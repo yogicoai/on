@@ -1040,11 +1040,14 @@ async function loadBizPromote(fresh) {
   try {
     const j = await (await fetch(`/api/biz-promote?months=${m}${fresh ? '&fresh=1' : ''}`)).json();
     if (!j.ok) throw new Error(j.error);
-    el('bzStatus').textContent = `${j.months}개월↑ · ${num(j.count)}명${j.cached ? ' · 캐시' : ' · 최신'}`;
+    el('bzStatus').textContent = `${j.months}개월↑ · ${num(j.count)}명${j.cached ? (j.stale ? ' · 캐시(갱신가능)' : ' · 캐시') : ' · 최신'}`;
     const when = j.builtAt ? new Date(j.builtAt).toLocaleString('ko-KR') : '';
-    const cacheBar = `<div class="insightline" style="border-left-color:${j.cached ? 'var(--muted)' : 'var(--green)'}">
-      ${j.cached ? `🗄 이전 저장 데이터(캐시) · ${when} 집계` : `🟢 방금 새로 계산 · ${when}`}
-      — 주문 데이터가 바뀌면 자동 갱신됩니다. <button id="bzFresh" class="btn mini ghost">↻ 최신 재계산</button></div>`;
+    const barColor = j.stale ? 'var(--orange, #e8a33d)' : (j.cached ? 'var(--muted)' : 'var(--green)');
+    const barText = j.stale
+      ? `🟠 이전 저장 데이터(캐시) · ${when} 집계 — <b>새 주문 데이터가 있습니다.</b> 최신으로 보려면 재계산하세요`
+      : (j.cached ? `🗄 이전 저장 데이터(캐시) · ${when} 집계 — 클릭 시 저장된 데이터를 먼저 보여줍니다` : `🟢 방금 새로 계산 · ${when}`);
+    const cacheBar = `<div class="insightline" style="border-left-color:${barColor}">
+      ${barText} <button id="bzFresh" class="btn mini ghost">↻ 최신 재계산</button></div>`;
     el('bzResult').innerHTML = `${cacheBar}<div class="card">
       <h3>🛒 비즈 구매 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 비즈 미구매 · ${num(j.count)}명 (상위 ${j.rows.length} 표시)</span>
         <a class="btn mini" href="/api/biz-promote.csv?months=${m}">⤓ CSV</a></h3>

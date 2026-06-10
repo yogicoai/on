@@ -465,8 +465,9 @@ async function handle(req, res) {
   // ── 비즈 구매 유도 고객 (본품 구매 후 N개월·비즈 미구매) JSON / CSV ──
   if (u.pathname === '/api/biz-promote' || u.pathname === '/api/biz-promote.csv') {
     const months = Number(u.searchParams.get('months') || 3);
+    const force = u.searchParams.get('fresh') === '1';
     try {
-      const data = await segments.bizPromote(months);
+      const data = await segments.bizPromote(months, { force });
       if (u.pathname.endsWith('.csv')) {
         const H = ['회원ID', '이름', '연락처', '이메일', '마케팅수신', 'SMS수신', '이메일수신', '가입일', '가입개월', '등급', '본품구매일', '경과개월', '구매본품'];
         const rows = data.rows.map((r) => [r.member_id, r.name, r.cellphone, r.email, r.marketing, r.smsAgree ? 'Y' : 'N', r.mailAgree ? 'Y' : 'N', r.created_date, r.tenureMonths, r.group_no, r.mainDate, r.monthsSince, (r.products || []).join(' / ')]);

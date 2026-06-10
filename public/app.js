@@ -19,6 +19,20 @@ function rangeFor(key) {
   return [ymd(y), ymd(y)];
 }
 
+// 상단 토픽바 / 통합비교 / 스마트스토어 날짜 입력을 한 값으로 동기화 (헷갈림 방지)
+function syncDateInputs(s, e) {
+  if (!s || !e) return;
+  for (const id of ['start', 'cmpStart', 'ssStart']) { const x = el(id); if (x) x.value = s; }
+  for (const id of ['end', 'cmpEnd', 'ssEnd']) { const x = el(id); if (x) x.value = e; }
+}
+// 날짜 입력을 수동 변경(change)해도 즉시 다른 곳에 반영
+function wireDateMirror(sId, eId) {
+  const sx = el(sId), ex = el(eId);
+  const mirror = () => syncDateInputs((el(sId) || {}).value, (el(eId) || {}).value);
+  if (sx) sx.addEventListener('change', mirror);
+  if (ex) ex.addEventListener('change', mirror);
+}
+
 let lastData = null;
 
 // ── 전역 로딩 스피너 — 400ms 넘는 fetch에만 상단 "불러오는 중…" 표시(빠른 요청은 깜빡임 방지) ──
@@ -111,6 +125,7 @@ async function openSSDetail(kind, value, label) {
 async function load(force) {
   const start = el('start').value, end = el('end').value;
   if (!start || !end) return;
+  syncDateInputs(start, end);
   setStatus('불러오는 중…', '');
   document.body.classList.add('loading');
   try {
@@ -337,6 +352,7 @@ async function applyCurrentMonthPromo() {
 }
 el('apply').addEventListener('click', () => { document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active')); load(false); });
 el('refresh').addEventListener('click', () => load(true));
+wireDateMirror('start', 'end');
 
 // 최근 1주일 재취합: 라이브 API 강제 + 해당 기간 Mongo 캐시 삭제·갱신
 el('refreshWeek').addEventListener('click', async () => {
@@ -758,8 +774,9 @@ function initSmartstore() {
       <button class="tab" data-sstab="bizpromote">⑥ 비즈 유도</button>
     </nav>
     <div id="ssPanel"></div>`;
-  el('ssStart').value = monthStart(); el('ssEnd').value = rangeFor('yesterday')[1];
+  el('ssStart').value = el('start').value || monthStart(); el('ssEnd').value = el('end').value || rangeFor('yesterday')[1];
   el('ssLoad').addEventListener('click', loadSmartstore);
+  wireDateMirror('ssStart', 'ssEnd');
   el('ssSync').addEventListener('click', syncSmartstore);
   el('ssMonthBtn').addEventListener('click', () => { el('ssStart').value = monthStart(); el('ssEnd').value = rangeFor('yesterday')[1]; loadSmartstore(); });
   el('ssYBtn').addEventListener('click', () => { const y = rangeFor('yesterday'); el('ssStart').value = y[0]; el('ssEnd').value = y[1]; loadSmartstore(); });
@@ -791,6 +808,7 @@ async function syncSmartstore() {
 }
 async function loadSmartstore() {
   const s = el('ssStart').value, e = el('ssEnd').value;
+  syncDateInputs(s, e);
   el('ssPanel').innerHTML = '<div class="empty">분석 중…</div>'; el('ssKpiDetail').innerHTML = ''; ssBreakOpen = false;
   try {
     const j = await (await fetch(`/api/smartstore/analysis?start=${s}&end=${e}`)).json();
@@ -1015,15 +1033,19 @@ function initBizPromote() {
     el('bzResult').innerHTML = `<div class="empty">${m}개월↑ 조건으로 <strong>찾기</strong>를 눌러주세요.</div>`;
   });
 }
-async function loadBizPromote() {
+async function loadBizPromote(fresh) {
   const m = el('bzMonths').value;
   el('bzCsv').href = `/api/biz-promote.csv?months=${m}`;
-  el('bzResult').innerHTML = '<div class="empty">추출 중…</div>';
+  el('bzResult').innerHTML = `<div class="empty">${fresh ? '최신 재계산 중… (회원 정보 조회 포함)' : '불러오는 중…'}</div>`;
   try {
-    const j = await (await fetch(`/api/biz-promote?months=${m}`)).json();
+    const j = await (await fetch(`/api/biz-promote?months=${m}${fresh ? '&fresh=1' : ''}`)).json();
     if (!j.ok) throw new Error(j.error);
-    el('bzStatus').textContent = `${j.months}개월↑ · ${num(j.count)}명`;
-    el('bzResult').innerHTML = `<div class="card">
+    el('bzStatus').textContent = `${j.months}개월↑ · ${num(j.count)}명${j.cached ? ' · 캐시' : ' · 최신'}`;
+    const when = j.builtAt ? new Date(j.builtAt).toLocaleString('ko-KR') : '';
+    const cacheBar = `<div class="insightline" style="border-left-color:${j.cached ? 'var(--muted)' : 'var(--green)'}">
+      ${j.cached ? `🗄 이전 저장 데이터(캐시) · ${when} 집계` : `🟢 방금 새로 계산 · ${when}`}
+      — 주문 데이터가 바뀌면 자동 갱신됩니다. <button id="bzFresh" class="btn mini ghost">↻ 최신 재계산</button></div>`;
+    el('bzResult').innerHTML = `${cacheBar}<div class="card">
       <h3>🛒 비즈 구매 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 비즈 미구매 · ${num(j.count)}명 (상위 ${j.rows.length} 표시)</span>
         <a class="btn mini" href="/api/biz-promote.csv?months=${m}">⤓ CSV</a></h3>
       ${tableHtml(['회원ID', '이름', '연락처', '이메일', '마케팅', 'SMS', '이메일수신', '본품 구매일', '경과', '구매 본품'], j.rows,
@@ -1031,6 +1053,7 @@ async function loadBizPromote() {
           `<span class="${r.marketing==='동의'?'agree':'deny'}">${r.marketing||'-'}</span>`,
           r.smsAgree?'✓':'✕', r.mailAgree?'✓':'✕', r.mainDate||'-', r.monthsSince+'개월', (r.products||[]).slice(0,2).join(', ')])}
     </div>`;
+    const fb = el('bzFresh'); if (fb) fb.addEventListener('click', () => loadBizPromote(true));
   } catch (err) { el('bzResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
@@ -1077,11 +1100,12 @@ function initCompare() {
       <button class="tab" data-cmptab="tier">⑤ 충전재별 판매량</button>
     </nav>
     <div id="cmpPanel"><div class="empty">분석 중…</div></div>`;
-  el('cmpStart').value = monthStart(); el('cmpEnd').value = rangeFor('yesterday')[1];
+  el('cmpStart').value = el('start').value || monthStart(); el('cmpEnd').value = el('end').value || rangeFor('yesterday')[1];
   fillYM('cmpYear', 'cmpMon');
   el('cmpYear').addEventListener('change', applyCmpMonth);
   el('cmpMon').addEventListener('change', applyCmpMonth);
   el('cmpLoad').addEventListener('click', loadCompare);
+  wireDateMirror('cmpStart', 'cmpEnd');
   el('cmpMonthBtn').addEventListener('click', () => { el('cmpStart').value = monthStart(); el('cmpEnd').value = rangeFor('yesterday')[1]; loadCompare(); });
   el('cmp30').addEventListener('click', () => { const [s, e] = rangeFor('30d'); el('cmpStart').value = s; el('cmpEnd').value = e; loadCompare(); });
   el('cmpPromo').addEventListener('change', () => { const o = el('cmpPromo').selectedOptions[0]; if (o && o.dataset.start) { el('cmpStart').value = o.dataset.start; el('cmpEnd').value = o.dataset.end; loadCompare(); } });
@@ -1125,6 +1149,7 @@ function cmpRtBig(r) { return r == null ? '<span class="muted">-</span>' : `<spa
 async function loadCompare() {
   const s = el('cmpStart').value, e = el('cmpEnd').value;
   if (!s || !e) return;
+  syncDateInputs(s, e);
   el('cmpFixed').innerHTML = '';
   el('cmpPanel').innerHTML = '<div class="empty">분석 중…</div>';
   try {

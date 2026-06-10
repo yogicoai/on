@@ -1,0 +1,20 @@
+node_modules/
+
+# secrets — 절대 커밋 금지 (.env 및 모든 변형). 예제 템플릿만 허용
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+*.log
+tmp/
+
+# Next.js
+.next/
+out/
+.vercel/
+next-env.d.ts
+
+# Claude Code 세션 아티팩트
+.claude/

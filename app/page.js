@@ -1,0 +1,121 @@
+import Script from 'next/script';
+
+// 기존 바닐라 프론트엔드(public/app.js)가 DOM을 id로 직접 제어하므로, 동일한 마크업을 그대로 주입한다.
+const SHELL = `
+  <div id="spinner"><div class="pill"><span class="ring"></span>불러오는 중…</div></div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <strong>Cafe24 판매 분석</strong>
+      <span class="muted">Yogibo</span>
+    </div>
+    <div class="controls">
+      <div class="ranges">
+        <button data-range="today" class="chip">오늘</button>
+        <button data-range="yesterday" class="chip active">어제</button>
+        <button data-range="7d" class="chip">최근 7일</button>
+        <button data-range="30d" class="chip">최근 30일</button>
+        <button data-range="promo" class="chip promo" title="이번 달 등록된 전사 프로모션 기간만 조회">🎯 프로모션 기간</button>
+        <button data-range="month" class="chip">이번 달</button>
+      </div>
+      <label>시작 <input type="date" id="start" /></label>
+      <label>종료 <input type="date" id="end" /></label>
+      <button id="apply" class="btn">조회</button>
+      <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
+      <button id="refreshWeek" class="btn warn" title="오늘~7일 전 구간을 라이브 API로 재취합하고 해당 기간 Mongo 캐시를 삭제·갱신">⟳ 최근 1주일 재취합(API)</button>
+      <button id="btnSettings" class="btn ghost" title="월별 목표 매출 · 전사 프로모션 기간 입력">⚙ 목표·프로모션 설정</button>
+    </div>
+  </header>
+
+  <nav class="channel-tabs" id="channelTabs">
+    <button class="chtab active" data-ch="cafe24">🛒 Cafe24 (자사몰)</button>
+    <button class="chtab" data-ch="smartstore">🟢 스마트스토어</button>
+    <button class="chtab" data-ch="compare">📊 통합 비교</button>
+  </nav>
+
+  <div id="status" class="status"></div>
+
+  <div id="view-cafe24">
+    <div id="caTarget" style="padding:0 24px 6px"></div>
+    <section class="kpis" id="kpis"></section>
+    <div id="kpiDetail" style="padding:0 20px"></div>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="inflow">① 유입</button>
+      <button class="tab" data-tab="members">② 회원 · 비회원</button>
+      <button class="tab" data-tab="promo">③ 프로모션(쿠폰)</button>
+      <button class="tab" data-tab="buyers">④ 프로모션 매출</button>
+      <button class="tab" data-tab="segment">⑤ 적립금·쿠폰</button>
+      <button class="tab" data-tab="groupbuy">⑥ 공동구매</button>
+      <button class="tab" data-tab="product">⑦ 상품 분석</button>
+      <button class="tab" data-tab="bizpromote">⑧ 비즈 유도 고객</button>
+    </nav>
+
+    <main>
+      <section class="panel active" id="tab-inflow"></section>
+      <section class="panel" id="tab-members"></section>
+      <section class="panel" id="tab-promo"></section>
+      <section class="panel" id="tab-buyers"></section>
+      <section class="panel" id="tab-segment"></section>
+      <section class="panel" id="tab-groupbuy"></section>
+      <section class="panel" id="tab-product"></section>
+      <section class="panel" id="tab-bizpromote"></section>
+    </main>
+  </div>
+
+  <div id="view-smartstore" style="display:none"><main id="ssMain"></main></div>
+
+  <div id="view-compare" style="display:none"><main id="cmpMain"></main></div>
+
+  <footer class="foot muted">
+    데이터: Cafe24 통계 API(유입) + Admin API(주문·쿠폰) · 토큰은 yogiChat 단일소유 읽기전용 재사용 ·
+    과거 구간은 DB 영구캐시, 오늘 포함 구간만 갱신
+  </footer>
+
+  <div id="settingsModal" class="modal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><strong>⚙ 월별 목표 · 전사 프로모션 설정</strong><button id="btnSettingsClose" class="btn ghost mini">닫기 ✕</button></div>
+      <div class="modal-body">
+        <div class="setblock">
+          <h4>📌 월별 목표 매출 <span class="muted">(만원 단위 입력)</span></h4>
+          <div class="setform">
+            <label>월 <span class="ymsel"><select id="tgYear"></select><select id="tgMon"></select></span></label>
+            <label>자사몰(만원) <input type="number" id="tgCafe24" placeholder="예: 12700"></label>
+            <label>스마트스토어(만원) <input type="number" id="tgSmart" placeholder="예: 5000"></label>
+            <button id="tgSave" class="btn">저장</button>
+            <span id="tgMsg" class="muted"></span>
+          </div>
+          <div id="tgList"></div>
+        </div>
+        <div class="setblock">
+          <h4>🎯 전사 프로모션 기간 <span class="muted">(이 기간 % 쿠폰 사용 주문 = 프로모션 성과)</span></h4>
+          <div class="setform">
+            <label>월 <span class="ymsel"><select id="pmYear"></select><select id="pmMon"></select></span></label>
+            <label>프로모션명 <input type="text" id="pmName" placeholder="예: 6월 전사프로모션"></label>
+            <label>시작 <input type="date" id="pmStart"></label>
+            <label>종료 <input type="date" id="pmEnd"></label>
+            <button id="pmSave" class="btn">저장</button>
+            <span id="pmMsg" class="muted"></span>
+          </div>
+          <div id="pmList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="detailModal" class="modal" style="display:none">
+    <div class="modal-box detail">
+      <div class="modal-head"><strong id="dmTitle">상세</strong><button id="dmClose" class="btn ghost mini">닫기 ✕</button></div>
+      <div class="modal-body" id="dmBody"></div>
+    </div>
+  </div>
+`;
+
+export default function Page() {
+  return (
+    <>
+      <div dangerouslySetInnerHTML={{ __html: SHELL }} />
+      <Script src="/app.js" strategy="afterInteractive" />
+    </>
+  );
+}

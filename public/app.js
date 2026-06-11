@@ -62,8 +62,9 @@ const dlink = (kind, value, text) => `<button class="linklike" data-dk="${kind}"
 function openDetailModal(titleHtml, bodyHtml) {
   el('dmTitle').innerHTML = titleHtml; el('dmBody').innerHTML = bodyHtml;
   el('detailModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden'; // 팝업 열림 동안 배경 스크롤 잠금
 }
-function closeDetailModal() { el('detailModal').style.display = 'none'; }
+function closeDetailModal() { el('detailModal').style.display = 'none'; document.body.style.overflow = ''; }
 function initDetailModal() {
   if (initDetailModal._done) return; initDetailModal._done = true;
   el('dmClose').addEventListener('click', closeDetailModal);
@@ -122,14 +123,14 @@ async function openSSDetail(kind, value, label) {
 }
 
 // ── 데이터 로드 ──
-async function load(force) {
+async function load(force, funnel) {
   const start = el('start').value, end = el('end').value;
   if (!start || !end) return;
   syncDateInputs(start, end);
-  setStatus('불러오는 중…', '');
+  setStatus(funnel ? '쿠폰 집계 중… (1~2분 소요될 수 있어요)' : '불러오는 중…', '');
   document.body.classList.add('loading');
   try {
-    const url = `/api/overview?start=${start}&end=${end}${force ? '&force=1' : ''}`;
+    const url = `/api/overview?start=${start}&end=${end}${force ? '&force=1' : ''}${funnel ? '&funnel=1' : ''}`;
     const r = await fetch(url);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || '실패');
@@ -138,7 +139,9 @@ async function load(force) {
     const cache = j._cache && j._cache.hit ? `캐시 (${new Date(j._cache.computedAt).toLocaleString('ko-KR')} 집계)` : `라이브 집계 ${j.elapsedMs}ms`;
     setStatus(`${start} ~ ${end} · 주문 ${num(j.ordersCount)}건 · ${cache}`, 'ok');
   } catch (e) {
-    setStatus('오류: ' + e.message, 'err');
+    // '지금 집계'(funnel) 실패는 친절하게 — 라이브 쿠폰 스캔은 토큰/타임아웃에 민감. 0시 자동 집계로 반영됨을 안내.
+    if (funnel) setStatus('쿠폰 즉시 집계를 못 했어요(서버 인증 만료/지연 등) — 0시 자동 집계 후 반영되며, ‘어제’ 이전 구간은 바로 조회됩니다.', 'err');
+    else setStatus('오류: ' + e.message, 'err');
   } finally {
     document.body.classList.remove('loading');
   }
@@ -162,7 +165,12 @@ function renderKpis(d) {
     { label: '총 매출', val: won(m.revenue), sub: `결제 ${num(m.paidOrders)}건 · 객단가 ${won(m.aov)} · 클릭=카테고리×등급`, cls: 'green', act: 'sales' },
     { label: '회원 매출비중', val: pct(m.memberRevenueShare), sub: `회원주문 ${pct(m.memberOrderShare)}`, act: 'tab:members' },
     { label: '프로모션 구매(다이렉트)', val: won(dp.sales), sub: `주문 ${num(dp.orders)} · 기간할인 ${won(dp.directDiscount)}`, cls: 'pink', act: 'tab:buyers' },
-    { label: '쿠폰 사용(프로모션)', val: funnelPending ? '집계중…' : num(f.used), sub: funnelPending ? '쿠폰 집계 준비중 (00시 자동 동기화 후 반영)' : `발급 ${num(f.issued)} · 사용률 ${pct(f.useRate)} · 매출 ${won(f.revenue)}`, cls: 'pink', act: 'tab:buyers' },
+    { label: '쿠폰 사용(프로모션)',
+      val: funnelPending ? '집계 전' : num(f.used),
+      sub: funnelPending
+        ? '쿠폰 집계는 매일 0시 자동 (오늘분은 익일 반영) · <button id="funnelNow" class="linklike" data-stop="1">지금 집계 ▸</button>'
+        : `발급 ${num(f.issued)} · 사용률 ${pct(f.useRate)} · 매출 ${won(f.revenue)}`,
+      cls: 'pink', act: funnelPending ? '' : 'tab:buyers' },
   ];
   el('kpis').innerHTML = cards.map((c) =>
     `<div class="kpi clickable ${c.cls || ''}" data-act="${c.act}"><div class="label">${c.label}</div><div class="val num">${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
@@ -172,6 +180,9 @@ function renderKpis(d) {
       if (a === 'sales') toggleSalesBreakdown();
       else if (a.startsWith('tab:')) document.querySelector(`.tab[data-tab="${a.slice(4)}"]`).click();
     }));
+  // '지금 집계' — 무거운 쿠폰 funnel 을 이 구간에 대해 즉시 스캔(1~2분). 카드 클릭 이벤트와 분리.
+  const fn = el('funnelNow');
+  if (fn) fn.addEventListener('click', (ev) => { ev.stopPropagation(); load(true, true); });
 }
 
 // 총매출 → 카테고리 × 등급(스탠다드/프리미엄/프리미엄플러스) 분해
@@ -1443,10 +1454,11 @@ el('pmSave').addEventListener('click', async () => {
   } catch (e) { el('pmMsg').textContent = '오류: ' + e.message; }
 });
 
-// ── 랜딩: 무조건 전날(어제) 데이터 ──
+// ── 랜딩: 오늘 데이터 ──
 (function init() {
-  const [s, e] = rangeFor('yesterday');
+  const [s, e] = rangeFor('today');
   el('start').value = s; el('end').value = e;
+  initDetailModal(); // 상세 팝업 닫기/배경클릭/ESC 핸들러를 랜딩 시 항상 연결(어느 탭에서 열어도 닫기 동작)
   load(false);
   loadTarget();
 })();

@@ -160,11 +160,12 @@ async function handle(req, res) {
     const start = u.searchParams.get('start') || y;
     const end = u.searchParams.get('end') || y;
     const force = u.searchParams.get('force') === '1';
+    const forceFunnel = u.searchParams.get('funnel') === '1'; // '지금 집계' — 무거운 쿠폰 funnel 즉시 스캔(1~2분)
     const t0 = Date.now();
-    console.log(`[${new Date().toISOString()}] /api/overview ${start}~${end}${force ? ' (force)' : ''}`);
+    console.log(`[${new Date().toISOString()}] /api/overview ${start}~${end}${force ? ' (force)' : ''}${forceFunnel ? ' (funnel)' : ''}`);
     try {
-      // 대시보드 force(↻ 갱신)는 주문만 재집계 — 무거운 쿠폰 funnel 은 캐시 유지(92초 스캔은 워밍/일일동기화 전용)
-      const data = await report.getOverview(start, end, { force, forceFunnel: false });
+      // 평소 force(↻ 갱신)는 주문만 재집계, funnel 은 캐시 유지. funnel=1 일 때만 쿠폰 스캔까지 강제.
+      const data = await report.getOverview(start, end, { force: force || forceFunnel, forceFunnel });
       data.elapsedMs = Date.now() - t0;
       return sendJson(res, 200, { ok: true, ...data });
     } catch (e) {

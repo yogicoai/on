@@ -205,14 +205,14 @@ function toggleSalesBreakdown() {
 
 // 충전재 등급 클릭 → 그 등급의 판매 제품 상세 (제품라인 무관 전체)
 async function loadTierProducts(tier) {
-  const d = el('fillerDetail'); d.innerHTML = '<div class="empty">판매 제품 불러오는 중…</div>';
+  openDetailModal(`${ae(tier)} 판매 제품`, '<div class="empty">판매 제품 불러오는 중…</div>');
   const s = (lastData && lastData.start) || el('start').value, e = (lastData && lastData.end) || el('end').value;
   try {
     const j = await (await fetch(`/api/line-tier?tier=${enc(tier)}&start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
-    d.innerHTML = `<div class="insightline" style="border-left-color:var(--pink)"><strong>${tier}</strong> 판매 제품 ${num(j.count)}종</div>
-      ${tableHtml(['판매 제품', '매출', '수량', '주문'], j.rows, (r) => [r.product_name, won(r.sales), num(r.qty), num(r.orders)])}`;
-  } catch (err) { d.innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+    el('dmTitle').innerHTML = `${ae(tier)} 판매 제품 <span class="muted" style="font-size:13px;font-weight:500">· ${num(j.count)}종</span>`;
+    el('dmBody').innerHTML = `${tableHtml(['판매 제품', '매출', '수량', '주문'], j.rows, (r) => [r.product_name, won(r.sales), num(r.qty), num(r.orders)])}`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // 라벨 정리: 'YYYY-MM-DD' → 'MM-DD', 그 외(요일 등)는 그대로
@@ -470,7 +470,7 @@ async function loadTagPromos() {
   } catch (err) { el('bResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 async function loadTagDetail(tag, s, e) {
-  el('bBuyers').innerHTML = '<div class="empty">상세 불러오는 중…</div>';
+  openDetailModal(`[${ae(tag)}] 프로모션 상세`, '<div class="empty">상세 불러오는 중…</div>');
   try {
     const [j, jb] = await Promise.all([
       (await fetch(`/api/tag-detail?tag=${enc(tag)}&start=${s}&end=${e}`)).json(),
@@ -478,7 +478,8 @@ async function loadTagDetail(tag, s, e) {
     ]);
     if (!j.ok) throw new Error(j.error);
     const csv = `/api/tag-buyers.csv?tag=${enc(tag)}&start=${s}&end=${e}`;
-    el('bBuyers').innerHTML = `
+    el('dmTitle').innerHTML = `[${ae(tag)}] 프로모션 상세 <span class="muted" style="font-size:13px;font-weight:500">· 매출 ${won(j.sales)} · 주문 ${num(j.orders)}</span>`;
+    el('dmBody').innerHTML = `
       <div class="grid two">
         <div class="card"><h3>[${tag}] 일별 매출 <span class="hint">매출 ${won(j.sales)} · 주문 ${num(j.orders)} · 수량 ${num(j.qty)} · 기간할인 ${won(j.directDiscount)}</span></h3>
           ${barsHtml(j.daily, 'sales', 'date')}</div>
@@ -490,7 +491,7 @@ async function loadTagDetail(tag, s, e) {
           (r) => [r.name||'-', r.cellphone||'-', r.email||'-', r.created_date||'-', r.tenureMonths!=null?r.tenureMonths:'-',
             r.group_no, `<span class="tag ${r.isNew?'tag-new':''}">${r.segment}</span>`, won(r.amount), (r.products||[]).slice(0,3).join(', ')]) : '<div class="empty">고객 정보를 불러오지 못했습니다</div>'}
       </div>`;
-  } catch (err) { el('bBuyers').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // 쿠폰 프로모션 (다운로드→구매, 집계)
@@ -529,33 +530,36 @@ async function showCouponProducts(i) {
   const c = couponCache[i]; if (!c) return;
   const s = el('bStart').value, e = el('bEnd').value;
   const csv = `/api/coupon-buyers.csv?coupon_no=${enc(c.coupon_no)}&start=${s}&end=${e}`;
-  el('bBuyers').innerHTML = `<div class="card">
-    <h3>${c.coupon_name} — 구매 상품 <span class="hint">사용 ${num(c.purchased)} · 매출 ${won(c.revenue)}</span></h3>
-    ${tableHtml(['상품', '매출', '수량', '구매수'], c.products, (r) => [r.name, won(r.amount), num(r.qty), num(r.buyers)])}
-    </div>
-    <div class="card" style="margin-top:16px" id="cpnBuyers"><div class="empty">쿠폰 사용 고객 불러오는 중…</div></div>`;
+  openDetailModal(`${ae(c.coupon_name)} <span class="muted" style="font-size:13px;font-weight:500">· 사용 ${num(c.purchased)} · 매출 ${won(c.revenue)}</span>`,
+    `<div class="card">
+      <h3>구매 상품 <span class="hint">사용 ${num(c.purchased)} · 매출 ${won(c.revenue)}</span></h3>
+      ${tableHtml(['상품', '매출', '수량', '구매수'], c.products, (r) => [r.name, won(r.amount), num(r.qty), num(r.buyers)])}
+      </div>
+      <div class="card" style="margin-top:16px" id="cpnBuyers"><div class="empty">쿠폰 사용 고객 불러오는 중…</div></div>`);
   try {
     const jb = await (await fetch(`/api/coupon-buyers?coupon_no=${enc(c.coupon_no)}&start=${s}&end=${e}`)).json();
-    el('cpnBuyers').innerHTML = `<h3>${c.coupon_name} — 쿠폰 사용 고객 <span class="hint">${jb.ok?num(jb.count):0}명</span><a class="btn mini" href="${csv}">⤓ CSV</a></h3>
+    const cb = el('cpnBuyers'); if (!cb) return;
+    cb.innerHTML = `<h3>쿠폰 사용 고객 <span class="hint">${jb.ok?num(jb.count):0}명</span><a class="btn mini" href="${csv}">⤓ CSV</a></h3>
       ${jb.ok ? tableHtml(['이름', '연락처', '이메일', '가입일', '가입개월', '등급', '구분', '구매액', '구매상품'], jb.rows,
         (r) => [r.name||'-', r.cellphone||'-', r.email||'-', r.created_date||'-', r.tenureMonths!=null?r.tenureMonths:'-',
           r.group_no, `<span class="tag ${r.isNew?'tag-new':''}">${r.segment}</span>`, won(r.amount), (r.products||[]).slice(0,3).join(', ')]) : '<div class="empty">-</div>'}`;
-  } catch (err) { el('cpnBuyers').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+  } catch (err) { const cb = el('cpnBuyers'); if (cb) cb.innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 async function loadCouponBuyers(cpn, s, e) {
-  el('bBuyers').innerHTML = '<div class="empty">구매 고객 명단 불러오는 중…</div>';
+  openDetailModal('쿠폰 구매 고객 명단', '<div class="empty">구매 고객 명단 불러오는 중…</div>');
   try {
     const j = await (await fetch(`/api/coupon-buyers?coupon_no=${enc(cpn)}&start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
     const csv = `/api/coupon-buyers.csv?coupon_no=${enc(cpn)}&start=${s}&end=${e}`;
-    el('bBuyers').innerHTML = `<div class="card">
+    el('dmTitle').innerHTML = `쿠폰 구매 고객 명단 <span class="muted" style="font-size:13px;font-weight:500">· ${num(j.count)}명</span>`;
+    el('dmBody').innerHTML = `<div class="card">
       <h3>구매 고객 명단 <span class="hint">${num(j.count)}명</span>
         <a class="btn mini" href="${csv}">⤓ CSV</a></h3>
       ${tableHtml(['이름', '연락처', '이메일', '가입일', '가입개월', '등급', '구분', '구매액', '구매상품'], j.rows,
         (r) => [r.name||'-', r.cellphone||'-', r.email||'-', r.created_date||'-', r.tenureMonths!=null?r.tenureMonths:'-',
           r.group_no, `<span class="tag ${r.isNew?'tag-new':''}">${r.segment}</span>`, won(r.amount), (r.products||[]).slice(0,3).join(', ')])}
     </div>`;
-  } catch (err) { el('bBuyers').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // ── ⑤ 적립금 · 쿠폰 ──
@@ -645,7 +649,7 @@ async function loadGroupbuy() {
   } catch (err) { el('gbResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 async function loadBenefitOrders(type, s, e) {
-  const d = el('bfDetail'); d.innerHTML = '<div class="empty">주문 상세 불러오는 중…</div>';
+  openDetailModal('적립금·쿠폰 주문 상세', '<div class="empty">주문 상세 불러오는 중…</div>');
   try {
     const j = await (await fetch(`/api/benefit-orders?type=${enc(type)}&start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
@@ -654,12 +658,13 @@ async function loadBenefitOrders(type, s, e) {
       ? ['주문일', '고객', '구매 상품', '사용 쿠폰', '결제액', '쿠폰할인', '적립금']
       : ['주문일', '고객', '구매 상품', '결제액', '쿠폰할인', '적립금'];
     const cpnCell = (r) => { const cs = r.coupons || []; return cs.length ? cs.map((n) => `<span class="tag">${n}</span>`).join(' ') : '<span class="muted">미상</span>'; };
-    d.innerHTML = `<div class="insightline" style="border-left-color:var(--pink)"><strong>${j.label}</strong> 주문 ${num(j.count)}건 — 구매상품 · ${showCpn ? '사용 쿠폰 · ' : ''}쿠폰/적립금 사용액${showCpn ? ' <span class="muted" style="font-size:11px">(쿠폰명은 order_coupons 적재분 기준 — "미상"은 ⚙에서 쿠폰명 적재 필요)</span>' : ''}</div>
+    el('dmTitle').innerHTML = `${ae(j.label)} <span class="muted" style="font-size:13px;font-weight:500">· 주문 ${num(j.count)}건</span>`;
+    el('dmBody').innerHTML = `<div class="insightline" style="border-left-color:var(--pink)">구매상품 · ${showCpn ? '사용 쿠폰 · ' : ''}쿠폰/적립금 사용액${showCpn ? ' <span class="muted" style="font-size:11px">(쿠폰명은 order_coupons 적재분 기준 — "미상"은 ⚙에서 쿠폰명 적재 필요)</span>' : ''}</div>
       ${tableHtml(cols, j.rows,
         (r) => showCpn
           ? [r.order_date, r.name || (r.member_id ? r.member_id : '-'), (r.products || []).join(', '), cpnCell(r), won(r.payment_amount), won(r.coupon_discount), won(r.points_used)]
           : [r.order_date, r.name || (r.member_id ? r.member_id : '-'), (r.products || []).join(', '), won(r.payment_amount), won(r.coupon_discount), won(r.points_used)])}`;
-  } catch (err) { d.innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // ── ⑥ 상품 분석 ──
@@ -975,14 +980,14 @@ function toggleSSBreakdown() {
   box.querySelectorAll('button[data-sstier]').forEach((btn) => btn.addEventListener('click', () => loadSSTier(decodeURIComponent(btn.dataset.sstier))));
 }
 async function loadSSTier(tier) {
-  const d = el('ssFillerDetail'); d.innerHTML = '<div class="empty">판매 제품 불러오는 중…</div>';
+  openDetailModal(`${ae(tier)} 판매 제품 <span class="muted" style="font-size:12px;font-weight:500">· 스마트스토어</span>`, '<div class="empty">판매 제품 불러오는 중…</div>');
   const s = el('ssStart').value, e = el('ssEnd').value;
   try {
     const j = await (await fetch(`/api/smartstore/line-tier?tier=${enc(tier)}&start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
-    d.innerHTML = `<div class="insightline" style="border-left-color:var(--pink)"><strong>${tier}</strong> 판매 제품 ${num(j.count)}종</div>
-      ${tableHtml(['판매 제품', '매출', '수량', '주문'], j.rows, (r) => [r.product_name, won(r.sales), num(r.qty), num(r.orders)])}`;
-  } catch (err) { d.innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+    el('dmTitle').innerHTML = `${ae(tier)} 판매 제품 <span class="muted" style="font-size:13px;font-weight:500">· 스마트스토어 · ${num(j.count)}종</span>`;
+    el('dmBody').innerHTML = `${tableHtml(['판매 제품', '매출', '수량', '주문'], j.rows, (r) => [r.product_name, won(r.sales), num(r.qty), num(r.orders)])}`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // ── 월 목표 달성률 배너 ──

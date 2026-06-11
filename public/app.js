@@ -156,12 +156,13 @@ function render(d) {
 function renderKpis(d) {
   const t = d.inflow.totals, m = d.members.total, f = d.funnel.totals;
   const dp = d.directPromo || { sales: 0, orders: 0, directDiscount: 0 };
+  const funnelPending = d.funnel && d.funnel.pending; // 아직 워밍 안 된 구간 → 쿠폰 집계 준비중
   const cards = [
     { label: '방문수', val: num(t.visits), sub: `신규 ${pct(t.newRatio)} · 일평균 ${num(t.avgDaily)}`, cls: 'accent', act: 'tab:inflow' },
     { label: '총 매출', val: won(m.revenue), sub: `결제 ${num(m.paidOrders)}건 · 객단가 ${won(m.aov)} · 클릭=카테고리×등급`, cls: 'green', act: 'sales' },
     { label: '회원 매출비중', val: pct(m.memberRevenueShare), sub: `회원주문 ${pct(m.memberOrderShare)}`, act: 'tab:members' },
     { label: '프로모션 구매(다이렉트)', val: won(dp.sales), sub: `주문 ${num(dp.orders)} · 기간할인 ${won(dp.directDiscount)}`, cls: 'pink', act: 'tab:buyers' },
-    { label: '쿠폰 사용(프로모션)', val: num(f.used), sub: `발급 ${num(f.issued)} · 사용률 ${pct(f.useRate)} · 매출 ${won(f.revenue)}`, cls: 'pink', act: 'tab:buyers' },
+    { label: '쿠폰 사용(프로모션)', val: funnelPending ? '집계중…' : num(f.used), sub: funnelPending ? '쿠폰 집계 준비중 (00시 자동 동기화 후 반영)' : `발급 ${num(f.issued)} · 사용률 ${pct(f.useRate)} · 매출 ${won(f.revenue)}`, cls: 'pink', act: 'tab:buyers' },
   ];
   el('kpis').innerHTML = cards.map((c) =>
     `<div class="kpi clickable ${c.cls || ''}" data-act="${c.act}"><div class="label">${c.label}</div><div class="val num">${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
@@ -354,21 +355,20 @@ el('apply').addEventListener('click', () => { document.querySelectorAll('.chip')
 el('refresh').addEventListener('click', () => load(true));
 wireDateMirror('start', 'end');
 
-// 최근 1주일 재취합: 라이브 API 강제 + 해당 기간 Mongo 캐시 삭제·갱신
+// 오늘 재취합: 오늘 주문(Cafe24+스마트스토어) 적재 후 현재 구간만 빠르게 갱신(쿠폰 funnel 은 캐시 유지).
+//  최근 1주일 전체 동기화는 매일 00시 자동 스케줄러가 담당.
 el('refreshWeek').addEventListener('click', async () => {
   const btn = el('refreshWeek');
   btn.disabled = true;
-  setStatus('최근 1주일 라이브 재취합 중… (쿠폰 스캔 포함, 다소 시간이 걸립니다)', '');
+  setStatus('오늘 주문 재취합 중… (Cafe24·스마트스토어 적재)', '');
   document.body.classList.add('loading');
   try {
-    const r = await fetch('/api/refresh-week');
+    const r = await fetch('/api/sync-today');
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || '실패');
-    lastData = j;
-    document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active'));
-    el('start').value = j.start; el('end').value = j.end;
-    render(j);
-    setStatus(`재취합 완료: ${j.start} ~ ${j.end} · 주문 ${num(j.ordersCount)}건 · 기존 캐시 ${num(j.deleted)}건 삭제 후 갱신 · ${j.elapsedMs}ms`, 'ok');
+    // 적재 후 현재 선택 구간을 캐시 무시하고 다시 불러오기 (주문 반영, funnel 은 캐시)
+    await load(true);
+    setStatus(`오늘 재취합 완료 (${j.day}) · ${j.elapsedMs}ms — 현재 구간 갱신됨`, 'ok');
   } catch (e) {
     setStatus('재취합 오류: ' + e.message, 'err');
   } finally {

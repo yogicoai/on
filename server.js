@@ -34,6 +34,7 @@ const benefit = require('./lib/benefit');
 const smartstore = require('./lib/smartstore');
 const smartstoreIngest = require('./lib/smartstoreIngest');
 const smartstoreAnalysis = require('./lib/smartstoreAnalysis');
+const dailySync = require('./lib/dailySync');
 
 const PORT = Number(process.env.PORT || 5200);
 const PUBLIC = path.join(__dirname, 'public');
@@ -88,7 +89,7 @@ async function handle(req, res) {
 
   // 읽기 전용 배포(Vercel)에서는 수집·동기화·설정 변경을 비활성화
   if (process.env.READ_ONLY === '1') {
-    const WRITE = new Set(['/api/refresh-week', '/api/sync-month', '/api/sync-coupon-names', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/promo-periods/set', '/api/promo-periods/delete']);
+    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/promo-periods/set', '/api/promo-periods/delete']);
     if (req.method === 'POST' || WRITE.has(u.pathname)) {
       return sendJson(res, 403, { ok: false, error: '읽기 전용 배포입니다. 수집·동기화·설정 변경은 로컬에서 실행하세요.' });
     }
@@ -124,6 +125,36 @@ async function handle(req, res) {
     }
   }
 
+  // 오늘만 재취합 — 오늘 주문 적재(Cafe24+SmartStore) + 오늘 포함 구간 빠른 갱신(쿠폰 funnel 은 캐시 유지)
+  if (u.pathname === '/api/sync-today' || u.pathname === '/api/refresh-today') {
+    const t0 = Date.now();
+    console.log(`[${new Date().toISOString()}] /api/sync-today`);
+    try {
+      const data = await dailySync.runToday();
+      data.elapsedMs = Date.now() - t0;
+      console.log(`  → 오늘 재취합 완료 (${data.elapsedMs}ms)`);
+      return sendJson(res, 200, { ok: true, ...data });
+    } catch (e) {
+      console.error('sync-today 실패:', e);
+      return sendJson(res, 500, { ok: false, error: String(e.message) });
+    }
+  }
+
+  // 수동 일일 동기화(최근 N일 적재 + 워밍) — 스케줄러와 동일 루틴을 즉시 1회 실행
+  if (u.pathname === '/api/daily-sync') {
+    const days = Math.min(Number(u.searchParams.get('days') || 7), 31);
+    const t0 = Date.now();
+    console.log(`[${new Date().toISOString()}] /api/daily-sync days=${days}`);
+    try {
+      const data = await dailySync.runDaily({ days });
+      data.elapsedMs = Date.now() - t0;
+      return sendJson(res, 200, { ok: true, ...data });
+    } catch (e) {
+      console.error('daily-sync 실패:', e);
+      return sendJson(res, 500, { ok: false, error: String(e.message) });
+    }
+  }
+
   if (u.pathname === '/api/overview') {
     const y = report.yesterdayStr();
     const start = u.searchParams.get('start') || y;
@@ -132,7 +163,8 @@ async function handle(req, res) {
     const t0 = Date.now();
     console.log(`[${new Date().toISOString()}] /api/overview ${start}~${end}${force ? ' (force)' : ''}`);
     try {
-      const data = await report.getOverview(start, end, { force });
+      // 대시보드 force(↻ 갱신)는 주문만 재집계 — 무거운 쿠폰 funnel 은 캐시 유지(92초 스캔은 워밍/일일동기화 전용)
+      const data = await report.getOverview(start, end, { force, forceFunnel: false });
       data.elapsedMs = Date.now() - t0;
       return sendJson(res, 200, { ok: true, ...data });
     } catch (e) {
@@ -499,12 +531,37 @@ async function handle(req, res) {
   return serveStatic(res, u.pathname);
 }
 
+// 매일 00시(로컬=KST) 자동 동기화 스케줄러 — 의존성 없이 setTimeout 으로 다음 자정까지 대기 후 24h 반복.
+//  ENABLE_DAILY_SYNC=1 인 항상 켜진 호스트(ychat 등)에서만 켠다. 배포(Vercel/READ_ONLY)에선 절대 켜지 말 것.
+function msUntilNextMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 10); // 00:00:10
+  return next.getTime() - now.getTime();
+}
+function startDailyScheduler() {
+  if (process.env.ENABLE_DAILY_SYNC !== '1') return;
+  if (process.env.READ_ONLY === '1') { console.log('[scheduler] READ_ONLY 이므로 자동 동기화 비활성'); return; }
+  const days = Number(process.env.DAILY_SYNC_DAYS || 7);
+  const run = async () => {
+    try { console.log(`[scheduler] 00시 자동 동기화 시작 (최근 ${days}일)`); await dailySync.runDaily({ days }); }
+    catch (e) { console.error('[scheduler] 자동 동기화 실패:', e.message); }
+  };
+  const schedule = () => {
+    const wait = msUntilNextMidnight();
+    console.log(`[scheduler] 다음 자동 동기화까지 ${(wait / 3600000).toFixed(1)}시간`);
+    setTimeout(async () => { await run(); schedule(); }, wait); // 매 자정마다 재예약
+  };
+  if (process.env.DAILY_SYNC_ON_BOOT === '1') run(); // 기동 직후 1회(옵션)
+  schedule();
+}
+
 const server = http.createServer(handle);
 // 로컬에서 직접 실행할 때만 리슨 (Next/Vercel에서 require 시에는 서버를 띄우지 않음)
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`\n🟢 Cafe24 분석 대시보드  →  http://localhost:${PORT}`);
     console.log(`   mall=${cafe24.MALL} | 캐시DB=${store.configured() ? store.DB_NAME : '미설정'} | 기본구간=어제(${report.yesterdayStr()})\n`);
+    startDailyScheduler();
   });
 }
 

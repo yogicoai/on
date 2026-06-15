@@ -338,13 +338,29 @@ document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () 
   b.classList.add('active');
   el('tab-' + b.dataset.tab).classList.add('active');
 }));
+// 현재 보고 있는 채널 (상단 날짜 칩/조회/갱신이 이 뷰를 제어)
+let curCh = 'cafe24';
+const loadedRange = {}; // ch -> '시작~종료' 마지막 로드 구간 (탭 전환 시 중복 로드 방지)
+// 상단 날짜 컨트롤을 현재 활성 채널 뷰에 적용 (Cafe24 / 스마트스토어 / 통합비교 공통)
+function applyRangeToActiveView(s, e, force) {
+  loadedRange[curCh] = (s || '') + '~' + (e || '');
+  if (curCh === 'smartstore') {
+    if (s) el('ssStart').value = s; if (e) el('ssEnd').value = e;
+    loadSmartstore();
+  } else if (curCh === 'compare') {
+    if (s) el('cmpStart').value = s; if (e) el('cmpEnd').value = e;
+    loadCompare();
+  } else {
+    load(!!force);
+  }
+}
 document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active'));
   b.classList.add('active');
   if (b.dataset.range === 'promo') { applyCurrentMonthPromo(); return; }
   const [s, e] = rangeFor(b.dataset.range);
   el('start').value = s; el('end').value = e;
-  load(false);
+  applyRangeToActiveView(s, e);
 }));
 // 🎯 프로모션 기간 칩 — 이번 달(또는 오늘이 포함된) 등록 전사 프로모션 기간만 조회
 async function applyCurrentMonthPromo() {
@@ -358,12 +374,12 @@ async function applyCurrentMonthPromo() {
       || items.filter((r) => r.start <= today).sort((a, b) => (a.start < b.start ? 1 : -1))[0];
     if (!promo) { setStatus(`${ym} 등록된 전사 프로모션이 없습니다 — ⚙ 설정에서 먼저 등록하세요`, 'err'); return; }
     el('start').value = promo.start; el('end').value = promo.end;
-    load(false);
+    applyRangeToActiveView(promo.start, promo.end);
     setStatus(`🎯 프로모션 기간: ${promo.name} (${promo.start} ~ ${promo.end})`, 'ok');
   } catch (e) { setStatus('프로모션 조회 오류: ' + e.message, 'err'); }
 }
-el('apply').addEventListener('click', () => { document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active')); load(false); });
-el('refresh').addEventListener('click', () => load(true));
+el('apply').addEventListener('click', () => { document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active')); applyRangeToActiveView(el('start').value, el('end').value); });
+el('refresh').addEventListener('click', () => applyRangeToActiveView(el('start').value, el('end').value, true));
 wireDateMirror('start', 'end');
 
 // 오늘 재취합: 오늘 주문(Cafe24+스마트스토어) 적재 후 현재 구간만 빠르게 갱신(쿠폰 funnel 은 캐시 유지).
@@ -752,12 +768,16 @@ document.querySelectorAll('.chtab').forEach((b) => b.addEventListener('click', (
   document.querySelectorAll('.chtab').forEach((x) => x.classList.remove('active'));
   b.classList.add('active');
   const ch = b.dataset.ch;
+  curCh = ch; // 상단 날짜 칩/조회/갱신이 이 채널 뷰를 제어하도록
   el('view-cafe24').style.display = ch === 'cafe24' ? '' : 'none';
   el('view-smartstore').style.display = ch === 'smartstore' ? '' : 'none';
   el('view-compare').style.display = ch === 'compare' ? '' : 'none';
-  // 헤더 컨트롤 바는 항상 노출 (목표·프로모션 설정은 공통). 날짜/갱신은 Cafe24 전용 동작.
+  // 헤더 컨트롤 바는 항상 노출. 상단 날짜 칩/조회는 applyRangeToActiveView 로 현재 채널에 적용.
   if (ch === 'smartstore') initSmartstore();
-  if (ch === 'compare') initCompare();
+  else if (ch === 'compare') initCompare();
+  // 전환한 채널을 상단 구간으로 로드 (이미 같은 구간으로 로드돼 있으면 건너뜀)
+  const cur = (el('start').value || '') + '~' + (el('end').value || '');
+  if (loadedRange[ch] !== cur) applyRangeToActiveView(el('start').value, el('end').value);
 }));
 
 let ssData = null, ssTab = 'product', ssBreakOpen = false;
@@ -767,13 +787,8 @@ function initSmartstore() {
     <div id="ssTargetBar" style="margin:14px 0 0"></div>
     <div class="card" style="margin:14px 0">
       <div class="panelctl">
-        <div class="ranges">
-          <button id="ssMonthBtn" class="chip active">이번 달</button>
-          <button id="ssYBtn" class="chip">어제</button>
-        </div>
-        <label>시작 <input type="date" id="ssStart"></label>
-        <label>종료 <input type="date" id="ssEnd"></label>
-        <button id="ssLoad" class="btn">조회</button>
+        <input type="hidden" id="ssStart"><input type="hidden" id="ssEnd">
+        <span class="muted" style="font-size:12px">📅 기간은 <b>상단 날짜 선택</b>으로 조회합니다 (자사몰·통합비교 공통)</span>
         <button id="ssSync" class="btn warn" title="최근 7일 주문만 네이버 커머스 API로 재수집(월 단위보다 호출 적음)">⟲ 최근 7일 동기화(API)</button>
         <span id="ssStatus" class="muted" style="font-size:12px"></span>
       </div>
@@ -790,12 +805,8 @@ function initSmartstore() {
       <button class="tab" data-sstab="bizpromote">⑥ 비즈 유도</button>
     </nav>
     <div id="ssPanel"></div>`;
-  el('ssStart').value = monthStart(); el('ssEnd').value = rangeFor('yesterday')[1]; // 활성 칩(이번 달)과 일치하는 기본 구간(데이터 있는 범위)
-  el('ssLoad').addEventListener('click', loadSmartstore);
-  wireDateMirror('ssStart', 'ssEnd');
+  el('ssStart').value = el('start').value || monthStart(); el('ssEnd').value = el('end').value || rangeFor('yesterday')[1]; // 상단 구간 사용
   el('ssSync').addEventListener('click', syncSmartstore);
-  el('ssMonthBtn').addEventListener('click', () => { el('ssStart').value = monthStart(); el('ssEnd').value = rangeFor('yesterday')[1]; loadSmartstore(); });
-  el('ssYBtn').addEventListener('click', () => { const y = rangeFor('yesterday'); el('ssStart').value = y[0]; el('ssEnd').value = y[1]; loadSmartstore(); });
   el('ssTabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
     el('ssTabs').querySelectorAll('.tab').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     ssTab = b.dataset.sstab; renderSSPanel();
@@ -808,8 +819,8 @@ function initSmartstore() {
     const b = ev.target.closest('[data-dk]');
     if (b) { openSSDetail(b.dataset.dk, b.dataset.dv, b.dataset.dl || b.dataset.dv); }
   });
-  loadSmartstore();
   loadTarget();
+  // 최초 로드는 채널 전환 핸들러(applyRangeToActiveView)가 상단 구간으로 수행
 }
 async function syncSmartstore() {
   const b = el('ssSync'); b.disabled = true;
@@ -1101,13 +1112,11 @@ function initCompare() {
   el('cmpMain').innerHTML = `
     <div class="card" style="margin:14px 0">
       <div class="panelctl">
-        <div class="ranges"><button id="cmpMonthBtn" class="chip active">이번 달</button><button id="cmp30" class="chip">최근 30일</button></div>
+        <input type="hidden" id="cmpStart"><input type="hidden" id="cmpEnd">
+        <span class="muted" style="font-size:12px">📅 기간은 <b>상단 날짜 선택</b> 사용 · 또는 ↓</span>
         <label>월 선택 <span class="ymsel"><select id="cmpYear"></select><select id="cmpMon"></select></span></label>
         <label id="cmpPromoWrap">전사 프로모션 <select id="cmpPromo"><option value="">(기간 직접 선택)</option></select></label>
-        <label>시작 <input type="date" id="cmpStart"></label>
-        <label>종료 <input type="date" id="cmpEnd"></label>
-        <button id="cmpLoad" class="btn">조회</button>
-        <span class="muted" style="font-size:12px">자사몰+스마트스토어 통합 · 기간을 선택해 조회 (전사 프로모션 선택은 ① 프로모션 매출용)</span>
+        <span class="muted" style="font-size:12px">자사몰+스마트스토어 통합 (전사 프로모션 선택은 ① 프로모션 매출용)</span>
       </div>
     </div>
     <div id="cmpFixed"></div>
@@ -1123,11 +1132,8 @@ function initCompare() {
   fillYM('cmpYear', 'cmpMon');
   el('cmpYear').addEventListener('change', applyCmpMonth);
   el('cmpMon').addEventListener('change', applyCmpMonth);
-  el('cmpLoad').addEventListener('click', loadCompare);
-  wireDateMirror('cmpStart', 'cmpEnd');
-  el('cmpMonthBtn').addEventListener('click', () => { el('cmpStart').value = monthStart(); el('cmpEnd').value = rangeFor('yesterday')[1]; loadCompare(); });
-  el('cmp30').addEventListener('click', () => { const [s, e] = rangeFor('30d'); el('cmpStart').value = s; el('cmpEnd').value = e; loadCompare(); });
-  el('cmpPromo').addEventListener('change', () => { const o = el('cmpPromo').selectedOptions[0]; if (o && o.dataset.start) { el('cmpStart').value = o.dataset.start; el('cmpEnd').value = o.dataset.end; loadCompare(); } });
+  // 전사 프로모션 선택 → 그 기간으로 (상단 날짜와 동기화)
+  el('cmpPromo').addEventListener('change', () => { const o = el('cmpPromo').selectedOptions[0]; if (o && o.dataset.start) { syncTopRange(o.dataset.start, o.dataset.end); loadCompare(); } });
   // 서브탭 전환 — 데이터 재호출 없이 cmpCache로 렌더
   el('cmpTabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
     el('cmpTabs').querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
@@ -1135,7 +1141,12 @@ function initCompare() {
   }));
   loadCmpPromos();
   syncCmpControls();
-  loadCompare();
+  // 최초 로드는 채널 전환 핸들러(applyRangeToActiveView)가 상단 구간으로 수행
+}
+// 상단 날짜 + 모든 뷰의 숨은 입력을 한 구간으로 맞춤(특수 선택기에서 사용)
+function syncTopRange(s, e) {
+  if (s) el('start').value = s; if (e) el('end').value = e;
+  syncDateInputs(s, e); loadedRange.compare = (s || '') + '~' + (e || '');
 }
 // 전사 프로모션 선택기는 ① 프로모션 매출 탭에서만 노출 (나머지 탭은 기간만 사용)
 function syncCmpControls() {
@@ -1146,9 +1157,8 @@ function applyCmpMonth() {
   const ym = getYM('cmpYear', 'cmpMon');
   const y = +ym.slice(0, 4), m = +ym.slice(5, 7);
   const last = new Date(y, m, 0), today = new Date();
-  el('cmpStart').value = `${ym}-01`;
-  el('cmpEnd').value = ymd(last > today ? today : last);
-  document.querySelectorAll('#cmpMain .chip').forEach((x) => x.classList.remove('active'));
+  syncTopRange(`${ym}-01`, ymd(last > today ? today : last)); // 상단 날짜와 동기화
+  document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active'));
   loadCompare();
 }
 async function loadCmpPromos() {
@@ -1459,6 +1469,6 @@ el('pmSave').addEventListener('click', async () => {
   const [s, e] = rangeFor('today');
   el('start').value = s; el('end').value = e;
   initDetailModal(); // 상세 팝업 닫기/배경클릭/ESC 핸들러를 랜딩 시 항상 연결(어느 탭에서 열어도 닫기 동작)
-  load(false);
+  applyRangeToActiveView(s, e); // 랜딩 = Cafe24 로드 + loadedRange 기록
   loadTarget();
 })();

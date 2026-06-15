@@ -79,7 +79,13 @@ function serveStatic(res, pathname) {
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    const ext = path.extname(file);
+    // app.js/style.css/index.html 은 자주 바뀌므로 브라우저 캐시 방지(항상 최신 로드 → stale 화면 방지)
+    const noCache = ['.js', '.css', '.html'].includes(ext);
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': noCache ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
+    });
     res.end(data);
   });
 }
@@ -227,16 +233,16 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await analytics.trafficMonthly(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  // 월별 매출 시계열 (몰별, 2025-01~현재) — 전년 동월 비교(YoY)용
+  // 월별 매출 시계열 (몰별, 2024-01~현재) — 전년 동월 비교(YoY)용. 2024 백필로 2025 YoY 비교 가능.
   if (u.pathname === '/api/compare/monthly') {
-    const start = u.searchParams.get('start') || '2025-01-01';
+    const start = u.searchParams.get('start') || '2024-01-01';
     const end = u.searchParams.get('end') || Y();
     try { return sendJson(res, 200, { ok: true, ...(await compare.monthlySeries(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  // 월별 충전재(등급)별 매출 시계열
+  // 월별 충전재(등급)별 매출 시계열 (2024-01~현재)
   if (u.pathname === '/api/compare/monthly-tier') {
-    const start = u.searchParams.get('start') || '2025-01-01';
+    const start = u.searchParams.get('start') || '2024-01-01';
     const end = u.searchParams.get('end') || Y();
     try { return sendJson(res, 200, { ok: true, ...(await compare.monthlyTierSeries(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

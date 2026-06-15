@@ -790,7 +790,7 @@ function initSmartstore() {
       <button class="tab" data-sstab="bizpromote">⑥ 비즈 유도</button>
     </nav>
     <div id="ssPanel"></div>`;
-  el('ssStart').value = el('start').value || monthStart(); el('ssEnd').value = el('end').value || rangeFor('yesterday')[1];
+  el('ssStart').value = monthStart(); el('ssEnd').value = rangeFor('yesterday')[1]; // 활성 칩(이번 달)과 일치하는 기본 구간(데이터 있는 범위)
   el('ssLoad').addEventListener('click', loadSmartstore);
   wireDateMirror('ssStart', 'ssEnd');
   el('ssSync').addEventListener('click', syncSmartstore);
@@ -1268,8 +1268,8 @@ async function renderCmpTraffic() {
       ${kc('가입 / 가입률', num(t.signups) + '명', `가입률 ${pct(t.signupRate)}`, 'pink')}
     </section>
     <div class="grid two">
-      <div class="card"><h3>📊 자사몰 월별 방문수 (2025 vs 2026) <span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.visits, num)}</div>
-      <div class="card"><h3>📊 자사몰 월별 가입수 (2025 vs 2026) <span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.signups, num)}</div>
+      <div class="card"><h3>📊 자사몰 월별 방문수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.visits, num)}</div>
+      <div class="card"><h3>📊 자사몰 월별 가입수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.signups, num)}</div>
     </div>
     <div class="grid two" style="margin-top:16px">
       <div class="card"><h3>🛒 월별 매출 (자사몰 vs 스마트스토어) <span class="hint">2025-01 ~ 현재</span></h3>${monthlyChannel(monRows, (o) => o.sales, won)}</div>
@@ -1347,7 +1347,7 @@ function renderCmpBest() {
   if (showSs) cards.push(`<div class="card"><h3>🟢 스마트스토어 베스트 Top10 <span class="hint">${s} ~ ${e} · 매출순</span></h3>${tableHtml(['상품', '수량', '매출'], (best.ok && best.smartstore) || [], (q) => [q.name, num(q.qty), won(q.sales)])}</div>`);
   const grid = cards.length > 1 ? `<div class="grid two">${cards.join('')}</div>` : (cards[0] || '');
   p.innerHTML = chSelectBar('베스트 상품을 몰별로 확인') + grid +
-    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 월별 매출 추이 (2025 vs 2026) <span class="hint">전년 동월 비교</span></h3>
+    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 월별 매출 추이 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>
       ${monthlyYoy(monRows, (r) => chPick(r, 'sales'), won)}</div>`;
   wireCmpCh();
 }
@@ -1360,8 +1360,8 @@ function renderCmpProduct() {
   const monRows = (cmpCache.mon && cmpCache.mon.ok && cmpCache.mon.rows) || [];
   const showCa = cmpCh !== 'smartstore', showSs = cmpCh !== 'cafe24';
   const tCards = [], yCards = [];
-  if (showCa) { tCards.push(`<div class="card"><h3>🛒 자사몰 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ca.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ca, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 자사몰 월별 매출 (2025 vs 2026) <span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.cafe24.sales, won)}</div>`); }
-  if (showSs) { tCards.push(`<div class="card"><h3>🟢 스마트스토어 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ss.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ss, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 스마트스토어 월별 매출 (2025 vs 2026) <span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.smartstore.sales, won)}</div>`); }
+  if (showCa) { tCards.push(`<div class="card"><h3>🛒 자사몰 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ca.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ca, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 자사몰 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.cafe24.sales, won)}</div>`); }
+  if (showSs) { tCards.push(`<div class="card"><h3>🟢 스마트스토어 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ss.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ss, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 스마트스토어 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.smartstore.sales, won)}</div>`); }
   const grid = (cs) => cs.length > 1 ? `<div class="grid two">${cs.join('')}</div>` : (cs[0] || '');
   p.innerHTML = chSelectBar('상품별 판매량을 몰별로 확인') + grid(tCards) + `<div style="margin-top:16px">${grid(yCards)}</div>`;
   wireCmpCh();
@@ -1379,7 +1379,7 @@ function renderCmpTier() {
   const grid = cards.length > 1 ? `<div class="grid two">${cards.join('')}</div>` : (cards[0] || '');
   const ch = cmpCh === 'all' ? 'total' : cmpCh;
   p.innerHTML = chSelectBar('충전재를 몰별로 확인') + grid +
-    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 충전재 등급별 전년비 (2025 vs 2026) <span class="hint">연 누적 매출 비교</span></h3>${tierYoy(montier, ch)}</div>`;
+    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 충전재 등급별 전년비 (연도별 · 전년비)<span class="hint">연 누적 매출 비교</span></h3>${tierYoy(montier, ch)}</div>`;
   wireCmpCh();
 }
 

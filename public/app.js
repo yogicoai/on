@@ -100,7 +100,7 @@ async function openSSDetail(kind, value, label) {
       if (r.means) meta.push(`<span class="m"><b>결제</b> ${ae(r.means)}</span>`);
       if (r.inflow) meta.push(`<span class="m"><b>유입</b> ${ae(r.inflow)}</span>`);
       if (r.device) meta.push(`<span class="m"><b>기기</b> ${ae(r.device)}</span>`);
-      (r.coupons || []).forEach((c) => meta.push(`<span class="m cpn">🎟 ${ae(c)}</span>`));
+      (r.coupons || []).forEach((c) => meta.push(`<span class="m cpn">${ae(c)}</span>`));
       const metaHtml = meta.length ? `<div class="ordmeta">${meta.join('')}</div>` : '';
       return `
       <tr>
@@ -116,8 +116,8 @@ async function openSSDetail(kind, value, label) {
       : '<div class="empty">주문 없음</div>';
     openDetailModal(`${ae(label)} <span class="muted" style="font-size:13px;font-weight:500">· 주문 ${num(j.orderCount)}건 · 매출 ${won(j.totalSales)} · 수량 ${num(j.totalQty)}개</span>`,
       `<div class="dmcols ssdetail">
-        <div><h4>📦 상품 집계 <span class="muted">상위 ${(j.products || []).length}</span></h4>${prodTbl}</div>
-        <div><h4>🧾 주문 목록 <span class="muted">상위 ${(j.orders || []).length}</span></h4>${ordTbl}</div>
+        <div><h4>상품 집계 <span class="muted">상위 ${(j.products || []).length}</span></h4>${prodTbl}</div>
+        <div><h4>주문 목록 <span class="muted">상위 ${(j.orders || []).length}</span></h4>${ordTbl}</div>
       </div>`);
   } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
@@ -136,6 +136,7 @@ async function load(force, funnel) {
     if (!j.ok) throw new Error(j.error || '실패');
     lastData = j;
     render(j);
+    loadDailyHealth(); // 같은 요일 평균 대비 방문·일일매출 경고(비차단)
     const cache = j._cache && j._cache.hit ? `캐시 (${new Date(j._cache.computedAt).toLocaleString('ko-KR')} 집계)` : `라이브 집계 ${j.elapsedMs}ms`;
     setStatus(`${start} ~ ${end} · 주문 ${num(j.ordersCount)}건 · ${cache}`, 'ok');
   } catch (e) {
@@ -147,6 +148,28 @@ async function load(force, funnel) {
   }
 }
 function setStatus(msg, cls) { el('status').innerHTML = `<span class="${cls}">${msg}</span>`; }
+
+// 같은 요일 평균 대비 방문수·일일매출 경고 (Cafe24). 오늘은 진행중이라 직전 완료일(어제) 기준으로 점검.
+async function loadDailyHealth() {
+  const box = el('dailyHealth'); if (!box) return;
+  const today = rangeFor('today')[0], yest = rangeFor('yesterday')[0];
+  const end = el('end').value || today;
+  const hd = (end >= today) ? yest : end;
+  try {
+    const j = await (await fetch(`/api/cafe24/daily-health?date=${hd}&weeks=8`)).json();
+    if (!j.ok) { box.innerHTML = ''; return; }
+    const v = j.visits, s = j.sales, warn = v.below || s.below;
+    const md = `${+hd.slice(5, 7)}/${+hd.slice(8, 10)}`;
+    const salesTxt = s.below
+      ? `일일 매출이 ${j.label}요일 평균(${won(s.avg)})보다 <b>${won(Math.abs(s.diff))} 모자랍니다</b>`
+      : `일일 매출 ${won(s.day)} <span class="muted">(평균 ${won(s.avg)} 대비 +${won(s.diff)})</span>`;
+    const visitTxt = v.below
+      ? `방문수가 ${j.label}요일 평균(${num(v.avg)})보다 <b>${num(Math.abs(v.diff))} 적습니다</b>`
+      : `방문수 ${num(v.day)} <span class="muted">(평균 ${num(v.avg)} 대비 +${num(v.diff)})</span>`;
+    box.innerHTML = `<div class="insightline" style="border-left-color:${warn ? 'var(--warn)' : 'var(--green)'}">`
+      + `<b>${md}(${j.label}) 일일 점검</b> <span class="muted">· 최근 ${j.samples}개 ${j.label}요일 평균 대비</span> — ${salesTxt} · ${visitTxt}</div>`;
+  } catch (_) { box.innerHTML = ''; }
+}
 
 // ── 렌더 ──
 function render(d) {
@@ -202,7 +225,7 @@ function toggleSalesBreakdown() {
       (x) => [x.qty ? `<button class="linklike" data-tier="${enc(x.tier)}">${x.tier} ▸</button>` : x.tier,
         num(x.qty)+'개', pct(x.qtyShare), won(x.sales), pct(x.share)])}
     <div id="fillerDetail" style="margin-top:12px"></div>
-    <div class="insightline">💡 충전재 등급: 스탠다드(기본) / 프리미엄 / 프리미엄플러스 / 기타(커버·비즈 등). 예) "맥스"=스탠다드, "맥스 프리미엄"=프리미엄</div>
+    <div class="insightline">충전재 등급: 스탠다드(기본) / 프리미엄 / 프리미엄플러스 / 기타(커버·비즈 등). 예) "맥스"=스탠다드, "맥스 프리미엄"=프리미엄</div>
   </div>
   <div class="card" style="margin-top:16px">
     <h3>카테고리 × 충전재 <span class="hint">매출(수량)</span></h3>
@@ -255,8 +278,29 @@ function tableHtml(cols, rows, rowFn) {
   if (!rows.length) return '<div class="empty">데이터 없음</div>';
   const head = '<tr>' + cols.map((c) => `<th>${c}</th>`).join('') + '</tr>';
   const body = rows.map(rowFn).map((cells) => '<tr>' + cells.map((v, i) => `<td class="${i ? 'num' : ''}">${v}</td>`).join('') + '</tr>').join('');
-  return `<div class="tablewrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  // 모든 표에 ⤓ CSV 버튼 자동 부착 (클릭 시 렌더된 표를 클라이언트에서 CSV로 다운로드)
+  return `<div class="tablewrap"><div class="csvbar"><button class="csv-btn" title="이 표를 CSV로 다운로드">⤓ CSV</button></div><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
+// 렌더된 <table> 텍스트를 CSV로 다운로드 (엑셀 한글용 BOM 포함)
+function downloadTableCsv(table, filename) {
+  const esc = (s) => { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csv = [...table.querySelectorAll('tr')].map((tr) =>
+    [...tr.querySelectorAll('th,td')].map((c) => esc(c.textContent)).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename || 'data.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+// ⤓ CSV 버튼 위임 처리 (캡처 단계 → 카드/행 클릭 핸들러보다 먼저 가로채 충돌 방지)
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest && ev.target.closest('.csv-btn'); if (!btn) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const wrap = btn.closest('.tablewrap'); const table = wrap && wrap.querySelector('table'); if (!table) return;
+  const card = btn.closest('.card'); const h = card && card.querySelector('h3');
+  const title = (h ? h.textContent : '데이터').replace(/[\\/:*?"<>|·]+/g, '').replace(/\s+/g, '_').slice(0, 40);
+  const dr = (el('start') && el('start').value) || '';
+  downloadTableCsv(table, `${title}${dr ? '_' + dr : ''}.csv`);
+}, true);
 
 function renderInflow(f) {
   const t = f.totals;
@@ -340,16 +384,20 @@ document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () 
 }));
 // 현재 보고 있는 채널 (상단 날짜 칩/조회/갱신이 이 뷰를 제어)
 let curCh = 'cafe24';
-const loadedRange = {}; // ch -> '시작~종료' 마지막 로드 구간 (탭 전환 시 중복 로드 방지)
-// 상단 날짜 컨트롤을 현재 활성 채널 뷰에 적용 (Cafe24 / 스마트스토어 / 통합비교 공통)
+let curGroup = null; // curCh==='group' 일 때 선택된 기타 채널 그룹명(쿠팡·롯데·신세계…)
+const loadedRange = {}; // key -> '시작~종료' 마지막 로드 구간 (탭 전환 시 중복 로드 방지)
+// 상단 날짜 컨트롤을 현재 활성 채널 뷰에 적용 (Cafe24 / 스마트스토어 / 기타채널 그룹 / 통합비교 공통)
 function applyRangeToActiveView(s, e, force) {
-  loadedRange[curCh] = (s || '') + '~' + (e || '');
+  const key = curCh === 'group' ? 'group:' + curGroup : curCh;
+  loadedRange[key] = (s || '') + '~' + (e || '');
   if (curCh === 'smartstore') {
     if (s) el('ssStart').value = s; if (e) el('ssEnd').value = e;
     loadSmartstore();
   } else if (curCh === 'compare') {
     if (s) el('cmpStart').value = s; if (e) el('cmpEnd').value = e;
     loadCompare();
+  } else if (curCh === 'group') {
+    loadGroupView(curGroup); // 그룹 전용 뷰는 상단 start/end 를 직접 읽음
   } else {
     load(!!force);
   }
@@ -362,7 +410,7 @@ document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', ()
   el('start').value = s; el('end').value = e;
   applyRangeToActiveView(s, e);
 }));
-// 🎯 프로모션 기간 칩 — 이번 달(또는 오늘이 포함된) 등록 전사 프로모션 기간만 조회
+// 프로모션 기간 칩 — 이번 달(또는 오늘이 포함된) 등록 전사 프로모션 기간만 조회
 async function applyCurrentMonthPromo() {
   const t = new Date(); const ym = `${t.getFullYear()}-${pad(t.getMonth() + 1)}`; const today = ymd(t);
   setStatus(`${ym} 전사 프로모션 기간 조회 중…`, '');
@@ -372,10 +420,10 @@ async function applyCurrentMonthPromo() {
     let promo = items.find((r) => r.month === ym)
       || items.find((r) => r.start <= today && r.end >= today)
       || items.filter((r) => r.start <= today).sort((a, b) => (a.start < b.start ? 1 : -1))[0];
-    if (!promo) { setStatus(`${ym} 등록된 전사 프로모션이 없습니다 — ⚙ 설정에서 먼저 등록하세요`, 'err'); return; }
+    if (!promo) { setStatus(`${ym} 등록된 전사 프로모션이 없습니다 — 설정에서 먼저 등록하세요`, 'err'); return; }
     el('start').value = promo.start; el('end').value = promo.end;
     applyRangeToActiveView(promo.start, promo.end);
-    setStatus(`🎯 프로모션 기간: ${promo.name} (${promo.start} ~ ${promo.end})`, 'ok');
+    setStatus(`프로모션 기간: ${promo.name} (${promo.start} ~ ${promo.end})`, 'ok');
   } catch (e) { setStatus('프로모션 조회 오류: ' + e.message, 'err'); }
 }
 el('apply').addEventListener('click', () => { document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active')); applyRangeToActiveView(el('start').value, el('end').value); });
@@ -393,9 +441,14 @@ el('refreshWeek').addEventListener('click', async () => {
     const r = await fetch('/api/sync-today');
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || '실패');
-    // 적재 후 현재 선택 구간을 캐시 무시하고 다시 불러오기 (주문 반영, funnel 은 캐시)
-    await load(true);
-    setStatus(`오늘 재취합 완료 (${j.day}) · ${j.elapsedMs}ms — 현재 구간 갱신됨`, 'ok');
+    // 오늘 데이터를 받았으니 "오늘" 구간으로 이동해 방금 받은 데이터를 보여준다 (현재 보고 있는 채널 기준)
+    const [s, e] = rangeFor('today');
+    el('start').value = s; el('end').value = e;
+    document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active'));
+    const todayChip = document.querySelector('.chip[data-range="today"]'); if (todayChip) todayChip.classList.add('active');
+    loadedRange[curCh] = ''; // 강제 재조회
+    applyRangeToActiveView(s, e, true);
+    setStatus(`오늘 재취합 완료 (${j.day}) · ${j.elapsedMs}ms — 오늘 구간으로 이동`, 'ok');
   } catch (e) {
     setStatus('재취합 오류: ' + e.message, 'err');
   } finally {
@@ -538,7 +591,7 @@ async function loadCouponPromos() {
         ${kpiCard('전사 프로모션 매출', won(promo.revenue), `%쿠폰 사용 · 전체쿠폰의 ${pct(promo.share)}`, 'pink')}
         ${kpiCard('쿠폰 연결 매출', won(t.revenue), `${s} ~ ${e}`, '')}
       </section>
-      <div class="card"><h3>🎯 전사 프로모션 성과 (할인율 %별) <span class="hint">그달 고객이 사용한 % 쿠폰으로 유추 · ${s} ~ ${e}</span></h3>
+      <div class="card"><h3>전사 프로모션 성과 (할인율 %별) <span class="hint">그달 고객이 사용한 % 쿠폰으로 유추 · ${s} ~ ${e}</span></h3>
         ${promo.byRate.length ? tableHtml(['할인율', '쿠폰수', '다운로드', '구매(고객)', '구매율', '매출', '객단가', '주요 상품 Top3'], promo.byRate,
           (r) => [`<strong>${r.rate}%</strong>`, num(r.coupons), num(r.downloaded), num(r.purchased),
             pct(r.downloaded ? r.purchased/r.downloaded : 0), won(r.revenue), won(r.aov),
@@ -634,7 +687,7 @@ async function loadBenefit() {
         ${tableHtml(['구분', '주문수', '비중', '매출', '쿠폰할인', '적립금 사용'], bf.rows,
           (r) => [`<button class="linklike" data-type="${r.type}">${r.key} ▸</button>`, num(r.orders), pct(bf.total ? r.orders/bf.total : 0), won(r.revenue), won(r.coupon), won(r.points)])}
         <div id="bfDetail" style="margin-top:12px"></div>
-        <div class="insightline">💡 적립금 사용 주문 <strong>${num(bf.pointOrders)}건(${pct(bf.pointRatio)})</strong> · 쿠폰 사용 <strong>${num(bf.couponOrders)}건(${pct(bf.couponRatio)})</strong> — 구분을 클릭하면 그 주문들의 상품·사용액이 나옵니다</div>
+        <div class="insightline">적립금 사용 주문 <strong>${num(bf.pointOrders)}건(${pct(bf.pointRatio)})</strong> · 쿠폰 사용 <strong>${num(bf.couponOrders)}건(${pct(bf.couponRatio)})</strong> — 구분을 클릭하면 그 주문들의 상품·사용액이 나옵니다</div>
       </div>`;
     el('pResult').querySelectorAll('button[data-type]').forEach((b) => b.addEventListener('click', () => loadBenefitOrders(b.dataset.type, s, e)));
   } catch (err) { el('pResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
@@ -670,7 +723,7 @@ async function loadGroupbuy() {
         ${kpiCard('객단가', won(gb.aov), `구매 고객 ${num(gb.members)}`, 'accent')}
         ${kpiCard('신규 주문', num(gb.newOrders), '첫 구매', 'pink')}
       </section>
-      <div class="card"><h3>🤝 공동구매 상품별 성과 <span class="hint">상품명 [공동구매] 기준 · ${gb.productCount}종</span></h3>
+      <div class="card"><h3>공동구매 상품별 성과 <span class="hint">상품명 [공동구매] 기준 · ${gb.productCount}종</span></h3>
         ${gb.products.length ? tableHtml(['상품', '주문', '수량', '매출'], gb.products, (r) => [r.name, num(r.orders), num(r.qty), won(r.sales)]) : '<div class="empty">이 기간 공동구매 주문 없음</div>'}
       </div>`;
   } catch (err) { el('gbResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
@@ -686,7 +739,7 @@ async function loadBenefitOrders(type, s, e) {
       : ['주문일', '고객', '구매 상품', '결제액', '쿠폰할인', '적립금'];
     const cpnCell = (r) => { const cs = r.coupons || []; return cs.length ? cs.map((n) => `<span class="tag">${n}</span>`).join(' ') : '<span class="muted">미상</span>'; };
     el('dmTitle').innerHTML = `${ae(j.label)} <span class="muted" style="font-size:13px;font-weight:500">· 주문 ${num(j.count)}건</span>`;
-    el('dmBody').innerHTML = `<div class="insightline" style="border-left-color:var(--pink)">구매상품 · ${showCpn ? '사용 쿠폰 · ' : ''}쿠폰/적립금 사용액${showCpn ? ' <span class="muted" style="font-size:11px">(쿠폰명은 order_coupons 적재분 기준 — "미상"은 ⚙에서 쿠폰명 적재 필요)</span>' : ''}</div>
+    el('dmBody').innerHTML = `<div class="insightline" style="border-left-color:var(--pink)">구매상품 · ${showCpn ? '사용 쿠폰 · ' : ''}쿠폰/적립금 사용액${showCpn ? ' <span class="muted" style="font-size:11px">(쿠폰명은 order_coupons 적재분 기준 — "미상"은 에서 쿠폰명 적재 필요)</span>' : ''}</div>
       ${tableHtml(cols, j.rows,
         (r) => showCpn
           ? [r.order_date, r.name || (r.member_id ? r.member_id : '-'), (r.products || []).join(', '), cpnCell(r), won(r.payment_amount), won(r.coupon_discount), won(r.points_used)]
@@ -761,24 +814,58 @@ document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () 
 }));
 
 // ══════════════════════════════════════════════
-//  채널 전환 (Cafe24 / 스마트스토어)
+//  채널 전환 (Cafe24 / 스마트스토어 / 기타채널 그룹들 / 통합비교)
 // ══════════════════════════════════════════════
 let ssInit = false;
-document.querySelectorAll('.chtab').forEach((b) => b.addEventListener('click', () => {
+// 채널 탭은 그룹 탭이 런타임에 추가되므로 위임(delegation)으로 처리
+el('channelTabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.chtab');
+  if (b) switchChannel(b);
+});
+function switchChannel(b) {
   document.querySelectorAll('.chtab').forEach((x) => x.classList.remove('active'));
   b.classList.add('active');
   const ch = b.dataset.ch;
   curCh = ch; // 상단 날짜 칩/조회/갱신이 이 채널 뷰를 제어하도록
+  curGroup = ch === 'group' ? b.dataset.group : null;
   el('view-cafe24').style.display = ch === 'cafe24' ? '' : 'none';
   el('view-smartstore').style.display = ch === 'smartstore' ? '' : 'none';
+  el('view-other').style.display = ch === 'group' ? '' : 'none'; // 그룹 전용 뷰 컨테이너(재사용)
   el('view-compare').style.display = ch === 'compare' ? '' : 'none';
   // 헤더 컨트롤 바는 항상 노출. 상단 날짜 칩/조회는 applyRangeToActiveView 로 현재 채널에 적용.
   if (ch === 'smartstore') initSmartstore();
+  else if (ch === 'group') initGroupView();
   else if (ch === 'compare') initCompare();
   // 전환한 채널을 상단 구간으로 로드 (이미 같은 구간으로 로드돼 있으면 건너뜀)
+  const key = ch === 'group' ? 'group:' + curGroup : ch;
   const cur = (el('start').value || '') + '~' + (el('end').value || '');
-  if (loadedRange[ch] !== cur) applyRangeToActiveView(el('start').value, el('end').value);
-}));
+  if (loadedRange[key] !== cur) applyRangeToActiveView(el('start').value, el('end').value);
+  // 활성 채널 뷰 하단에 인라인 관리(이번 달 목표 + 프로모션). 통합비교는 제외.
+  if (ch === 'cafe24') showChannelAdmin('자사몰', el('view-cafe24'));
+  else if (ch === 'smartstore') showChannelAdmin('스마트스토어', el('view-smartstore'));
+  else if (ch === 'group') showChannelAdmin(curGroup, el('view-other'));
+  else showChannelAdmin(null);
+}
+
+// 기타 채널 그룹들을 상단 탭으로 동적 생성 (Cafe24·스마트스토어와 동급, 매출순) — 데이터 기반이라 채널 추가 시 자동 반영
+let groupTabsBuilt = false;
+async function buildGroupTabs() {
+  if (groupTabsBuilt) return; groupTabsBuilt = true;
+  try {
+    const j = await (await fetch('/api/other/overview')).json();
+    if (!j.ok || !(j.groups || []).length) return;
+    const nav = el('channelTabs');
+    const anchor = el('chtabCompare'); // 통합 비교 탭 앞에 삽입
+    for (const g of j.groups) {
+      const btn = document.createElement('button');
+      btn.className = 'chtab';
+      btn.dataset.ch = 'group';
+      btn.dataset.group = g.group;
+      btn.textContent = `${g.group}`;
+      if (anchor) nav.insertBefore(btn, anchor); else nav.appendChild(btn);
+    }
+  } catch (_) { /* 그룹 탭 생성 실패해도 나머지 채널은 정상 동작 */ }
+}
 
 let ssData = null, ssTab = 'product', ssBreakOpen = false;
 function initSmartstore() {
@@ -788,7 +875,7 @@ function initSmartstore() {
     <div class="card" style="margin:14px 0">
       <div class="panelctl">
         <input type="hidden" id="ssStart"><input type="hidden" id="ssEnd">
-        <span class="muted" style="font-size:12px">📅 기간은 <b>상단 날짜 선택</b>으로 조회합니다 (자사몰·통합비교 공통)</span>
+        <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b>으로 조회합니다 (자사몰·통합비교 공통)</span>
         <button id="ssSync" class="btn warn" title="최근 7일 주문만 네이버 커머스 API로 재수집(월 단위보다 호출 적음)">⟲ 최근 7일 동기화(API)</button>
         <span id="ssStatus" class="muted" style="font-size:12px"></span>
       </div>
@@ -865,7 +952,7 @@ function renderSSPanel() {
   if (ssTab === 'inflow') {
     p.innerHTML = `<div class="card"><h3>유입경로별 주문·매출 <span class="hint">네이버 제공 유입경로 · 상위 ${j.inflow.length} · 클릭 시 상세</span></h3>
       ${tableHtml(['유입경로', '주문', '매출', '비중'], j.inflow, (r) => [dlink('inflow', r.inflow), num(r.orders), won(r.sales), pct(j.kpis.revenue ? r.sales / j.kpis.revenue : 0)])}
-      <div class="insightline">💡 스마트스토어는 사이트 방문수 통계가 별도라, 주문 단위 <strong>유입경로(검색/광고/장바구니 등)</strong>로 분석합니다. 방문수 API 제공 여부 확인 중 — 가능하면 추가합니다.</div></div>`;
+      <div class="insightline">스마트스토어는 사이트 방문수 통계가 별도라, 주문 단위 <strong>유입경로(검색/광고/장바구니 등)</strong>로 분석합니다. 방문수 API 제공 여부 확인 중 — 가능하면 추가합니다.</div></div>`;
   } else if (ssTab === 'product') {
     p.innerHTML = `
       <div class="grid two">
@@ -907,7 +994,7 @@ function renderSSPanel() {
         ${ssKc('수수료', won(k.commission), `수수료율 ${pct(k.commissionRate)}`, '', '')}
         ${ssKc('매출(결제)', won(k.revenue), `주문 ${num(k.orders)}`, 'green', '')}
       </section>
-      <div class="card"><h3>🎯 할인 이벤트 (즉시할인 진행 상품) <span class="hint">즉시할인이 적용된 상품 = 할인 이벤트 · ${de.length}종 · 클릭 시 상세</span></h3>
+      <div class="card"><h3>할인 이벤트 (즉시할인 진행 상품) <span class="hint">즉시할인이 적용된 상품 = 할인 이벤트 · ${de.length}종 · 클릭 시 상세</span></h3>
         ${de.length ? tableHtml(['상품', '등급', '주문', '수량', '매출', '할인액', '할인율'], de,
           (r) => [dlink('discountEvent', r.name), `<span class="tag">${r.tier}</span>`, num(r.orders), num(r.qty), won(r.sales), won(r.total), pct(r.discountRate)]) : '<div class="empty">이 기간 즉시할인 진행 상품 없음</div>'}</div>
       <div style="height:16px"></div>
@@ -923,7 +1010,7 @@ function renderSSPanel() {
       </div>
       <div class="card" style="margin-top:16px"><h3>적용 쿠폰 <span class="hint">쿠폰 적용 주문 ${num(k.couponOrders||0)}건 · 네이버는 쿠폰 마스터 API 미제공 → 주문에 적용된 쿠폰 집계</span></h3>
         ${(j.coupons && j.coupons.length) ? tableHtml(['쿠폰', '적용 주문', '할인액'], j.coupons, (c) => [dlink('coupon', c.name), num(c.orders), won(c.discount)]) : '<div class="empty">이 기간 적용된 쿠폰 정보 없음 (재수집 필요하거나 쿠폰 미사용)</div>'}
-        <div class="insightline">💡 네이버 커머스 API는 쿠폰 발급/마스터 조회를 제공하지 않습니다(공식 확인). 대신 <strong>주문에 적용된 할인 유형·금액·쿠폰</strong>을 집계해 분석합니다. 방문수 통계도 API 미제공(셀러센터 비즈어드바이저 전용).</div></div>`;
+        <div class="insightline">네이버 커머스 API는 쿠폰 발급/마스터 조회를 제공하지 않습니다(공식 확인). 대신 <strong>주문에 적용된 할인 유형·금액·쿠폰</strong>을 집계해 분석합니다. 방문수 통계도 API 미제공(셀러센터 비즈어드바이저 전용).</div></div>`;
   } else if (ssTab === 'payment') {
     p.innerHTML = '<div class="empty">결제·혜택 분석 중…</div>';
     loadSSPayment();
@@ -954,7 +1041,7 @@ async function loadSSBizPromote() {
     const cov = j.ordererCoverage < 0.5
       ? `<div class="insightline" style="border-left-color:var(--pink)">⚠ 주문자ID 적재율이 낮습니다(${pct(j.ordererCoverage)}). 이 기능은 주문자ID가 필요해요 — <strong>⟲ 이번 달 동기화</strong> 또는 전체 재수집 후 정확해집니다. (이미 수집된 과거 주문엔 주문자ID가 없어 재수집 필요)</div>` : '';
     el('ssBzResult').innerHTML = `${cov}<div class="card">
-      <h3>🟢 스마트스토어 비즈 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 리필 미구매 · ${num(j.count)}명</span>
+      <h3>스마트스토어 비즈 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 리필 미구매 · ${num(j.count)}명</span>
         <a class="btn mini" href="/api/smartstore/biz-promote.csv?months=${m}">⤓ CSV</a></h3>
       ${tableHtml(['주문자ID', '이름', '연락처', '본품 구매일', '경과', '구매 본품'], j.rows,
         (r) => [r.orderer_id || '-', r.name || '-', r.tel || '-', r.mainDate || '-', r.monthsSince + '개월', (r.products || []).slice(0, 2).join(', ')])}
@@ -979,7 +1066,7 @@ async function loadSSPayment() {
         <div class="card"><h3>PC / 모바일 <span class="hint">payLocationType · 클릭 시 상세</span></h3>
           ${tableHtml(['디바이스', '주문', '비중', '매출'], j.byDevice, (r) => [dlink('device', r.device), num(r.orders), pct(r.share), won(r.sales)])}</div>
       </div>
-      <div class="insightline">💡 네이버는 적립금 대신 <strong>네이버 마일리지(포인트)</strong>로 결제 — ${num(j.mileage.orders)}건에서 ${won(j.mileage.sum)} 사용. 결제수단(간편결제/카드)·디바이스·멤버십 비중은 스마트스토어 MD가 보는 핵심 지표입니다.</div>`;
+      <div class="insightline">네이버는 적립금 대신 <strong>네이버 마일리지(포인트)</strong>로 결제 — ${num(j.mileage.orders)}건에서 ${won(j.mileage.sum)} 사용. 결제수단(간편결제/카드)·디바이스·멤버십 비중은 스마트스토어 MD가 보는 핵심 지표입니다.</div>`;
   } catch (err) { el('ssPanel').innerHTML = `<div class="empty">오류: ${err.message} <br><span class="muted">결제 필드 재수집 중일 수 있습니다 — 잠시 후 다시 조회</span></div>`; }
 }
 // 충전재 분해 (Cafe24 총매출 분해와 동일 양식) — ssData.salesBreakdown
@@ -1071,12 +1158,12 @@ async function loadBizPromote(fresh) {
     const when = j.builtAt ? new Date(j.builtAt).toLocaleString('ko-KR') : '';
     const barColor = j.stale ? 'var(--orange, #e8a33d)' : (j.cached ? 'var(--muted)' : 'var(--green)');
     const barText = j.stale
-      ? `🟠 이전 저장 데이터(캐시) · ${when} 집계 — <b>새 주문 데이터가 있습니다.</b> 최신으로 보려면 재계산하세요`
-      : (j.cached ? `🗄 이전 저장 데이터(캐시) · ${when} 집계 — 클릭 시 저장된 데이터를 먼저 보여줍니다` : `🟢 방금 새로 계산 · ${when}`);
+      ? `이전 저장 데이터(캐시) · ${when} 집계 — <b>새 주문 데이터가 있습니다.</b> 최신으로 보려면 재계산하세요`
+      : (j.cached ? `이전 저장 데이터(캐시) · ${when} 집계 — 클릭 시 저장된 데이터를 먼저 보여줍니다` : `방금 새로 계산 · ${when}`);
     const cacheBar = `<div class="insightline" style="border-left-color:${barColor}">
       ${barText} <button id="bzFresh" class="btn mini ghost">↻ 최신 재계산</button></div>`;
     el('bzResult').innerHTML = `${cacheBar}<div class="card">
-      <h3>🛒 비즈 구매 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 비즈 미구매 · ${num(j.count)}명 (상위 ${j.rows.length} 표시)</span>
+      <h3>비즈 구매 유도 대상 <span class="hint">본품 구매 ${j.months}개월↑ 경과 · 비즈 미구매 · ${num(j.count)}명 (상위 ${j.rows.length} 표시)</span>
         <a class="btn mini" href="/api/biz-promote.csv?months=${m}">⤓ CSV</a></h3>
       ${tableHtml(['회원ID', '이름', '연락처', '이메일', '마케팅', 'SMS', '이메일수신', '본품 구매일', '경과', '구매 본품'], j.rows,
         (r) => [r.member_id||'-', r.name||'-', r.cellphone||'-', r.email||'-',
@@ -1088,7 +1175,75 @@ async function loadBizPromote(fresh) {
 }
 
 // ══════════════════════════════════════════════
-//  📊 통합 비교 (자사몰 + 스마트스토어)
+//  기타 채널 그룹 전용 뷰 (쿠팡·롯데·현대·신세계·공동구매 등 — 각 그룹이 상단 독립 탭)
+//   · 그룹 = 입점몰 합산(현대=현대이지웰+현대M포인트몰+더현대닷컴 등). 모두 #view-other 컨테이너 재사용.
+//   · 입점몰 행 클릭 → 그 입점몰 상품 상세 팝업.
+// ══════════════════════════════════════════════
+let groupViewInit = false;
+function initGroupView() {
+  if (groupViewInit) return; groupViewInit = true;
+  el('otherMain').innerHTML = `
+    <div class="card" style="margin:14px 0"><div class="panelctl">
+      <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b> 사용 · 이카운트 등록 판매 기준(매출/수량) · 입점몰 합산</span>
+    </div></div>
+    <section class="kpis" id="otherKpis"></section>
+    <div id="otherPanel"></div>`;
+  initDetailModal();
+  // 입점몰(채널) 행 클릭 → 그 입점몰 상품 상세 팝업
+  el('otherMain').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-ostore]');
+    if (b) openOtherChannel(decodeURIComponent(b.dataset.ostore));
+  });
+}
+async function loadGroupView(group) {
+  if (!group) return;
+  el('otherKpis').innerHTML = '';
+  el('otherPanel').innerHTML = '<div class="empty">분석 중…</div>';
+  const s = el('start').value, e = el('end').value;
+  try {
+    const j = await (await fetch(`/api/other/group?group=${enc(group)}&start=${s}&end=${e}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const t = j.totals; const subs = j.subs || []; const topSub = subs[0];
+    const empty = !t.sales ? `<div class="insightline" style="border-left-color:var(--warn)">선택 구간(${s} ~ ${e})에 <b>${ae(group)}</b> 판매가 없습니다. 상단 날짜를 넓혀보세요.</div>` : '';
+    el('otherKpis').innerHTML = [
+      kpiCard(`${group} 매출`, won(t.sales), `${num(t.orders)}주문 · ${num(t.channels)}개 입점몰`, 'green'),
+      kpiCard('판매 수량', num(t.qty) + '개', `객단가 ${won(t.aov)}`, 'accent'),
+      kpiCard('Top 입점몰', topSub ? topSub.store : '-', topSub ? won(topSub.sales) : '', 'pink'),
+      kpiCard('기간', `${j.start || '전체'}`, `~ ${j.end || '현재'}`, ''),
+    ].join('');
+    el('otherPanel').innerHTML = `
+      ${empty}
+      <div class="card"><h3>입점몰(채널)별 매출 <span class="hint">행 클릭 시 입점몰 상품 상세 · ${num(subs.length)}개</span></h3>
+        ${tableHtml(['입점몰', '매출', '수량', '주문', '객단가', '비중'], subs,
+          (r) => [`<button class="linklike" data-ostore="${enc(r.store)}">${r.store} ▸</button>`, won(r.sales), num(r.qty), num(r.orders), won(r.aov), pct(t.sales ? r.sales / t.sales : 0)])}
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="card"><h3>카테고리별 매출 <span class="hint">${(j.byCategory || []).length}종</span></h3>
+          ${tableHtml(['카테고리', '매출', '수량', '비중'], j.byCategory || [], (r) => [r.category, won(r.sales), num(r.qty), pct(t.sales ? r.sales / t.sales : 0)])}</div>
+        <div class="card"><h3>충전재(등급)별 <span class="hint">beadType</span></h3>
+          ${tableHtml(['충전재', '매출', '수량'], j.byBead || [], (r) => [r.beadType, won(r.sales), num(r.qty)])}</div>
+      </div>
+      <div class="card" style="margin-top:16px"><h3>상품별 매출 <span class="hint">${num((j.products || []).length)}종</span></h3>
+        ${tableHtml(['상품', '매출', '수량', '주문'], j.products || [], (r) => [r.productName, won(r.sales), num(r.qty), num(r.orders)])}</div>
+      <div class="card" style="margin-top:16px"><h3>월별 매출 추이 <span class="hint">${ae(group)} 전체</span></h3>
+        ${monthlyYoy((j.monthly || []).map((m) => ({ ym: m.ym, sales: m.sales })), (r) => r.sales, won)}</div>`;
+  } catch (err) { el('otherPanel').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+// 입점몰(채널) 클릭 → 그 입점몰 상품/카테고리 상세 (팝업)
+async function openOtherChannel(storeName) {
+  const s = el('start').value, e = el('end').value;
+  openDetailModal(`${ae(storeName)} <span class="muted" style="font-size:13px;font-weight:500">· 입점몰 상세</span>`, '<div class="empty">불러오는 중…</div>');
+  try {
+    const j = await (await fetch(`/api/other/channel?store=${enc(storeName)}&start=${s}&end=${e}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    el('dmBody').innerHTML = `
+      <div class="card"><h3>카테고리별</h3>${tableHtml(['카테고리', '매출', '수량'], j.byCategory, (r) => [r.category, won(r.sales), num(r.qty)])}</div>
+      <div class="card" style="margin-top:12px"><h3>상품별 <span class="hint">${num(j.products.length)}종</span></h3>${tableHtml(['상품', '매출', '수량', '주문'], j.products, (r) => [r.productName, won(r.sales), num(r.qty), num(r.orders)])}</div>`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+
+// ══════════════════════════════════════════════
+//  통합 비교 (자사몰 + 스마트스토어)
 // ══════════════════════════════════════════════
 // 고정 헤더(KPI + 전년/전월/전주 비교표) + 서브탭 5개. 탭 전환은 재호출 없이 cmpCache 사용.
 let cmpInit = false;
@@ -1096,7 +1251,7 @@ let cmpCache = null;        // loadCompare가 받은 6개 응답 보관 { s, e, 
 let cmpTab = 'promo';       // promo | traffic | best | product | tier
 let cmpCh = 'all';          // all | cafe24 | smartstore — 베스트/상품별/충전재 몰별 필터
 const CMP_CH_NAME = { total: '전체', cafe24: '자사몰', smartstore: '스마트스토어' };
-const CMP_CH_OPT = [['all', '전체 (자사몰+스마트스토어)'], ['cafe24', '🛒 자사몰'], ['smartstore', '🟢 스마트스토어']];
+const CMP_CH_OPT = [['all', '전체 (자사몰+스마트스토어)'], ['cafe24', '자사몰'], ['smartstore', '스마트스토어']];
 // 몰 선택창 + 재렌더 배선
 function chSelectBar(hint) {
   return `<div class="card" style="margin-bottom:14px"><div class="panelctl">
@@ -1113,7 +1268,7 @@ function initCompare() {
     <div class="card" style="margin:14px 0">
       <div class="panelctl">
         <input type="hidden" id="cmpStart"><input type="hidden" id="cmpEnd">
-        <span class="muted" style="font-size:12px">📅 기간은 <b>상단 날짜 선택</b> 사용 · 또는 ↓</span>
+        <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b> 사용 · 또는 ↓</span>
         <label>월 선택 <span class="ymsel"><select id="cmpYear"></select><select id="cmpMon"></select></span></label>
         <label id="cmpPromoWrap">전사 프로모션 <select id="cmpPromo"><option value="">(기간 직접 선택)</option></select></label>
         <span class="muted" style="font-size:12px">자사몰+스마트스토어 통합 (전사 프로모션 선택은 ① 프로모션 매출용)</span>
@@ -1182,7 +1337,7 @@ async function loadCompare() {
   el('cmpFixed').innerHTML = '';
   el('cmpPanel').innerHTML = '<div class="empty">분석 중…</div>';
   try {
-    const [per, best, cat, promos, extra, prod, mon, montier] = await Promise.all([
+    const [per, best, cat, promos, extra, prod, mon, montier, other] = await Promise.all([
       (await fetch(`/api/compare/period?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/best?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/category-promo?start=${s}&end=${e}`)).json(),
@@ -1191,8 +1346,9 @@ async function loadCompare() {
       (await fetch(`/api/compare/product-by-channel?start=${s}&end=${e}&limit=50`)).json(),
       (await fetch('/api/compare/monthly')).json(),
       (await fetch('/api/compare/monthly-tier')).json(),
+      (await fetch(`/api/other/overview?start=${s}&end=${e}`)).json(), // 기타 채널 합산
     ]);
-    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier };
+    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier, other };
     renderCmpFixed();
     renderCmpTab();
   } catch (err) {
@@ -1203,19 +1359,25 @@ async function loadCompare() {
 // 고정 헤더: KPI 4장 + 전년/전월/전주 동기간 비교표 (탭 전환과 무관하게 항상 표시)
 function renderCmpFixed() {
   const c = cmpCache; if (!c) return;
-  const { s, e, per } = c;
+  const { s, e, per, other } = c;
   const rows = (per.ok && per.rows) || [];
   const T = rows.find((r) => r.channel === 'total') || null;
+  const oSales = (other && other.ok && other.totals.sales) || 0;
+  const oOrders = (other && other.ok && other.totals.orders) || 0;
+  const oChannels = (other && other.ok && other.totals.channels) || 0;
+  const grand = (T ? T.cur.revenue : 0) + oSales; // 전 채널 = 자사몰+스마트스토어+기타
   const kc = (l, v, sub, cls) => `<div class="kpi ${cls || ''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
+  // 기타 채널을 비교표의 한 행으로 추가(전주/전월/전년 비교는 미산출 → '-')
+  const otherRow = oSales ? [{ channel: '기타 채널', cur: { revenue: oSales, aov: oOrders ? Math.round(oSales / oOrders) : 0 }, wow: { rate: null }, mom: { rate: null }, yoy: { rate: null } }] : [];
   el('cmpFixed').innerHTML = `
     ${T ? `<section class="kpis" style="padding:0 0 14px">
-      ${kc('전체 매출', won(T.cur.revenue), `${s} ~ ${e} · 자사몰+스마트스토어`, 'accent')}
-      ${kc('전월 대비', cmpRtBig(T.mom.rate), `전월 동기간 ${won(T.mom.revenue)}`, '')}
-      ${kc('전년 대비', cmpRtBig(T.yoy.rate), `전년 동기간 ${won(T.yoy.revenue)}`, '')}
-      ${kc('객단가', won(T.cur.aov), `전주 대비 ${cmpRtBig(T.wow.rate)}`, 'green')}
+      ${kc('전 채널 매출', won(grand), `${s} ~ ${e} · 자사몰+스마트스토어+기타`, 'accent')}
+      ${kc('자사몰+스마트스토어', won(T.cur.revenue), `전월 ${cmpRtBig(T.mom.rate)} · 전년 ${cmpRtBig(T.yoy.rate)}`, 'green')}
+      ${kc('기타 채널', won(oSales), `${num(oOrders)}주문 · ${num(oChannels)}개 채널 · 이카운트`, 'pink')}
+      ${kc('객단가(자사+스토어)', won(T.cur.aov), `전주 대비 ${cmpRtBig(T.wow.rate)}`, '')}
     </section>` : ''}
-    <div class="card"><h3>전년 / 전월 / 전주 동기간 비교 <span class="hint">${s} ~ ${e} · 채널별 매출·객단가</span></h3>
-      ${tableHtml(['채널', '현재 매출', '객단가', '전주비', '전월비', '전년비'], rows,
+    <div class="card"><h3>전년 / 전월 / 전주 동기간 비교 <span class="hint">${s} ~ ${e} · 채널별 매출·객단가 (기타=이카운트 합계)</span></h3>
+      ${tableHtml(['채널', '현재 매출', '객단가', '전주비', '전월비', '전년비'], [...rows, ...otherRow],
         (r) => [`<strong>${CMP_CH_NAME[r.channel] || r.channel}</strong>`, won(r.cur.revenue), won(r.cur.aov), cmpRt(r.wow.rate), cmpRt(r.mom.rate), cmpRt(r.yoy.rate)])}
     </div>`;
 }
@@ -1238,7 +1400,7 @@ function renderCmpPromo() {
   p.innerHTML = `
     <div class="card"><h3>전사 프로모션 기간별 매출 비교 <span class="hint">행 클릭 시 그 기간으로 전환(전체 비교 반영) · 자사몰+스마트스토어</span></h3>
       ${promoRows.length ? tableHtml(['프로모션', '기간', '일수', '총매출', '일평균', '자사몰', '스마트스토어', '객단가', '전7일', '후7일'], promoRows,
-        (q) => [`<button class="linklike" data-ps="${q.start}" data-pe="${q.end}">${q.name} ▸</button>`, `${q.start}~${q.end}`, q.days + '일', won(q.total.revenue), won(q.dailyAvg), won(q.cafe24.revenue), won(q.smartstore.revenue), won(q.aov), won(q.before7.revenue), won(q.after7.revenue)]) : '<div class="empty">저장된 전사 프로모션 없음 — ⚙ 목표·프로모션 설정에서 기간을 입력하세요</div>'}
+        (q) => [`<button class="linklike" data-ps="${q.start}" data-pe="${q.end}">${q.name} ▸</button>`, `${q.start}~${q.end}`, q.days + '일', won(q.total.revenue), won(q.dailyAvg), won(q.cafe24.revenue), won(q.smartstore.revenue), won(q.aov), won(q.before7.revenue), won(q.after7.revenue)]) : '<div class="empty">저장된 전사 프로모션 없음 — 목표·프로모션 설정에서 기간을 입력하세요</div>'}
     </div>
     <div class="card" style="margin-top:16px"><h3>카테고리별 프로모션 성과 <span class="hint">전월 동기간 대비 (자사몰) · ${s} ~ ${e}</span></h3>
       ${tableHtml(['카테고리', '매출', '비중', '전월비'], catRows, (r) => [r.cat, won(r.sales), pct(r.share), cmpRt(r.momRate)])}
@@ -1278,12 +1440,12 @@ async function renderCmpTraffic() {
       ${kc('가입 / 가입률', num(t.signups) + '명', `가입률 ${pct(t.signupRate)}`, 'pink')}
     </section>
     <div class="grid two">
-      <div class="card"><h3>📊 자사몰 월별 방문수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.visits, num)}</div>
-      <div class="card"><h3>📊 자사몰 월별 가입수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.signups, num)}</div>
+      <div class="card"><h3>자사몰 월별 방문수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.visits, num)}</div>
+      <div class="card"><h3>자사몰 월별 가입수 (연도별 · 전년비)<span class="hint">전년 동월 비교 · 자사몰 한정</span></h3>${monthlyYoy(mrows, (r) => r.signups, num)}</div>
     </div>
     <div class="grid two" style="margin-top:16px">
-      <div class="card"><h3>🛒 월별 매출 (자사몰 vs 스마트스토어) <span class="hint">2025-01 ~ 현재</span></h3>${monthlyChannel(monRows, (o) => o.sales, won)}</div>
-      <div class="card"><h3>🧾 월별 구매건수 (자사몰 vs 스마트스토어) <span class="hint">2025-01 ~ 현재</span></h3>${monthlyChannel(monRows, (o) => o.orders, num)}</div>
+      <div class="card"><h3>월별 매출 (자사몰 vs 스마트스토어) <span class="hint">2025-01 ~ 현재</span></h3>${monthlyChannel(monRows, (o) => o.sales, won)}</div>
+      <div class="card"><h3>월별 구매건수 (자사몰 vs 스마트스토어) <span class="hint">2025-01 ~ 현재</span></h3>${monthlyChannel(monRows, (o) => o.orders, num)}</div>
     </div>
     <div class="grid two" style="margin-top:16px">
       <div class="card"><h3>요일별 평균 방문 / 가입 <span class="hint">${s} ~ ${e}</span></h3>
@@ -1294,7 +1456,7 @@ async function renderCmpTraffic() {
     <div class="card" style="margin-top:16px"><h3>일별 트래픽 상세 <span class="hint">${s} ~ ${e} · 방문/PV/구매/가입</span></h3>
       ${tableHtml(['일자', '요일', '방문', 'PV', 'PV/방문', '구매', '구매율', '구매액(자사몰)', '가입', '가입률'], daily,
         (r) => [r.date, DOW[r.dow], num(r.visits), num(r.pv), r.pvPerVisit.toFixed(2), num(r.orders), pct(r.cvr), won(r.revenue), num(r.signups), pct(r.signupRate)])}</div>
-    <div class="insightline">💡 데이터 출처 — 방문·PV: Cafe24 통계 API · 가입: 회원 가입일(<code>/customersprivacy</code>) · 구매·매출: 주문 DB(자사몰+스마트스토어).</div>`;
+    <div class="insightline">데이터 출처 — 방문·PV: Cafe24 통계 API · 가입: 회원 가입일(<code>/customersprivacy</code>) · 구매·매출: 주문 DB(자사몰+스마트스토어).</div>`;
 }
 
 // ── 전체기간 월별 추이 + 전년비(YoY) 헬퍼 ──
@@ -1353,11 +1515,11 @@ function renderCmpBest() {
   const monRows = (mon && mon.ok && mon.rows) || [];
   const showCa = cmpCh !== 'smartstore', showSs = cmpCh !== 'cafe24';
   const cards = [];
-  if (showCa) cards.push(`<div class="card"><h3>🛒 자사몰 베스트 Top10 <span class="hint">${s} ~ ${e} · 매출순</span></h3>${tableHtml(['상품', '수량', '매출'], (best.ok && best.cafe24) || [], (q) => [q.name, num(q.qty), won(q.sales)])}</div>`);
-  if (showSs) cards.push(`<div class="card"><h3>🟢 스마트스토어 베스트 Top10 <span class="hint">${s} ~ ${e} · 매출순</span></h3>${tableHtml(['상품', '수량', '매출'], (best.ok && best.smartstore) || [], (q) => [q.name, num(q.qty), won(q.sales)])}</div>`);
+  if (showCa) cards.push(`<div class="card"><h3>자사몰 베스트 Top10 <span class="hint">${s} ~ ${e} · 매출순</span></h3>${tableHtml(['상품', '수량', '매출'], (best.ok && best.cafe24) || [], (q) => [q.name, num(q.qty), won(q.sales)])}</div>`);
+  if (showSs) cards.push(`<div class="card"><h3>스마트스토어 베스트 Top10 <span class="hint">${s} ~ ${e} · 매출순</span></h3>${tableHtml(['상품', '수량', '매출'], (best.ok && best.smartstore) || [], (q) => [q.name, num(q.qty), won(q.sales)])}</div>`);
   const grid = cards.length > 1 ? `<div class="grid two">${cards.join('')}</div>` : (cards[0] || '');
   p.innerHTML = chSelectBar('베스트 상품을 몰별로 확인') + grid +
-    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 월별 매출 추이 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>
+    `<div class="card" style="margin-top:16px"><h3>${chLabel()} 월별 매출 추이 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>
       ${monthlyYoy(monRows, (r) => chPick(r, 'sales'), won)}</div>`;
   wireCmpCh();
 }
@@ -1370,8 +1532,8 @@ function renderCmpProduct() {
   const monRows = (cmpCache.mon && cmpCache.mon.ok && cmpCache.mon.rows) || [];
   const showCa = cmpCh !== 'smartstore', showSs = cmpCh !== 'cafe24';
   const tCards = [], yCards = [];
-  if (showCa) { tCards.push(`<div class="card"><h3>🛒 자사몰 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ca.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ca, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 자사몰 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.cafe24.sales, won)}</div>`); }
-  if (showSs) { tCards.push(`<div class="card"><h3>🟢 스마트스토어 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ss.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ss, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>📈 스마트스토어 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.smartstore.sales, won)}</div>`); }
+  if (showCa) { tCards.push(`<div class="card"><h3>자사몰 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ca.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ca, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>자사몰 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.cafe24.sales, won)}</div>`); }
+  if (showSs) { tCards.push(`<div class="card"><h3>스마트스토어 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 상위 ${ss.length}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], ss, (r) => [r.name, num(r.qty), won(r.sales), pct(r.share)])}</div>`); yCards.push(`<div class="card"><h3>스마트스토어 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(monRows, (r) => r.smartstore.sales, won)}</div>`); }
   const grid = (cs) => cs.length > 1 ? `<div class="grid two">${cs.join('')}</div>` : (cs[0] || '');
   p.innerHTML = chSelectBar('상품별 판매량을 몰별로 확인') + grid(tCards) + `<div style="margin-top:16px">${grid(yCards)}</div>`;
   wireCmpCh();
@@ -1389,7 +1551,7 @@ function renderCmpTier() {
   const grid = cards.length > 1 ? `<div class="grid two">${cards.join('')}</div>` : (cards[0] || '');
   const ch = cmpCh === 'all' ? 'total' : cmpCh;
   p.innerHTML = chSelectBar('충전재를 몰별로 확인') + grid +
-    `<div class="card" style="margin-top:16px"><h3>📈 ${chLabel()} 충전재 등급별 전년비 (연도별 · 전년비)<span class="hint">연 누적 매출 비교</span></h3>${tierYoy(montier, ch)}</div>`;
+    `<div class="card" style="margin-top:16px"><h3>${chLabel()} 충전재 등급별 전년비 (연도별 · 전년비)<span class="hint">연 누적 매출 비교</span></h3>${tierYoy(montier, ch)}</div>`;
   wireCmpCh();
 }
 
@@ -1407,13 +1569,15 @@ function getYM(yearId, monId) { return `${el(yearId).value}-${pad(el(monId).valu
 function setYM(yearId, monId, ym) { el(yearId).value = ym.slice(0, 4); el(monId).value = +ym.slice(5, 7); }
 function openSettings() {
   el('settingsModal').style.display = 'flex';
-  if (!el('tgYear').options.length) { fillYM('tgYear', 'tgMon'); fillYM('pmYear', 'pmMon'); }
-  loadTgList(); loadPmList();
+  if (!el('tgYear').options.length) fillYM('tgYear', 'tgMon');
+  prMallOptions();
+  loadTgList(); loadPrList(); renderPrProducts();
 }
 function closeSettings() { el('settingsModal').style.display = 'none'; }
-el('btnSettings').addEventListener('click', openSettings);
-el('btnSettingsClose').addEventListener('click', closeSettings);
-el('settingsModal').addEventListener('click', (e) => { if (e.target === el('settingsModal')) closeSettings(); });
+// ⚙ 설정 모달은 채널 인라인 관리(showChannelAdmin)로 대체 — 진입 버튼 제거. (모달 마크업/JS는 비활성 잔존)
+const _bs = el('btnSettings'); if (_bs) _bs.addEventListener('click', openSettings);
+const _bsc = el('btnSettingsClose'); if (_bsc) _bsc.addEventListener('click', closeSettings);
+const _sm = el('settingsModal'); if (_sm) _sm.addEventListener('click', (e) => { if (e.target === _sm) closeSettings(); });
 
 async function loadTgList() {
   try {
@@ -1432,37 +1596,336 @@ el('tgSave').addEventListener('click', async () => {
   el('tgMsg').textContent = '저장 중…';
   try {
     const j = await (await fetch('/api/target/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month, cafe24, smartstore }) })).json();
-    el('tgMsg').textContent = j.ok ? '✅ 저장됨' : ('오류: ' + j.error);
+    el('tgMsg').textContent = j.ok ? '저장됨' : ('오류: ' + j.error);
     loadTgList(); loadTarget();
   } catch (e) { el('tgMsg').textContent = '오류: ' + e.message; }
 });
 
-async function loadPmList() {
+// ── 몰별 프로모션 관리 (몰 선택 → Cafe24 상품 검색·추가 → 상품별 할인율 → 기간) ──
+let prSelected = [];   // [{productNo, productName, price, discountRate}]
+let prEditId = null;
+function prMallOptions() {
+  if (!el('prMall')) return;
+  const malls = ['자사몰', '스마트스토어'];
+  document.querySelectorAll('#channelTabs .chtab[data-ch="group"]').forEach((b) => { if (b.dataset.group) malls.push(b.dataset.group); });
+  const cur = el('prMall').value;
+  el('prMall').innerHTML = malls.map((m) => `<option value="${ae(m)}">${ae(m)}</option>`).join('');
+  if (cur && malls.includes(cur)) el('prMall').value = cur;
+}
+function renderPrProducts() {
+  if (!el('prProducts')) return;
+  if (!prSelected.length) { el('prProducts').innerHTML = '<div class="muted" style="font-size:12px;padding:6px 0">선택된 상품 없음 — 위에서 검색 후 추가하세요</div>'; return; }
+  const rows = prSelected.map((p, i) => `<tr>
+    <td>${ae(p.productName)}</td>
+    <td class="num">${won(p.price)}</td>
+    <td class="num"><input type="number" min="0" max="100" value="${p.discountRate || 0}" data-pri="${i}" class="prdisc" style="width:60px">%</td>
+    <td class="num prfinal">${won(Math.round(p.price * (1 - (p.discountRate || 0) / 100)))}</td>
+    <td class="num"><button class="delx" data-prdel="${i}">✕</button></td></tr>`).join('');
+  el('prProducts').innerHTML = `<table style="width:100%;margin-top:6px"><thead><tr><th>상품</th><th class="num">정가</th><th class="num">할인율</th><th class="num">할인가</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  el('prProducts').querySelectorAll('.prdisc').forEach((inp) => inp.addEventListener('input', () => {
+    const i = +inp.dataset.pri, v = Math.max(0, Math.min(100, +inp.value || 0));
+    prSelected[i].discountRate = v;
+    const cell = inp.closest('tr').querySelector('.prfinal');
+    if (cell) cell.textContent = won(Math.round(prSelected[i].price * (1 - v / 100)));
+  }));
+  el('prProducts').querySelectorAll('[data-prdel]').forEach((b) => b.addEventListener('click', () => { prSelected.splice(+b.dataset.prdel, 1); renderPrProducts(); }));
+}
+async function prDoSearch() {
+  const q = el('prSearch').value.trim();
+  el('prSearchMsg').textContent = '검색 중…'; el('prSearchResult').innerHTML = '';
   try {
-    const j = await (await fetch('/api/promo-periods/list')).json();
-    const items = (j.ok && j.items) || [];
-    el('pmList').innerHTML = '<div class="setlist">' + (items.length ? tableHtml(['월', '프로모션명', '기간', ''], items,
-      (r) => [r.month, r.name, `${r.start} ~ ${r.end}`, `<button class="linklike" data-m="${r.month}" data-n="${encodeURIComponent(r.name)}" data-s="${r.start}" data-e="${r.end}">수정</button> <button class="delx" data-del="${r.month}">삭제</button>`]) : '<div class="empty">저장된 프로모션 없음</div>') + '</div>';
-    el('pmList').querySelectorAll('button[data-m]').forEach((b) => b.addEventListener('click', () => {
-      setYM('pmYear', 'pmMon', b.dataset.m); el('pmName').value = decodeURIComponent(b.dataset.n); el('pmStart').value = b.dataset.s; el('pmEnd').value = b.dataset.e;
+    const j = await (await fetch(`/api/cafe24/products/search?q=${enc(q)}&limit=50`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const items = j.items || [];
+    el('prSearchMsg').textContent = `${items.length}개${items.length >= 50 ? '+ (상위 50)' : ''}`;
+    if (!items.length) { el('prSearchResult').innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
+    el('prSearchResult').innerHTML = `<div style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:6px">
+      <table style="width:100%"><tbody>${items.map((r) => `<tr>
+        <td>${ae(r.productName)}</td><td class="num">${won(r.price)}</td>
+        <td class="num"><button class="linklike" data-pradd="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table></div>`;
+    el('prSearchResult').querySelectorAll('[data-pradd]').forEach((b) => b.addEventListener('click', () => {
+      const p = JSON.parse(decodeURIComponent(b.dataset.pradd));
+      if (prSelected.some((x) => x.productNo === p.productNo)) { el('prSearchMsg').textContent = '이미 추가된 상품입니다'; return; }
+      prSelected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: 0 });
+      renderPrProducts();
     }));
-    el('pmList').querySelectorAll('button[data-del]').forEach((b) => b.addEventListener('click', async () => {
-      if (!confirm('삭제할까요?')) return;
-      await fetch('/api/promo-periods/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: b.dataset.del }) });
-      loadPmList();
+  } catch (e) { el('prSearchMsg').textContent = '오류: ' + e.message; }
+}
+async function loadPrList() {
+  if (!el('prList')) return;
+  try {
+    const j = await (await fetch('/api/promotions/list')).json();
+    const items = (j.ok && j.items) || [];
+    el('prList').innerHTML = '<div class="setlist">' + (items.length ? tableHtml(['몰', '프로모션명', '기간', '상품', ''], items,
+      (r) => [ae(r.mall), ae(r.name), `${r.start} ~ ${r.end}`, `${(r.products || []).length}개`,
+        `<button class="linklike" data-predit="${r.id}">수정</button> <button class="delx" data-prdelp="${r.id}">삭제</button>`]) : '<div class="empty">등록된 프로모션 없음</div>') + '</div>';
+    el('prList').querySelectorAll('[data-predit]').forEach((b) => b.addEventListener('click', () => { const it = items.find((x) => x.id === b.dataset.predit); if (it) prEditLoad(it); }));
+    el('prList').querySelectorAll('[data-prdelp]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('이 프로모션을 삭제할까요?')) return;
+      await fetch('/api/promotions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.dataset.prdelp }) });
+      loadPrList();
     }));
   } catch (_) {}
 }
-el('pmSave').addEventListener('click', async () => {
-  const month = getYM('pmYear', 'pmMon'), name = el('pmName').value, start = el('pmStart').value, end = el('pmEnd').value;
-  if (!month || !start || !end) { el('pmMsg').textContent = '월·시작·종료를 입력하세요'; return; }
-  el('pmMsg').textContent = '저장 중…';
+function prEditLoad(it) {
+  prEditId = it.id;
+  prMallOptions();
+  el('prMall').value = it.mall; el('prName').value = it.name; el('prStart').value = it.start; el('prEnd').value = it.end;
+  prSelected = (it.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0 }));
+  renderPrProducts();
+  el('prMsg').textContent = `수정 중: ${it.name}`;
+}
+function prReset() {
+  prEditId = null;
+  el('prName').value = ''; el('prStart').value = ''; el('prEnd').value = '';
+  el('prSearch').value = ''; el('prSearchResult').innerHTML = ''; el('prSearchMsg').textContent = '';
+  prSelected = []; renderPrProducts(); el('prMsg').textContent = '';
+}
+async function prSave() {
+  const mall = el('prMall').value, name = el('prName').value.trim(), start = el('prStart').value, end = el('prEnd').value;
+  if (!mall || !name || !start || !end) { el('prMsg').textContent = '몰·이름·시작·종료를 입력하세요'; return; }
+  el('prMsg').textContent = '저장 중…';
   try {
-    const j = await (await fetch('/api/promo-periods/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month, name, start, end }) })).json();
-    el('pmMsg').textContent = j.ok ? '✅ 저장됨' : ('오류: ' + j.error);
-    loadPmList();
-  } catch (e) { el('pmMsg').textContent = '오류: ' + e.message; }
-});
+    const body = { mall, name, start, end, products: prSelected };
+    if (prEditId) body.id = prEditId;
+    const j = await (await fetch('/api/promotions/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+    if (!j.ok) throw new Error(j.error);
+    el('prMsg').textContent = '저장됨';
+    prReset(); loadPrList();
+  } catch (e) { el('prMsg').textContent = '오류: ' + e.message; }
+}
+el('prSearchBtn').addEventListener('click', prDoSearch);
+el('prSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); prDoSearch(); } });
+el('prSave').addEventListener('click', prSave);
+el('prReset').addEventListener('click', prReset);
+
+// ══════════════════════════════════════════════
+//  채널 인라인 관리 — 각 채널 화면 하단: 이번 달 목표(달성률) + 프로모션(등록/목록)
+//   자사몰·스마트스토어·기타 그룹 공통. 단일 노드를 활성 채널 뷰 하단으로 이동해 사용.
+// ══════════════════════════════════════════════
+let admNode = null, admMall = null, admPrSelected = [], admPrEditId = null;
+function curYM() { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}`; }
+function buildChannelAdmin() {
+  if (admNode) return admNode;
+  const n = document.createElement('div');
+  n.id = 'channelAdmin';
+  n.style.cssText = 'max-width:1400px;margin:8px auto 0;padding:0 24px 40px';
+  n.innerHTML = `
+    <div class="card" style="margin-top:18px;border-top:3px solid var(--line2)">
+      <h3>이번 달 목표 매출 <span class="hint" id="admTgInfo"></span></h3>
+      <div class="panelctl">
+        <label>목표(만원) <input type="number" id="admTgInput" placeholder="예: 2000" style="width:120px"></label>
+        <button id="admTgSave" class="btn">목표 저장</button>
+        <span id="admTgMsg" class="muted"></span>
+      </div>
+      <div id="admTgStatus" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>프로모션 <span class="hint">이 채널 · 프로모션명·기간·상품·상품별 할인율</span></h3>
+      <div class="setform">
+        <label>프로모션명 <input type="text" id="admPrName" placeholder="예: 6월 여름 프로모션"></label>
+        <label>시작 <input type="date" id="admPrStart"></label>
+        <label>종료 <input type="date" id="admPrEnd"></label>
+      </div>
+      <div class="setform" style="margin-top:8px">
+        <label>상품 검색 <input type="text" id="admPrSearch" placeholder="상품명 (Cafe24/스마트스토어)"></label>
+        <button id="admPrSearchBtn" class="btn ghost">검색</button>
+        <span id="admPrSearchMsg" class="muted"></span>
+      </div>
+      <div id="admPrSearchResult"></div>
+      <div id="admPrProducts"></div>
+      <div class="setform" style="margin-top:10px">
+        <button id="admPrSave" class="btn">프로모션 저장</button>
+        <button id="admPrReset" class="btn ghost">새로 작성</button>
+        <span id="admPrMsg" class="muted"></span>
+      </div>
+      <div id="admPrList" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>프로모션 성과 <span class="hint">등록 프로모션 상품의 실제 판매(기간 내) · 자사몰=상품번호, 그 외=상품명 매칭</span></h3>
+      <div id="admPrPerf"></div>
+    </div>`;
+  admNode = n;
+  n.querySelector('#admTgSave').addEventListener('click', saveAdminTarget);
+  n.querySelector('#admPrSearchBtn').addEventListener('click', admPrDoSearch);
+  n.querySelector('#admPrSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); admPrDoSearch(); } });
+  n.querySelector('#admPrSave').addEventListener('click', admPrSave);
+  n.querySelector('#admPrReset').addEventListener('click', admPrReset);
+  return n;
+}
+// 각 채널 뷰 하단에는 "컴팩트 요약 + 관리 버튼"만. 클릭 시 팝업(모달)에서 목표·프로모션 관리.
+let admTrigger = null;
+function buildAdmTrigger() {
+  if (admTrigger) return admTrigger;
+  const n = document.createElement('div');
+  n.id = 'admTrigger';
+  n.style.cssText = 'max-width:1400px;margin:14px auto 0;padding:0 24px 40px';
+  n.innerHTML = `<div class="card" style="border-top:3px solid var(--line2);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+    <div id="admTrigSummary" class="muted" style="font-size:13px">목표 · 프로모션</div>
+    <button id="admTrigBtn" class="btn">이번 달 목표 · 프로모션 관리 ▸</button>
+  </div>`;
+  admTrigger = n;
+  n.querySelector('#admTrigBtn').addEventListener('click', () => openChannelAdminModal(admMall));
+  return n;
+}
+function showChannelAdmin(mall, viewEl) {
+  const n = buildAdmTrigger();
+  if (!mall || !viewEl) { n.style.display = 'none'; return; }
+  viewEl.appendChild(n);
+  n.style.display = '';
+  admMall = mall;
+  loadAdmTriggerSummary(mall);
+}
+async function loadAdmTriggerSummary(mall) {
+  const box = el('admTrigSummary'); if (!box) return;
+  box.textContent = `${mall} · 불러오는 중…`;
+  try {
+    const ym = curYM();
+    const [tr, pr] = await Promise.all([
+      (await fetch(`/api/target/mall?month=${ym}&mall=${enc(mall)}`)).json(),
+      (await fetch(`/api/promotions/list?mall=${enc(mall)}`)).json(),
+    ]);
+    const promos = (pr.ok && pr.items) ? pr.items.length : 0;
+    const tg = (tr.ok && tr.target)
+      ? `목표 ${won(tr.target)} · 실적 ${won(tr.actual)} · 달성률 <b>${pct(tr.rate)}</b>`
+      : `이번 달 실적 ${won((tr && tr.actual) || 0)} · <span style="color:var(--warn)">목표 미설정</span>`;
+    box.innerHTML = `<b>${ae(mall)}</b> · ${ym} · ${tg} · 프로모션 ${promos}건`;
+  } catch (_) { box.textContent = `${mall} · 목표 · 프로모션`; }
+}
+function ensureAdminModal() {
+  if (el('adminModal')) return;
+  const m = document.createElement('div');
+  m.id = 'adminModal'; m.className = 'modal'; m.style.display = 'none';
+  m.innerHTML = `<div class="modal-box" style="max-width:920px;width:94%"><div class="modal-head"><strong id="admModalTitle">관리</strong><button id="admModalClose" class="btn ghost mini">닫기 ✕</button></div><div class="modal-body" id="admModalBody" style="max-height:78vh;overflow:auto"></div></div>`;
+  document.body.appendChild(m);
+  el('admModalClose').addEventListener('click', closeChannelAdminModal);
+  m.addEventListener('click', (e) => { if (e.target === m) closeChannelAdminModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el('adminModal') && el('adminModal').style.display === 'flex') closeChannelAdminModal(); });
+}
+function openChannelAdminModal(mall) {
+  if (!mall) return;
+  ensureAdminModal();
+  const node = buildChannelAdmin();
+  node.style.cssText = '';      // 모달 안에서는 뷰용 여백 제거
+  node.style.display = '';
+  el('admModalBody').appendChild(node);
+  el('admModalTitle').textContent = `${mall} · 이번 달 목표 · 프로모션`;
+  el('adminModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  admMall = mall;
+  admPrReset();
+  loadAdminTarget();
+  loadAdminPromos();
+  loadAdminPerformance();
+}
+function closeChannelAdminModal() {
+  if (el('adminModal')) el('adminModal').style.display = 'none';
+  document.body.style.overflow = '';
+  if (admMall) loadAdmTriggerSummary(admMall); // 닫을 때 요약 갱신
+}
+async function loadAdminPerformance() {
+  const box = el('admPrPerf'); if (!box) return;
+  box.innerHTML = '<span class="muted">집계 중…</span>';
+  try {
+    const j = await (await fetch(`/api/promotions/performance?mall=${enc(admMall)}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const ps = j.promotions || [];
+    box.innerHTML = ps.length
+      ? tableHtml(['프로모션', '기간', '대상상품', '프로모션 매출', '수량', '주문'], ps,
+          (r) => [`<b>${ae(r.name)}</b>`, `${r.start} ~ ${r.end}`, `${num(r.products)}개`, won(r.sales), num(r.qty), num(r.orders)])
+      : '<div class="empty">등록된 프로모션이 없습니다 (프로모션을 등록하면 그 상품의 기간 내 실제 판매가 여기 집계됩니다)</div>';
+  } catch (e) { box.innerHTML = `<span class="muted">성과 조회 오류: ${e.message}</span>`; }
+}
+async function loadAdminTarget() {
+  const ym = curYM();
+  el('admTgInfo').textContent = `${admMall} · ${ym}`;
+  el('admTgStatus').innerHTML = '<span class="muted">불러오는 중…</span>';
+  try {
+    const j = await (await fetch(`/api/target/mall?month=${ym}&mall=${enc(admMall)}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    el('admTgInput').value = j.target ? Math.round(j.target / 10000) : '';
+    const rate = j.rate || 0, pace = j.totalDays ? j.elapsedDays / j.totalDays : 0;
+    const cls = rate >= 1 ? 'var(--green)' : (rate >= pace ? 'var(--accent)' : 'var(--warn)');
+    el('admTgStatus').innerHTML = j.target
+      ? `<div class="insightline" style="border-left-color:${cls}">목표 <b>${won(j.target)}</b> · 실적 <b>${won(j.actual)}</b> · 달성률 <b>${pct(rate)}</b> <span class="muted">· 페이스대비 ${j.vsPace >= 0 ? '+' : ''}${won(j.vsPace)} · 예상 ${won(j.forecast)} · 남은목표 ${won(j.remain)}(일 ${won(j.needPerDay)})</span></div>`
+      : `<div class="muted" style="font-size:12px">이번 달 실적 ${won(j.actual)} · 위에 목표(만원)를 입력하면 달성률이 표시됩니다</div>`;
+  } catch (e) { el('admTgStatus').innerHTML = `<span class="muted">목표 조회 오류: ${e.message}</span>`; }
+}
+async function saveAdminTarget() {
+  const amount = Math.round((+el('admTgInput').value || 0) * 10000);
+  el('admTgMsg').textContent = '저장 중…';
+  try {
+    const j = await (await fetch('/api/target/mall/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: curYM(), mall: admMall, amount }) })).json();
+    if (!j.ok) throw new Error(j.error);
+    el('admTgMsg').textContent = '저장됨'; loadAdminTarget();
+  } catch (e) { el('admTgMsg').textContent = '오류: ' + e.message; }
+}
+function renderAdmPrProducts() {
+  const box = el('admPrProducts'); if (!box) return;
+  if (!admPrSelected.length) { box.innerHTML = '<div class="muted" style="font-size:12px;padding:6px 0">선택된 상품 없음 — 검색 후 추가</div>'; return; }
+  box.innerHTML = `<table style="width:100%;margin-top:6px"><thead><tr><th>상품</th><th class="num">정가</th><th class="num">할인율</th><th class="num">할인가</th><th></th></tr></thead><tbody>${
+    admPrSelected.map((p, i) => `<tr><td>${ae(p.productName)} <span class="muted" style="font-size:11px">${p.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(p.price)}</td><td class="num"><input type="number" min="0" max="100" value="${p.discountRate || 0}" data-i="${i}" class="admdisc" style="width:56px">%</td><td class="num admfin">${won(Math.round(p.price * (1 - (p.discountRate || 0) / 100)))}</td><td class="num"><button class="delx" data-del="${i}">✕</button></td></tr>`).join('')
+  }</tbody></table>`;
+  box.querySelectorAll('.admdisc').forEach((inp) => inp.addEventListener('input', () => { const i = +inp.dataset.i, v = Math.max(0, Math.min(100, +inp.value || 0)); admPrSelected[i].discountRate = v; const c = inp.closest('tr').querySelector('.admfin'); if (c) c.textContent = won(Math.round(admPrSelected[i].price * (1 - v / 100))); }));
+  box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { admPrSelected.splice(+b.dataset.del, 1); renderAdmPrProducts(); }));
+}
+async function admPrDoSearch() {
+  const q = el('admPrSearch').value.trim();
+  el('admPrSearchMsg').textContent = '검색 중…'; el('admPrSearchResult').innerHTML = '';
+  try {
+    const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(admMall)}&limit=50`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const items = j.items || [];
+    el('admPrSearchMsg').textContent = `${items.length}개${items.length >= 50 ? '+' : ''} · ${j.source || ''}`;
+    if (!items.length) { el('admPrSearchResult').innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
+    el('admPrSearchResult').innerHTML = `<div style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:6px"><table style="width:100%"><tbody>${items.map((r) => `<tr><td>${ae(r.productName)}</td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table></div>`;
+    el('admPrSearchResult').querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
+      const p = JSON.parse(decodeURIComponent(b.dataset.add));
+      if (admPrSelected.some((x) => x.productNo === p.productNo && x.source === p.source)) { el('admPrSearchMsg').textContent = '이미 추가된 상품'; return; }
+      admPrSelected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: 0, source: p.source });
+      renderAdmPrProducts();
+    }));
+  } catch (e) { el('admPrSearchMsg').textContent = '오류: ' + e.message; }
+}
+async function loadAdminPromos() {
+  const box = el('admPrList'); if (!box) return;
+  try {
+    const j = await (await fetch(`/api/promotions/list?mall=${enc(admMall)}`)).json();
+    const items = (j.ok && j.items) || [];
+    box.innerHTML = items.length ? tableHtml(['프로모션', '기간', '상품', '할인율', ''], items,
+      (r) => [ae(r.name), `${r.start} ~ ${r.end}`, `${(r.products || []).length}개`, (r.products || []).map((p) => p.discountRate + '%').filter((v, i, a) => a.indexOf(v) === i).slice(0, 3).join('/') || '-',
+        `<button class="linklike" data-edit="${r.id}">수정</button> <button class="delx" data-del="${r.id}">삭제</button>`]) : '<div class="empty">등록된 프로모션 없음</div>';
+    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { const it = items.find((x) => x.id === b.dataset.edit); if (it) admPrEdit(it); }));
+    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('이 프로모션을 삭제할까요?')) return; await fetch('/api/promotions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.dataset.del }) }); loadAdminPromos(); }));
+  } catch (_) {}
+}
+function admPrEdit(it) {
+  admPrEditId = it.id;
+  el('admPrName').value = it.name; el('admPrStart').value = it.start; el('admPrEnd').value = it.end;
+  admPrSelected = (it.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0, source: p.source }));
+  renderAdmPrProducts();
+  el('admPrMsg').textContent = `수정 중: ${it.name}`;
+}
+function admPrReset() {
+  admPrEditId = null;
+  ['admPrName', 'admPrStart', 'admPrEnd', 'admPrSearch'].forEach((id) => { if (el(id)) el(id).value = ''; });
+  if (el('admPrSearchResult')) el('admPrSearchResult').innerHTML = '';
+  if (el('admPrSearchMsg')) el('admPrSearchMsg').textContent = '';
+  if (el('admPrMsg')) el('admPrMsg').textContent = '';
+  admPrSelected = []; renderAdmPrProducts();
+}
+async function admPrSave() {
+  const name = el('admPrName').value.trim(), start = el('admPrStart').value, end = el('admPrEnd').value;
+  if (!name || !start || !end) { el('admPrMsg').textContent = '이름·시작·종료를 입력하세요'; return; }
+  el('admPrMsg').textContent = '저장 중…';
+  try {
+    const body = { mall: admMall, name, start, end, products: admPrSelected };
+    if (admPrEditId) body.id = admPrEditId;
+    const j = await (await fetch('/api/promotions/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+    if (!j.ok) throw new Error(j.error);
+    el('admPrMsg').textContent = '저장됨'; admPrReset(); loadAdminPromos();
+  } catch (e) { el('admPrMsg').textContent = '오류: ' + e.message; }
+}
 
 // ── 랜딩: 오늘 데이터 ──
 (function init() {
@@ -1471,4 +1934,6 @@ el('pmSave').addEventListener('click', async () => {
   initDetailModal(); // 상세 팝업 닫기/배경클릭/ESC 핸들러를 랜딩 시 항상 연결(어느 탭에서 열어도 닫기 동작)
   applyRangeToActiveView(s, e); // 랜딩 = Cafe24 로드 + loadedRange 기록
   loadTarget();
+  buildGroupTabs(); // 기타 채널 그룹들을 상단 탭으로 동적 추가(쿠팡·롯데·현대·신세계…)
+  showChannelAdmin('자사몰', el('view-cafe24')); // Cafe24 화면 하단 인라인 관리(목표·프로모션)
 })();

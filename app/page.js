@@ -6,7 +6,7 @@ const SHELL = `
   <header class="topbar">
     <div class="brand">
       <span class="dot"></span>
-      <strong>Cafe24 판매 분석</strong>
+      <strong>판매 분석</strong>
       <span class="muted">Yogibo</span>
     </div>
     <div class="controls">
@@ -15,7 +15,6 @@ const SHELL = `
         <button data-range="yesterday" class="chip">어제</button>
         <button data-range="7d" class="chip">최근 7일</button>
         <button data-range="30d" class="chip">최근 30일</button>
-        <button data-range="promo" class="chip promo" title="이번 달 등록된 전사 프로모션 기간만 조회">🎯 프로모션 기간</button>
         <button data-range="month" class="chip">이번 달</button>
       </div>
       <label>시작 <input type="date" id="start" /></label>
@@ -23,19 +22,18 @@ const SHELL = `
       <button id="apply" class="btn">조회</button>
       <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
       <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 00시 자동 실행)">⟳ 오늘 재취합(API)</button>
-      <button id="btnSettings" class="btn ghost" title="월별 목표 매출 · 전사 프로모션 기간 입력">⚙ 목표·프로모션 설정</button>
     </div>
   </header>
 
   <div class="syncinfo">
-    <span class="si-ico">⏱</span>
     <span>매일 <b>00:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합(API)</b> 버튼을 눌러 최신 API를 취합하세요.</span>
   </div>
 
   <nav class="channel-tabs" id="channelTabs">
-    <button class="chtab active" data-ch="cafe24">🛒 Cafe24 (자사몰)</button>
-    <button class="chtab" data-ch="smartstore">🟢 스마트스토어</button>
-    <button class="chtab" data-ch="compare">📊 통합 비교</button>
+    <button class="chtab active" data-ch="cafe24">Cafe24 (자사몰)</button>
+    <button class="chtab" data-ch="smartstore">스마트스토어</button>
+    <!-- 기타 채널 그룹 탭(쿠팡·롯데·현대·신세계…)은 app.js buildGroupTabs() 가 여기 동적 삽입 -->
+    <button class="chtab" id="chtabCompare" data-ch="compare">통합 비교</button>
   </nav>
 
   <div id="status" class="status"></div>
@@ -43,6 +41,7 @@ const SHELL = `
   <div id="view-cafe24">
     <div id="caTarget" style="padding:0 24px 6px"></div>
     <section class="kpis" id="kpis"></section>
+    <div id="dailyHealth" style="padding:4px 20px 0"></div>
     <div id="kpiDetail" style="padding:0 20px"></div>
 
     <nav class="tabs">
@@ -70,6 +69,7 @@ const SHELL = `
 
   <div id="view-smartstore" style="display:none"><main id="ssMain"></main></div>
 
+  <div id="view-other" style="display:none"><main id="otherMain"></main></div>
   <div id="view-compare" style="display:none"><main id="cmpMain"></main></div>
 
   <footer class="foot muted">
@@ -79,10 +79,10 @@ const SHELL = `
 
   <div id="settingsModal" class="modal" style="display:none">
     <div class="modal-box">
-      <div class="modal-head"><strong>⚙ 월별 목표 · 전사 프로모션 설정</strong><button id="btnSettingsClose" class="btn ghost mini">닫기 ✕</button></div>
+      <div class="modal-head"><strong>월별 목표 · 몰별 프로모션 설정</strong><button id="btnSettingsClose" class="btn ghost mini">닫기 ✕</button></div>
       <div class="modal-body">
         <div class="setblock">
-          <h4>📌 월별 목표 매출 <span class="muted">(만원 단위 입력)</span></h4>
+          <h4>월별 목표 매출 <span class="muted">(만원 단위 입력)</span></h4>
           <div class="setform">
             <label>월 <span class="ymsel"><select id="tgYear"></select><select id="tgMon"></select></span></label>
             <label>자사몰(만원) <input type="number" id="tgCafe24" placeholder="예: 12700"></label>
@@ -93,16 +93,26 @@ const SHELL = `
           <div id="tgList"></div>
         </div>
         <div class="setblock">
-          <h4>🎯 전사 프로모션 기간 <span class="muted">(이 기간 % 쿠폰 사용 주문 = 프로모션 성과)</span></h4>
+          <h4>몰별 프로모션 <span class="muted">(몰 선택 → 상품 검색·추가 → 상품별 할인율 입력 → 기간)</span></h4>
           <div class="setform">
-            <label>월 <span class="ymsel"><select id="pmYear"></select><select id="pmMon"></select></span></label>
-            <label>프로모션명 <input type="text" id="pmName" placeholder="예: 6월 전사프로모션"></label>
-            <label>시작 <input type="date" id="pmStart"></label>
-            <label>종료 <input type="date" id="pmEnd"></label>
-            <button id="pmSave" class="btn">저장</button>
-            <span id="pmMsg" class="muted"></span>
+            <label>몰 <span class="ymsel"><select id="prMall"></select></span></label>
+            <label>프로모션명 <input type="text" id="prName" placeholder="예: 6월 여름 프로모션"></label>
+            <label>시작 <input type="date" id="prStart"></label>
+            <label>종료 <input type="date" id="prEnd"></label>
           </div>
-          <div id="pmList"></div>
+          <div class="setform" style="margin-top:8px">
+            <label>상품 검색 <input type="text" id="prSearch" placeholder="Cafe24 상품명"></label>
+            <button id="prSearchBtn" class="btn ghost">검색</button>
+            <span id="prSearchMsg" class="muted"></span>
+          </div>
+          <div id="prSearchResult"></div>
+          <div id="prProducts"></div>
+          <div class="setform" style="margin-top:10px">
+            <button id="prSave" class="btn">프로모션 저장</button>
+            <button id="prReset" class="btn ghost">새로 작성</button>
+            <span id="prMsg" class="muted"></span>
+          </div>
+          <div id="prList" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
@@ -120,7 +130,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260616i" strategy="afterInteractive" />
     </>
   );
 }

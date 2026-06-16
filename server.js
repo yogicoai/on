@@ -34,7 +34,12 @@ const benefit = require('./lib/benefit');
 const smartstore = require('./lib/smartstore');
 const smartstoreIngest = require('./lib/smartstoreIngest');
 const smartstoreAnalysis = require('./lib/smartstoreAnalysis');
+const otherChannels = require('./lib/otherChannels');
 const dailySync = require('./lib/dailySync');
+const mallPromos = require('./lib/mallPromotions');
+const cafe24Products = require('./lib/cafe24Products');
+const products = require('./lib/products');
+const promoPerformance = require('./lib/promoPerformance');
 
 const PORT = Number(process.env.PORT || 5200);
 const PUBLIC = path.join(__dirname, 'public');
@@ -95,7 +100,7 @@ async function handle(req, res) {
 
   // 읽기 전용 배포(Vercel)에서는 수집·동기화·설정 변경을 비활성화
   if (process.env.READ_ONLY === '1') {
-    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/promo-periods/set', '/api/promo-periods/delete']);
+    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/target/mall/set', '/api/promo-periods/set', '/api/promo-periods/delete', '/api/promotions/set', '/api/promotions/delete']);
     if (req.method === 'POST' || WRITE.has(u.pathname)) {
       return sendJson(res, 403, { ok: false, error: '읽기 전용 배포입니다. 수집·동기화·설정 변경은 로컬에서 실행하세요.' });
     }
@@ -196,6 +201,15 @@ async function handle(req, res) {
       return sendJson(res, 200, { ok: true, saved });
     } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
+  // 몰별 목표(달성률 포함) — 자사몰·스마트스토어 + 기타 채널 그룹
+  if (u.pathname === '/api/target/mall') {
+    try { return sendJson(res, 200, { ok: true, ...(await target.mallTargetStatus(u.searchParams.get('month'), u.searchParams.get('mall'))) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/target/mall/set' && req.method === 'POST') {
+    try { const b = await readBody(req); return sendJson(res, 200, { ok: true, saved: await target.setMallTarget(b.month, b.mall, b.amount) }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
   // ── 통합 비교 ──
   if (u.pathname === '/api/compare/period') {
     const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
@@ -226,6 +240,11 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await analytics.trafficDaily(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 일일 점검: 선택일의 '같은 요일 평균' 대비 방문수·일일매출 (평균 미달 시 경고용)
+  if (u.pathname === '/api/cafe24/daily-health') {
+    try { return sendJson(res, 200, { ok: true, ...(await analytics.dailyHealth(u.searchParams.get('date'), u.searchParams.get('weeks'))) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   // 트래픽 월별 (2025-01~현재) — 방문/가입 전년 동월 비교(YoY)
   if (u.pathname === '/api/traffic/monthly') {
     const start = u.searchParams.get('start') || '2025-01-01';
@@ -247,6 +266,30 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await compare.monthlyTierSeries(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // ── 기타 채널(이카운트) — on.orders 직접 집계 ──
+  if (u.pathname === '/api/other/overview') {
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.overview(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/other/group') {
+    const group = u.searchParams.get('group') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!group) return sendJson(res, 400, { ok: false, error: 'group 파라미터 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.groupDetail(group, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/other/channel') {
+    const storeName = u.searchParams.get('store') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!storeName) return sendJson(res, 400, { ok: false, error: 'store 파라미터 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.channelDetail(storeName, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+
   // 상품별 판매량 (몰별, 매출순 Top N)
   if (u.pathname === '/api/compare/product-by-channel') {
     const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
@@ -277,6 +320,35 @@ async function handle(req, res) {
   if (u.pathname === '/api/promo-periods/delete' && req.method === 'POST') {
     try { const b = await readBody(req); await promoPeriods.deletePromo(b.month); return sendJson(res, 200, { ok: true }); }
     catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+
+  // ── 몰별 프로모션 (몰·상품·할인율) — 전사 promo_periods 대체 ──
+  if (u.pathname === '/api/promotions/list') {
+    try { return sendJson(res, 200, { ok: true, items: await mallPromos.listPromotions(u.searchParams.get('mall') || '') }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promotions/set' && req.method === 'POST') {
+    try { const b = await readBody(req); return sendJson(res, 200, { ok: true, saved: await mallPromos.setPromotion(b) }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promotions/delete' && req.method === 'POST') {
+    try { const b = await readBody(req); await mallPromos.deletePromotion(b.id); return sendJson(res, 200, { ok: true }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  // 프로모션 성과 — 등록 프로모션 상품이 기간 내 실제 얼마나 팔렸는지(몰별 매칭)
+  if (u.pathname === '/api/promotions/performance') {
+    try { return sendJson(res, 200, { ok: true, ...(await promoPerformance.forMall(u.searchParams.get('mall') || '')) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // ── Cafe24 상품 검색 (프로모션 대상 선택용) ──
+  if (u.pathname === '/api/cafe24/products/search') {
+    try { return sendJson(res, 200, { ok: true, items: await cafe24Products.search(u.searchParams.get('q') || '', u.searchParams.get('limit')) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // ── 통합 상품 검색 (몰별: Cafe24/스마트스토어 + 카탈로그 누적) ──
+  if (u.pathname === '/api/products/search') {
+    try { return sendJson(res, 200, { ok: true, ...(await products.search(u.searchParams.get('q') || '', u.searchParams.get('mall') || '', u.searchParams.get('limit'))) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 
   // ── MD 데이터: 주문 거울 적재 ──

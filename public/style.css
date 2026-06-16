@@ -27,7 +27,7 @@ body{font-family:'Pretendard','Pretendard Variable',-apple-system,BlinkMacSystem
 button{cursor:pointer;font-family:inherit}
 
 /* 최대 너비 1400px 가운데 정렬 (가독성) */
-.topbar, .channel-tabs, .status, #view-cafe24, #view-smartstore, #view-compare, .foot{
+.topbar, .channel-tabs, .status, #view-cafe24, #view-smartstore, #view-other, #view-compare, .foot{
   max-width:1400px; margin-left:auto; margin-right:auto;
 }
 input,select{font-family:inherit}
@@ -138,6 +138,9 @@ th{color:var(--muted);font-weight:700;font-size:12px;position:sticky;top:0;backg
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--panel2)}
 .tablewrap{max-height:480px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm)}
+.csvbar{position:sticky;top:0;z-index:2;display:flex;justify-content:flex-end;padding:5px 6px;background:#fff;border-bottom:1px solid var(--line)}
+.csv-btn{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid #cfe3ff;border-radius:8px;padding:3px 9px;cursor:pointer;line-height:1.4}
+.csv-btn:hover{background:#dcebff}
 .num{font-variant-numeric:tabular-nums}
 .pos{color:var(--green)} .neg{color:var(--red)}
 .agree{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:7px;background:#e6f7ee;color:#0a8f4d}

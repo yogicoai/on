@@ -327,6 +327,28 @@ async function handle(req, res) {
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 
+  // 성장 Top10 — 전년비/전월비 성장률 상위 상품 (자사+스토어)
+  if (u.pathname === '/api/compare/growth') {
+    const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
+    const end = u.searchParams.get('end') || Y();
+    try { return sendJson(res, 200, { ok: true, ...(await compare.growthTop(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 충전재(비즈타입) 현재/전월/전년 3기간 동시 비교
+  if (u.pathname === '/api/compare/tier-3period') {
+    const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
+    const end = u.searchParams.get('end') || Y();
+    try { return sendJson(res, 200, { ok: true, ...(await compare.tierPeriods(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 리퍼(refurb) 전용 분석 — Top10 + 월별/일자별 추이
+  if (u.pathname === '/api/compare/refurb') {
+    const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
+    const end = u.searchParams.get('end') || Y();
+    try { return sendJson(res, 200, { ok: true, ...(await compare.refurb(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+
   // ── 월별 전사 프로모션 기간 ──
   if (u.pathname === '/api/promo-periods/list') {
     try { return sendJson(res, 200, { ok: true, items: await promoPeriods.listPromos() }); }

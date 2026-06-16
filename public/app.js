@@ -859,17 +859,18 @@ function switchChannel(b) {
 
 // 항상 노출하는 채널 그룹(매출 0이어도 탭 유지). 나머지 그룹은 선택 구간 매출 0이면 탭 숨김.
 const ALWAYS_GROUPS = new Set(['쿠팡', '오늘의집', '신세계', '롯데홈쇼핑', '현대', '삼성카드 쇼핑', '29CM', 'SK스토아', '11번가']);
-// 그룹 탭 노출/숨김 — 화이트리스트는 항상. 나머지는 "최근 7일 OR 선택 구간"에 매출>0 이면 노출(없으면 숨김).
-//   현재 활성 탭은 숨기지 않음(보던 채널이 사라지지 않게).
+// 그룹 탭 노출/숨김 — 화이트리스트는 항상. 나머지는 "이번 달(월초~오늘) OR 선택 구간"에 매출>0 이면 노출.
+//   → 그달에 한 건이라도 매출이 발생한 채널은 탭이 뜬다. 현재 활성 탭은 숨기지 않음.
 async function updateGroupTabVisibility(selStart, selEnd) {
   const tabs = [...document.querySelectorAll('#channelTabs .chtab[data-ch="group"]')];
   if (!tabs.length) return;
-  const [r7s, r7e] = rangeFor('7d');
+  const now = new Date();
+  const ms = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, me = rangeFor('today')[0]; // 이번 달 월초~오늘
   const sales = {};
   const merge = (j) => { if (j && j.ok) for (const g of (j.groups || [])) sales[g.group] = Math.max(sales[g.group] || 0, g.sales); };
   try {
-    const reqs = [fetch(`/api/other/overview?start=${r7s}&end=${r7e}`).then((r) => r.json())];
-    if (selStart && selEnd && !(selStart === r7s && selEnd === r7e)) reqs.push(fetch(`/api/other/overview?start=${selStart}&end=${selEnd}`).then((r) => r.json()));
+    const reqs = [fetch(`/api/other/overview?start=${ms}&end=${me}`).then((r) => r.json())];
+    if (selStart && selEnd && !(selStart === ms && selEnd === me)) reqs.push(fetch(`/api/other/overview?start=${selStart}&end=${selEnd}`).then((r) => r.json()));
     (await Promise.all(reqs)).forEach(merge);
   } catch (_) { return; }
   for (const t of tabs) {
@@ -1223,9 +1224,26 @@ function initGroupView() {
   initDetailModal();
   // 입점몰(채널) 행 클릭 → 그 입점몰 상품 상세 팝업
   el('otherMain').addEventListener('click', (ev) => {
+    const cat = ev.target.closest('[data-gcat]');
+    if (cat) { openGroupBreakdown('category', decodeURIComponent(cat.dataset.gcat)); return; }
+    const bead = ev.target.closest('[data-gbead]');
+    if (bead) { openGroupBreakdown('beadType', decodeURIComponent(bead.dataset.gbead)); return; }
+    const col = ev.target.closest('[data-gcolor]');
+    if (col) { openGroupBreakdown('color', decodeURIComponent(col.dataset.gcolor)); return; }
     const b = ev.target.closest('[data-ostore]');
     if (b) openOtherChannel(decodeURIComponent(b.dataset.ostore));
   });
+}
+// 그룹 화면에서 카테고리/충전재 클릭 → 그 분류에서 팔린 상품 상세 (팝업)
+async function openGroupBreakdown(field, value) {
+  const s = el('start').value, e = el('end').value;
+  const label = field === 'beadType' ? '충전재' : field === 'color' ? '컬러' : '카테고리';
+  openDetailModal(`${ae(curGroup)} · ${ae(value)} <span class="muted" style="font-size:13px;font-weight:500">· ${label}별 상품</span>`, '<div class="empty">불러오는 중…</div>');
+  try {
+    const j = await (await fetch(`/api/other/group-breakdown?group=${enc(curGroup)}&field=${enc(field)}&value=${enc(value)}&start=${s}&end=${e}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    el('dmBody').innerHTML = `<div class="card"><h3>${ae(value)} 상품별 <span class="hint">${num((j.products || []).length)}종</span></h3>${tableHtml(['상품', '매출', '수량', '주문'], j.products || [], (r) => [r.productName, won(r.sales), num(r.qty), num(r.orders)])}</div>`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 async function loadGroupView(group) {
   if (!group) return;
@@ -1250,11 +1268,13 @@ async function loadGroupView(group) {
           (r) => [`<button class="linklike" data-ostore="${enc(r.store)}">${r.store} ▸</button>`, won(r.sales), num(r.qty), num(r.orders), won(r.aov), pct(t.sales ? r.sales / t.sales : 0)])}
       </div>
       <div class="grid two" style="margin-top:16px">
-        <div class="card"><h3>카테고리별 매출 <span class="hint">${(j.byCategory || []).length}종</span></h3>
-          ${tableHtml(['카테고리', '매출', '수량', '비중'], j.byCategory || [], (r) => [r.category, won(r.sales), num(r.qty), pct(t.sales ? r.sales / t.sales : 0)])}</div>
-        <div class="card"><h3>충전재(등급)별 <span class="hint">beadType</span></h3>
-          ${tableHtml(['충전재', '매출', '수량'], j.byBead || [], (r) => [r.beadType, won(r.sales), num(r.qty)])}</div>
+        <div class="card"><h3>카테고리별 매출 <span class="hint">행 클릭 시 상품 상세 · ${(j.byCategory || []).length}종</span></h3>
+          ${tableHtml(['카테고리', '매출', '수량', '비중'], j.byCategory || [], (r) => [`<button class="linklike" data-gcat="${enc(r.category)}">${r.category} ▸</button>`, won(r.sales), num(r.qty), pct(t.sales ? r.sales / t.sales : 0)])}</div>
+        <div class="card"><h3>충전재(등급)별 <span class="hint">행 클릭 시 상품 상세</span></h3>
+          ${tableHtml(['충전재', '매출', '수량'], j.byBead || [], (r) => [`<button class="linklike" data-gbead="${enc(r.beadType)}">${r.beadType} ▸</button>`, won(r.sales), num(r.qty)])}</div>
       </div>
+      <div class="card" style="margin-top:16px"><h3>컬러(커버 색상)별 매출 <span class="hint">행 클릭 시 상품 상세 · ${(j.byColor || []).length}종</span></h3>
+        ${tableHtml(['컬러', '매출', '수량', '비중'], j.byColor || [], (r) => [`<button class="linklike" data-gcolor="${enc(r.color)}">${r.color} ▸</button>`, won(r.sales), num(r.qty), pct(t.sales ? r.sales / t.sales : 0)])}</div>
       <div class="card" style="margin-top:16px"><h3>상품별 매출 <span class="hint">${num((j.products || []).length)}종</span></h3>
         ${tableHtml(['상품', '매출', '수량', '주문'], j.products || [], (r) => [r.productName, won(r.sales), num(r.qty), num(r.orders)])}</div>
       <div class="card" style="margin-top:16px"><h3>월별 매출 추이 <span class="hint">${ae(group)} 전체</span></h3>
@@ -1283,16 +1303,39 @@ let cmpCache = null;        // loadCompare가 받은 6개 응답 보관 { s, e, 
 let cmpTab = 'promo';       // promo | traffic | best | product | tier
 let cmpCh = 'all';          // all | cafe24 | smartstore — 베스트/상품별/충전재 몰별 필터
 const CMP_CH_NAME = { total: '전체', cafe24: '자사몰', smartstore: '스마트스토어' };
-const CMP_CH_OPT = [['all', '전체 (자사몰+스마트스토어)'], ['cafe24', '자사몰'], ['smartstore', '스마트스토어']];
+// 몰 선택 옵션: 전체·자사몰·스마트스토어 + 모든 라이브 기타 채널 그룹(상단 탭에서 수집, 0원이어도 항상 노출)
+function cmpChOptions() {
+  const base = [['all', '전체 (자사몰+스마트스토어)'], ['cafe24', '자사몰'], ['smartstore', '스마트스토어']];
+  const groups = [...document.querySelectorAll('#channelTabs .chtab[data-ch="group"]')].map((b) => [b.dataset.group, b.dataset.group]);
+  return base.concat(groups);
+}
+function isGroupCh() { return cmpCh && !['all', 'cafe24', 'smartstore'].includes(cmpCh); }
+let cmpGroupCache = {};
+async function ensureCmpGroup(group) {
+  const c = cmpCache; if (!c) return null;
+  const key = `${group}|${c.s}|${c.e}`;
+  if (cmpGroupCache[key]) return cmpGroupCache[key];
+  try { const j = await (await fetch(`/api/other/group?group=${enc(group)}&start=${c.s}&end=${c.e}`)).json(); cmpGroupCache[key] = (j && j.ok) ? j : { ok: false }; }
+  catch (_) { cmpGroupCache[key] = { ok: false }; }
+  return cmpGroupCache[key];
+}
+function cmpGroupData() { const c = cmpCache; return c ? (cmpGroupCache[`${cmpCh}|${c.s}|${c.e}`] || null) : null; }
 // 몰 선택창 + 재렌더 배선
 function chSelectBar(hint) {
   return `<div class="card" style="margin-bottom:14px"><div class="panelctl">
-    <label>몰 선택 <select id="cmpCh">${CMP_CH_OPT.map(([v, l]) => `<option value="${v}" ${v === cmpCh ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <span class="muted" style="font-size:12px">${hint || '몰별로 데이터를 좁혀 볼 수 있어요'}</span></div></div>`;
+    <label>몰 선택 <select id="cmpCh">${cmpChOptions().map(([v, l]) => `<option value="${v}" ${v === cmpCh ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <span class="muted" style="font-size:12px">${hint || '몰별로 데이터를 좁혀 볼 수 있어요 · 기타 채널은 단일 몰로 표시'}</span></div></div>`;
 }
-function wireCmpCh() { const s = el('cmpCh'); if (s) s.addEventListener('change', () => { cmpCh = s.value; renderCmpTab(); }); }
+function wireCmpCh() {
+  const sel = el('cmpCh'); if (!sel) return;
+  sel.addEventListener('change', async () => {
+    cmpCh = sel.value;
+    if (isGroupCh()) { const sb = el('cmpPanel'); if (sb) sb.style.opacity = '.5'; await ensureCmpGroup(cmpCh); if (sb) sb.style.opacity = ''; }
+    renderCmpTab();
+  });
+}
 const chPick = (r, key) => (cmpCh === 'cafe24' ? r.cafe24[key] : cmpCh === 'smartstore' ? r.smartstore[key] : r.total[key]);
-const chLabel = () => (cmpCh === 'cafe24' ? '자사몰' : cmpCh === 'smartstore' ? '스마트스토어' : '전체');
+const chLabel = () => (cmpCh === 'cafe24' ? '자사몰' : cmpCh === 'smartstore' ? '스마트스토어' : isGroupCh() ? cmpCh : '전체');
 
 function initCompare() {
   if (cmpInit) return; cmpInit = true;
@@ -1369,7 +1412,7 @@ async function loadCompare() {
   el('cmpFixed').innerHTML = '';
   el('cmpPanel').innerHTML = '<div class="empty">분석 중…</div>';
   try {
-    const [per, best, cat, promos, extra, prod, mon, montier, other] = await Promise.all([
+    const [per, best, cat, promos, extra, prod, mon, montier, other, otherCmp] = await Promise.all([
       (await fetch(`/api/compare/period?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/best?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/category-promo?start=${s}&end=${e}`)).json(),
@@ -1379,8 +1422,9 @@ async function loadCompare() {
       (await fetch('/api/compare/monthly')).json(),
       (await fetch('/api/compare/monthly-tier')).json(),
       (await fetch(`/api/other/overview?start=${s}&end=${e}`)).json(), // 기타 채널 합산
+      (await fetch(`/api/other/period-compare?start=${s}&end=${e}`)).json(), // 기타 채널 그룹별 전주/전월/전년
     ]);
-    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier, other };
+    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier, other, otherCmp };
     renderCmpFixed();
     renderCmpTab();
   } catch (err) {
@@ -1399,8 +1443,9 @@ function renderCmpFixed() {
   const oChannels = (other && other.ok && other.totals.channels) || 0;
   const grand = (T ? T.cur.revenue : 0) + oSales; // 전 채널 = 자사몰+스마트스토어+기타
   const kc = (l, v, sub, cls) => `<div class="kpi ${cls || ''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
-  // 기타 채널을 비교표의 한 행으로 추가(전주/전월/전년 비교는 미산출 → '-')
-  const otherRow = oSales ? [{ channel: '기타 채널', cur: { revenue: oSales, aov: oOrders ? Math.round(oSales / oOrders) : 0 }, wow: { rate: null }, mom: { rate: null }, yoy: { rate: null } }] : [];
+  // 기타 채널을 "각 그룹 행"으로 표시(쿠팡·롯데·현대… 각각 전주/전월/전년 비교)
+  const og = (c.otherCmp && c.otherCmp.ok && c.otherCmp.rows) || [];
+  const otherRows = og.map((r) => ({ channel: r.group, cur: r.cur, wow: r.wow, mom: r.mom, yoy: r.yoy }));
   el('cmpFixed').innerHTML = `
     ${T ? `<section class="kpis" style="padding:0 0 14px">
       ${kc('전 채널 매출', won(grand), `${s} ~ ${e} · 자사몰+스마트스토어+기타`, 'accent')}
@@ -1408,8 +1453,8 @@ function renderCmpFixed() {
       ${kc('기타 채널', won(oSales), `${num(oOrders)}주문 · ${num(oChannels)}개 채널 · 이카운트`, 'pink')}
       ${kc('객단가(자사+스토어)', won(T.cur.aov), `전주 대비 ${cmpRtBig(T.wow.rate)}`, '')}
     </section>` : ''}
-    <div class="card"><h3>전년 / 전월 / 전주 동기간 비교 <span class="hint">${s} ~ ${e} · 채널별 매출·객단가 (기타=이카운트 합계)</span></h3>
-      ${tableHtml(['채널', '현재 매출', '객단가', '전주비', '전월비', '전년비'], [...rows, ...otherRow],
+    <div class="card"><h3>전년 / 전월 / 전주 동기간 비교 <span class="hint">${s} ~ ${e} · 채널별 매출·객단가 (기타 채널은 그룹별로 표시)</span></h3>
+      ${tableHtml(['채널', '현재 매출', '객단가', '전주비', '전월비', '전년비'], [...rows, ...otherRows],
         (r) => [`<strong>${CMP_CH_NAME[r.channel] || r.channel}</strong>`, won(r.cur.revenue), won(r.cur.aov), cmpRt(r.wow.rate), cmpRt(r.mom.rate), cmpRt(r.yoy.rate)])}
     </div>`;
 }
@@ -1555,6 +1600,13 @@ function tierYoy(montier, channel) {
 // ③ 베스트 상품 = 채널별 베스트 Top10 (몰 선택) + 전체기간 월별 추이
 function renderCmpBest() {
   const { s, e, best, mon } = cmpCache; const p = el('cmpPanel');
+  if (isGroupCh()) {
+    const g = cmpGroupData(); const prods = (g && g.ok && g.products) || [];
+    p.innerHTML = chSelectBar('베스트 상품을 몰별로 확인') +
+      `<div class="card"><h3>${ae(cmpCh)} 베스트 상품 <span class="hint">${s} ~ ${e} · 매출순 ${num(prods.length)}종</span></h3>${tableHtml(['상품', '수량', '매출', '주문'], prods.slice(0, 50), (q) => [q.productName, num(q.qty), won(q.sales), num(q.orders)])}</div>` +
+      `<div class="card" style="margin-top:16px"><h3>${ae(cmpCh)} 월별 매출 추이 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(((g && g.ok && g.monthly) || []).map((m) => ({ ym: m.ym, sales: m.sales })), (r) => r.sales, won)}</div>`;
+    wireCmpCh(); return;
+  }
   const monRows = (mon && mon.ok && mon.rows) || [];
   const showCa = cmpCh !== 'smartstore', showSs = cmpCh !== 'cafe24';
   const cards = [];
@@ -1570,6 +1622,13 @@ function renderCmpBest() {
 // ④ 상품별 판매량 = /api/compare/product-by-channel, 채널별 상품 판매 리스트(수량/매출/비중) 좌우 2열
 function renderCmpProduct() {
   const { s, e, prod } = cmpCache; const p = el('cmpPanel');
+  if (isGroupCh()) {
+    const g = cmpGroupData(); const prods = (g && g.ok && g.products) || []; const tot = prods.reduce((a, x) => a + x.sales, 0);
+    p.innerHTML = chSelectBar('상품별 판매량을 몰별로 확인') +
+      `<div class="card"><h3>${ae(cmpCh)} 상품별 판매량 <span class="hint">${s} ~ ${e} · 매출순 ${num(prods.length)}종</span></h3>${tableHtml(['상품', '수량', '매출', '비중'], prods, (r) => [r.productName, num(r.qty), won(r.sales), pct(tot ? r.sales / tot : 0)])}</div>` +
+      `<div style="margin-top:16px"><div class="card"><h3>${ae(cmpCh)} 월별 매출 (연도별 · 전년비)<span class="hint">전년 동월 비교</span></h3>${monthlyYoy(((g && g.ok && g.monthly) || []).map((m) => ({ ym: m.ym, sales: m.sales })), (r) => r.sales, won)}</div></div>`;
+    wireCmpCh(); return;
+  }
   const ca = (prod.ok && prod.cafe24) || [];
   const ss = (prod.ok && prod.smartstore) || [];
   const monRows = (cmpCache.mon && cmpCache.mon.ok && cmpCache.mon.rows) || [];
@@ -1585,6 +1644,16 @@ function renderCmpProduct() {
 // ⑤ 충전재별 판매량 = tiers 몰별 2열
 function renderCmpTier() {
   const { extra, montier } = cmpCache; const p = el('cmpPanel');
+  if (isGroupCh()) {
+    const g = cmpGroupData(); const beads = (g && g.ok && g.byBead) || []; const tot = beads.reduce((a, x) => a + x.sales, 0);
+    const colors = (g && g.ok && g.byColor) || []; const ctot = colors.reduce((a, x) => a + x.sales, 0);
+    p.innerHTML = chSelectBar('충전재·컬러를 몰별로 확인') +
+      `<div class="grid two">
+        <div class="card"><h3>${ae(cmpCh)} 충전재(등급)별 <span class="hint">${num(beads.length)}종</span></h3>${beads.length ? tableHtml(['충전재', '수량', '매출', '비중'], beads, (r) => [`<span class="tag">${ae(r.beadType)}</span>`, num(r.qty), won(r.sales), pct(tot ? r.sales / tot : 0)]) : '<div class="empty">데이터 없음</div>'}</div>
+        <div class="card"><h3>${ae(cmpCh)} 컬러(커버 색상)별 <span class="hint">${num(colors.length)}종</span></h3>${colors.length ? tableHtml(['컬러', '수량', '매출', '비중'], colors, (r) => [ae(r.color), num(r.qty), won(r.sales), pct(ctot ? r.sales / ctot : 0)]) : '<div class="empty">데이터 없음</div>'}</div>
+      </div>`;
+    wireCmpCh(); return;
+  }
   const ti = (extra.ok && extra.tiers) || null;
   if (!ti) { p.innerHTML = chSelectBar('충전재를 몰별로 확인') + '<div class="empty">충전재 데이터 없음</div>'; wireCmpCh(); return; }
   const showCa = cmpCh !== 'smartstore', showSs = cmpCh !== 'cafe24';
@@ -1764,7 +1833,7 @@ function buildChannelAdmin() {
       <div id="admTgStatus" style="margin-top:10px"></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h3>프로모션 <span class="hint">이 채널 · 프로모션명·기간·상품·상품별 할인율</span></h3>
+      <h3>프로모션 <span class="hint">이 채널 · 명·기간·상품 · 할인율(일괄 또는 상품별)</span></h3>
       <div class="setform">
         <label>프로모션명 <input type="text" id="admPrName" placeholder="예: 6월 여름 프로모션"></label>
         <label>시작 <input type="date" id="admPrStart"></label>
@@ -1776,6 +1845,11 @@ function buildChannelAdmin() {
         <span id="admPrSearchMsg" class="muted"></span>
       </div>
       <div id="admPrSearchResult"></div>
+      <div class="setform" style="margin-top:8px">
+        <label>일괄 할인율(%) <input type="number" min="0" max="100" id="admPrBulk" placeholder="예: 15" style="width:84px"></label>
+        <button id="admPrBulkApply" class="btn ghost mini">전체 적용</button>
+        <span class="muted" style="font-size:12px">아래 상품 전체에 적용 · 상품별로 개별 조정도 가능</span>
+      </div>
       <div id="admPrProducts"></div>
       <div class="setform" style="margin-top:10px">
         <button id="admPrSave" class="btn">프로모션 저장</button>
@@ -1794,6 +1868,11 @@ function buildChannelAdmin() {
   n.querySelector('#admPrSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); admPrDoSearch(); } });
   n.querySelector('#admPrSave').addEventListener('click', admPrSave);
   n.querySelector('#admPrReset').addEventListener('click', admPrReset);
+  n.querySelector('#admPrBulkApply').addEventListener('click', () => {
+    const v = Math.max(0, Math.min(100, +el('admPrBulk').value || 0));
+    admPrSelected.forEach((p) => { p.discountRate = v; });
+    renderAdmPrProducts();
+  });
   return n;
 }
 // 각 채널 뷰 하단에는 "컴팩트 요약 + 관리 버튼"만. 클릭 시 팝업(모달)에서 목표·프로모션 관리.
@@ -1839,10 +1918,16 @@ function ensureAdminModal() {
   if (el('adminModal')) return;
   const m = document.createElement('div');
   m.id = 'adminModal'; m.className = 'modal'; m.style.display = 'none';
-  m.innerHTML = `<div class="modal-box" style="max-width:920px;width:94%"><div class="modal-head"><strong id="admModalTitle">관리</strong><button id="admModalClose" class="btn ghost mini">닫기 ✕</button></div><div class="modal-body" id="admModalBody" style="max-height:78vh;overflow:auto"></div></div>`;
+  m.innerHTML = `<div class="modal-box adminbox">
+    <div class="modal-head">
+      <div><strong id="admModalTitle">관리</strong><div class="modal-sub">이번 달 목표 · 프로모션 등록 · 성과를 한곳에서</div></div>
+      <button id="admModalClose" class="btn ghost mini">닫기 ✕</button>
+    </div>
+    <div class="modal-body" id="admModalBody"></div>
+  </div>`;
   document.body.appendChild(m);
   el('admModalClose').addEventListener('click', closeChannelAdminModal);
-  m.addEventListener('click', (e) => { if (e.target === m) closeChannelAdminModal(); });
+  // 배경 클릭으로는 닫지 않음(실수로 자주 닫히던 문제) — 닫기 버튼 또는 ESC 로만 닫힘
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el('adminModal') && el('adminModal').style.display === 'flex') closeChannelAdminModal(); });
 }
 function openChannelAdminModal(mall) {
@@ -1852,7 +1937,7 @@ function openChannelAdminModal(mall) {
   node.style.cssText = '';      // 모달 안에서는 뷰용 여백 제거
   node.style.display = '';
   el('admModalBody').appendChild(node);
-  el('admModalTitle').textContent = `${mall} · 이번 달 목표 · 프로모션`;
+  el('admModalTitle').textContent = mall;
   el('adminModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   admMall = mall;
@@ -1912,23 +1997,36 @@ function renderAdmPrProducts() {
   box.querySelectorAll('.admdisc').forEach((inp) => inp.addEventListener('input', () => { const i = +inp.dataset.i, v = Math.max(0, Math.min(100, +inp.value || 0)); admPrSelected[i].discountRate = v; const c = inp.closest('tr').querySelector('.admfin'); if (c) c.textContent = won(Math.round(admPrSelected[i].price * (1 - v / 100))); }));
   box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { admPrSelected.splice(+b.dataset.del, 1); renderAdmPrProducts(); }));
 }
-async function admPrDoSearch() {
+let admPrSearchOffset = 0, admPrSearchItems = [];
+async function admPrDoSearch(more) {
   const q = el('admPrSearch').value.trim();
-  el('admPrSearchMsg').textContent = '검색 중…'; el('admPrSearchResult').innerHTML = '';
+  if (!more) { admPrSearchOffset = 0; admPrSearchItems = []; }
+  el('admPrSearchMsg').textContent = '검색 중…';
   try {
-    const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(admMall)}&limit=50`)).json();
+    const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(admMall)}&limit=50&offset=${admPrSearchOffset}`)).json();
     if (!j.ok) throw new Error(j.error);
     const items = j.items || [];
-    el('admPrSearchMsg').textContent = `${items.length}개${items.length >= 50 ? '+' : ''} · ${j.source || ''}`;
-    if (!items.length) { el('admPrSearchResult').innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
-    el('admPrSearchResult').innerHTML = `<div style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:6px"><table style="width:100%"><tbody>${items.map((r) => `<tr><td>${ae(r.productName)}</td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table></div>`;
-    el('admPrSearchResult').querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
-      const p = JSON.parse(decodeURIComponent(b.dataset.add));
-      if (admPrSelected.some((x) => x.productNo === p.productNo && x.source === p.source)) { el('admPrSearchMsg').textContent = '이미 추가된 상품'; return; }
-      admPrSelected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: 0, source: p.source });
-      renderAdmPrProducts();
-    }));
+    admPrSearchItems = admPrSearchItems.concat(items);
+    admPrSearchOffset += items.length;
+    const hasMore = items.length >= 50; // 한 페이지가 가득 차면 더 있을 수 있음
+    el('admPrSearchMsg').textContent = `${admPrSearchItems.length}개 표시${hasMore ? '+' : ''} · ${j.source || ''}`;
+    renderAdmSearchResults(hasMore);
   } catch (e) { el('admPrSearchMsg').textContent = '오류: ' + e.message; }
+}
+function renderAdmSearchResults(hasMore) {
+  const box = el('admPrSearchResult'); if (!box) return;
+  const items = admPrSearchItems;
+  if (!items.length) { box.innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
+  box.innerHTML = `<div class="prsearchbox">
+    <table style="width:100%"><tbody>${items.map((r) => `<tr><td>${ae(r.productName)} <span class="muted" style="font-size:11px">${r.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table>
+    ${hasMore ? `<div class="prmore"><button class="btn ghost mini" id="admPrMore">더 불러오기 (현재 ${items.length}개)</button></div>` : ''}</div>`;
+  box.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
+    const p = JSON.parse(decodeURIComponent(b.dataset.add));
+    if (admPrSelected.some((x) => x.productNo === p.productNo && x.source === p.source)) { el('admPrSearchMsg').textContent = '이미 추가된 상품'; return; }
+    admPrSelected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: (+el('admPrBulk').value || 0), source: p.source });
+    renderAdmPrProducts();
+  }));
+  const more = el('admPrMore'); if (more) more.addEventListener('click', () => admPrDoSearch(true));
 }
 async function loadAdminPromos() {
   const box = el('admPrList'); if (!box) return;
@@ -1946,15 +2044,18 @@ function admPrEdit(it) {
   admPrEditId = it.id;
   el('admPrName').value = it.name; el('admPrStart').value = it.start; el('admPrEnd').value = it.end;
   admPrSelected = (it.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0, source: p.source }));
+  const rates = [...new Set(admPrSelected.map((p) => p.discountRate))]; // 전부 같은 할인율이면 일괄칸에 표시
+  if (el('admPrBulk')) el('admPrBulk').value = rates.length === 1 ? rates[0] : '';
   renderAdmPrProducts();
   el('admPrMsg').textContent = `수정 중: ${it.name}`;
 }
 function admPrReset() {
   admPrEditId = null;
-  ['admPrName', 'admPrStart', 'admPrEnd', 'admPrSearch'].forEach((id) => { if (el(id)) el(id).value = ''; });
+  ['admPrName', 'admPrStart', 'admPrEnd', 'admPrSearch', 'admPrBulk'].forEach((id) => { if (el(id)) el(id).value = ''; });
   if (el('admPrSearchResult')) el('admPrSearchResult').innerHTML = '';
   if (el('admPrSearchMsg')) el('admPrSearchMsg').textContent = '';
   if (el('admPrMsg')) el('admPrMsg').textContent = '';
+  admPrSearchOffset = 0; admPrSearchItems = [];
   admPrSelected = []; renderAdmPrProducts();
 }
 async function admPrSave() {
@@ -1970,6 +2071,68 @@ async function admPrSave() {
   } catch (e) { el('admPrMsg').textContent = '오류: ' + e.message; }
 }
 
+// ══════════════════════════════════════════════
+//  AI 판매 분석 (Claude API) — 우하단 플로팅 버튼 + 팝업
+// ══════════════════════════════════════════════
+let aiBuilt = false, aiBusy = false;
+function buildAiUi() {
+  if (aiBuilt) return; aiBuilt = true;
+  const m = document.createElement('div');
+  m.id = 'aiModal'; m.className = 'modal'; m.style.display = 'none';
+  m.innerHTML = `<div class="modal-box aibox">
+    <div class="modal-head"><div><strong>AI 판매 분석</strong><div class="modal-sub">현재 조회 구간 데이터 기준 질의응답 · Claude</div></div><button id="aiClose" class="btn ghost mini" type="button">닫기 ✕</button></div>
+    <div class="modal-body">
+      <div class="aichips" id="aiChips"></div>
+      <div class="aiask"><input type="text" id="aiInput" placeholder="예: 이번 달 매출 전년 대비 어때?"><button id="aiSend" class="btn" type="button">질문</button></div>
+      <div id="aiAnswer" class="aianswer"><div class="muted" style="font-size:13px">질문을 입력하거나 아래 예시를 눌러보세요.</div></div>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  const SUGGEST = ['이번 달 매출 어때?', '전년 대비 성장률은?', '어느 채널이 부진해?', '기타 채널 중 가장 큰 곳은?', '목표 달성률 알려줘'];
+  el('aiChips').innerHTML = SUGGEST.map((s) => `<button class="aichip" type="button">${s}</button>`).join('');
+  el('aiChips').querySelectorAll('.aichip').forEach((b) => b.addEventListener('click', () => { el('aiInput').value = b.textContent; askAi(); }));
+  const openAi = () => { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; el('aiInput').focus(); };
+  const closeAi = () => { m.style.display = 'none'; document.body.style.overflow = ''; };
+  const btn = el('btnAi'); if (btn) btn.addEventListener('click', openAi);
+  el('aiClose').addEventListener('click', closeAi);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && m.style.display === 'flex') closeAi(); });
+  el('aiSend').addEventListener('click', askAi);
+  el('aiInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askAi(); } });
+  // 헤더 'AI 분석' 버튼으로 열고, 닫기 버튼/ESC 로만 닫힘 (배경 클릭으로 안 닫힘)
+}
+async function askAi() {
+  if (aiBusy) return;
+  const q = el('aiInput').value.trim();
+  if (!q) { el('aiInput').focus(); return; }
+  const s = el('start').value, e = el('end').value;
+  aiBusy = true;
+  el('aiAnswer').innerHTML = '<div class="aiload"><span class="ring"></span> 분석 중… (수 초 소요)</div>';
+  try {
+    const j = await (await fetch(`/api/ai/ask?q=${enc(q)}&start=${enc(s)}&end=${enc(e)}`)).json();
+    if (!j.ok) throw new Error(j.error || '실패');
+    el('aiAnswer').innerHTML = `<div class="aimd">${mdLite(j.text || '(빈 응답)')}</div><div class="muted" style="font-size:11px;margin-top:10px">모델 ${ae(j.model || '')} · 구간 ${s || '?'} ~ ${e || '?'}</div>`;
+  } catch (err) {
+    const miss = /미설정/.test(err.message);
+    el('aiAnswer').innerHTML = `<div class="insightline" style="border-left-color:var(--warn)">오류: ${ae(err.message)}${miss ? '<br><span class="muted">ANTHROPIC_API_KEY 를 .env(로컬) 또는 Vercel 환경변수에 설정하세요.</span>' : ''}</div>`;
+  } finally { aiBusy = false; }
+}
+// 마크다운 경량 렌더: ## 제목, **굵게**, - 목록, 줄바꿈
+function mdLite(t) {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  let html = '', inList = false;
+  for (const raw of esc(t).split('\n')) {
+    const line = raw.trimEnd();
+    if (/^#{1,6}\s/.test(line)) { if (inList) { html += '</ul>'; inList = false; } html += `<h4>${inline(line.replace(/^#{1,6}\s/, ''))}</h4>`; continue; }
+    if (/^\s*[-*]\s+/.test(line)) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${inline(line.replace(/^\s*[-*]\s+/, ''))}</li>`; continue; }
+    if (!line.trim()) { if (inList) { html += '</ul>'; inList = false; } html += '<div style="height:6px"></div>'; continue; }
+    if (inList) { html += '</ul>'; inList = false; }
+    html += `<p>${inline(line)}</p>`;
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
 // ── 랜딩: 오늘 데이터 ──
 (function init() {
   const [s, e] = rangeFor('today');
@@ -1979,4 +2142,5 @@ async function admPrSave() {
   loadTarget();
   buildGroupTabs(); // 기타 채널 그룹들을 상단 탭으로 동적 추가(쿠팡·롯데·현대·신세계…)
   showChannelAdmin('자사몰', el('view-cafe24')); // Cafe24 화면 하단 인라인 관리(목표·프로모션)
+  buildAiUi(); // 우하단 AI 분석 플로팅 버튼
 })();

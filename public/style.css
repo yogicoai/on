@@ -220,6 +220,40 @@ body.spinning #spinner{display:flex}
 .modal-body{padding:8px 22px 22px}
 /* ── 스마트스토어 상세 드릴다운 모달 (최종: 변형 A 표 기반 + B의 칩/툴팁/색 강조 접목) ── */
 .modal-box.detail{width:min(1180px,96vw)}
+/* 채널 관리 팝업(목표·프로모션) — 세련된 톤 */
+.modal-box.adminbox{width:min(960px,96vw);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,50,.28)}
+.adminbox .modal-head{padding:17px 24px;background:linear-gradient(180deg,#ffffff,#f6f7fb);border-bottom:1px solid var(--line)}
+.adminbox .modal-head strong{font-size:17px;letter-spacing:-.02em}
+.adminbox .modal-sub{font-size:12px;color:var(--muted);margin-top:3px;font-weight:500}
+.adminbox .modal-body{padding:18px 24px 24px;max-height:80vh;overflow:auto;background:#fbfbfd}
+.adminbox .card{border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(20,20,50,.04)}
+.adminbox .card>h3{display:flex;align-items:center;gap:9px}
+.adminbox .card>h3::before{content:"";flex:0 0 auto;width:4px;height:15px;border-radius:3px;background:var(--accent)}
+.adminbox .setform input,.adminbox .setform select{border-radius:10px}
+.adminbox table th{font-weight:700;color:var(--sub)}
+.prsearchbox{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:6px;background:#fff}
+.prsearchbox table td{padding:7px 10px;border-bottom:1px solid var(--line)}
+.prmore{text-align:center;padding:8px;position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line)}
+/* AI 판매 분석 — 헤더 버튼 + 팝업 모달 */
+.btn.ai{background:linear-gradient(135deg,var(--accent),#6d5efc);color:#fff;border:none;font-weight:800}
+.btn.ai:hover{filter:brightness(1.06)}
+.modal-box.aibox{width:min(620px,96vw);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,50,.28)}
+.aibox .modal-head{padding:16px 22px;background:linear-gradient(180deg,#fff,#f6f7fb);border-bottom:1px solid var(--line)}
+.aibox .modal-head strong{font-size:16px;letter-spacing:-.02em}
+.aibox .modal-sub{font-size:12px;color:var(--muted);margin-top:3px;font-weight:500}
+.aibox .modal-body{padding:16px 22px 22px;max-height:74vh;overflow:auto}
+.aichips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
+.aichip{border:1px solid var(--line2);background:#fff;border-radius:16px;padding:6px 11px;font:inherit;font-size:12px;color:var(--sub);cursor:pointer}
+.aichip:hover{background:#f4f4fb;border-color:var(--accent)}
+.aiask{display:flex;gap:8px;margin-bottom:12px}
+.aiask input{flex:1;border:1px solid var(--line2);border-radius:10px;padding:9px 12px;font:inherit;font-size:13px}
+.aianswer{font-size:13.5px;line-height:1.65;color:var(--txt)}
+.aimd h4{margin:12px 0 6px;font-size:14px;font-weight:800}
+.aimd p{margin:6px 0}
+.aimd ul{margin:6px 0 6px 2px;padding-left:18px}
+.aimd li{margin:3px 0}
+.aimd strong{font-weight:800}
+.aiload{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:8px 0}
 /* 비대칭 2분할: 주문 목록(콘텐츠가 길다)을 더 넓게 */
 .dmcols{display:grid;grid-template-columns:minmax(280px,0.85fr) minmax(420px,1.15fr);gap:20px;align-items:start}
 .dmcols h4{margin:6px 0 9px;font-size:13px;color:var(--sub);font-weight:700;display:flex;align-items:baseline;gap:6px}

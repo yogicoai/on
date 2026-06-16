@@ -40,6 +40,7 @@ const mallPromos = require('./lib/mallPromotions');
 const cafe24Products = require('./lib/cafe24Products');
 const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
+const ai = require('./lib/ai');
 
 const PORT = Number(process.env.PORT || 5200);
 const PUBLIC = path.join(__dirname, 'public');
@@ -273,6 +274,24 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await otherChannels.overview(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 기타 채널 그룹별 전주/전월/전년 비교 (통합비교 표용)
+  if (u.pathname === '/api/other/period-compare') {
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.groupsPeriodCompare(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 그룹 카테고리/충전재 → 상품 상세 (드릴다운)
+  if (u.pathname === '/api/other/group-breakdown') {
+    const group = u.searchParams.get('group') || '';
+    const field = u.searchParams.get('field') || 'category';
+    const value = u.searchParams.get('value') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!group) return sendJson(res, 400, { ok: false, error: 'group 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.groupBreakdownProducts(group, field, value, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   if (u.pathname === '/api/other/group') {
     const group = u.searchParams.get('group') || '';
     const start = u.searchParams.get('start') || '';
@@ -340,14 +359,27 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await promoPerformance.forMall(u.searchParams.get('mall') || '')) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+
+  // ── AI 판매 분석 (Claude API, mkboard 방식) — GET 으로 두어 읽기전용 배포에서도 동작 ──
+  if (u.pathname === '/api/ai/status') {
+    return sendJson(res, 200, { ok: true, enabled: ai.enabled(), model: ai.model() });
+  }
+  if (u.pathname === '/api/ai/ask') {
+    const q = u.searchParams.get('q') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!q.trim()) return sendJson(res, 400, { ok: false, error: '질문을 입력하세요' });
+    try { return sendJson(res, 200, { ok: true, ...(await ai.ask(q, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   // ── Cafe24 상품 검색 (프로모션 대상 선택용) ──
   if (u.pathname === '/api/cafe24/products/search') {
     try { return sendJson(res, 200, { ok: true, items: await cafe24Products.search(u.searchParams.get('q') || '', u.searchParams.get('limit')) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  // ── 통합 상품 검색 (몰별: Cafe24/스마트스토어 + 카탈로그 누적) ──
+  // ── 통합 상품 검색 (몰별: Cafe24/스마트스토어 + 카탈로그 누적, offset 페이지네이션) ──
   if (u.pathname === '/api/products/search') {
-    try { return sendJson(res, 200, { ok: true, ...(await products.search(u.searchParams.get('q') || '', u.searchParams.get('mall') || '', u.searchParams.get('limit'))) }); }
+    try { return sendJson(res, 200, { ok: true, ...(await products.search(u.searchParams.get('q') || '', u.searchParams.get('mall') || '', u.searchParams.get('limit'), u.searchParams.get('offset'))) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 

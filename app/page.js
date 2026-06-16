@@ -22,6 +22,7 @@ const SHELL = `
       <button id="apply" class="btn">조회</button>
       <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
       <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 00시 자동 실행)">⟳ 오늘 재취합(API)</button>
+      <button id="btnAi" class="btn ai" type="button" title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
     </div>
   </header>
 
@@ -130,7 +131,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260616m" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260616s" strategy="afterInteractive" />
     </>
   );
 }

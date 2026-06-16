@@ -858,7 +858,7 @@ function switchChannel(b) {
 }
 
 // 항상 노출하는 채널 그룹(매출 0이어도 탭 유지). 나머지 그룹은 선택 구간 매출 0이면 탭 숨김.
-const ALWAYS_GROUPS = new Set(['쿠팡', '오늘의집', '신세계', '롯데홈쇼핑', '현대', '삼성카드 쇼핑', '29CM', 'SK스토아', '11번가']);
+const ALWAYS_GROUPS = new Set(['쿠팡', '오늘의집', '신세계몰', '신세계센텀시티몰', '롯데홈쇼핑', '현대', '삼성카드 쇼핑', '29CM', 'SK스토아', '11번가']);
 // 그룹 탭 노출/숨김 — 화이트리스트는 항상. 나머지는 "이번 달(월초~오늘) OR 선택 구간"에 매출>0 이면 노출.
 //   → 그달에 한 건이라도 매출이 발생한 채널은 탭이 뜬다. 현재 활성 탭은 숨기지 않음.
 async function updateGroupTabVisibility(selStart, selEnd) {
@@ -1216,6 +1216,7 @@ let groupViewInit = false;
 function initGroupView() {
   if (groupViewInit) return; groupViewInit = true;
   el('otherMain').innerHTML = `
+    <div id="otherTarget"></div>
     <div class="card" style="margin:14px 0"><div class="panelctl">
       <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b> 사용 · 이카운트 등록 판매 기준(매출/수량) · 입점몰 합산</span>
     </div></div>
@@ -1245,8 +1246,18 @@ async function openGroupBreakdown(field, value) {
     el('dmBody').innerHTML = `<div class="card"><h3>${ae(value)} 상품별 <span class="hint">${num((j.products || []).length)}종</span></h3>${tableHtml(['상품', '매출', '수량', '주문'], j.products || [], (r) => [r.productName, won(r.sales), num(r.qty), num(r.orders)])}</div>`;
   } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
+// 그룹(기타 채널) 월 목표 배너 — cafe24/스마트스토어처럼 상단 표시. 목표가 설정된 경우에만 노출.
+async function loadGroupTarget(group) {
+  const box = el('otherTarget'); if (!box) return;
+  box.innerHTML = '';
+  try {
+    const j = await (await fetch(`/api/target/mall?month=${curYM()}&mall=${enc(group)}`)).json();
+    if (j.ok && j.target > 0) box.innerHTML = `<div style="margin:14px 0 0">${targetBannerHtml(`${ae(group)} 월 목표`, j, j)}</div>`;
+  } catch (_) {}
+}
 async function loadGroupView(group) {
   if (!group) return;
+  loadGroupTarget(group); // 상단 월 목표 배너(목표 설정된 경우)
   el('otherKpis').innerHTML = '';
   el('otherPanel').innerHTML = '<div class="empty">분석 중…</div>';
   const s = el('start').value, e = el('end').value;

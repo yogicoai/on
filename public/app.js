@@ -2179,6 +2179,8 @@ function createPromoCalendar(host, opts) {
     selected = promo ? (promo.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0, source: p.source })) : [];
     searchOffset = 0; searchItems = [];
     const malls = pcMallOptions(scopeMall);
+    // 전 몰 달력에서 기존 프로모션 편집 시, 그 몰이 현재 채널탭에 없어도 옵션에 포함(저장 시 몰이 바뀌는 것 방지)
+    if (!scopeMall && promo && promo.mall && !malls.includes(promo.mall)) malls.push(promo.mall);
     const selMall = promo ? promo.mall : (scopeMall || malls[1] || malls[0]);
     const start = promo ? promo.start : (date || ''), end = promo ? promo.end : (date || '');
     const mallField = scopeMall

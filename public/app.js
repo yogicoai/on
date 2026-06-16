@@ -1427,6 +1427,12 @@ function renderCmpFixed() {
   // 기타 채널을 "각 그룹 행"으로 표시(쿠팡·롯데·현대… 각각 전주/전월/전년 비교)
   const og = (c.otherCmp && c.otherCmp.ok && c.otherCmp.rows) || [];
   const otherRows = og.map((r) => ({ channel: r.group, cur: r.cur, wow: r.wow, mom: r.mom, yoy: r.yoy }));
+  // 그날 매출이 0원이라 빠진 채널도, 상단 탭에 있는(라이브) 기타 채널이면 0원 행으로 항상 표시
+  const present = new Set(otherRows.map((r) => r.channel));
+  [...document.querySelectorAll('#channelTabs .chtab[data-ch="group"]')].forEach((b) => {
+    const g = b.dataset.group;
+    if (g && !present.has(g)) { otherRows.push({ channel: g, cur: { revenue: 0, aov: 0 }, wow: { rate: null }, mom: { rate: null }, yoy: { rate: null } }); present.add(g); }
+  });
   el('cmpFixed').innerHTML = `
     ${T ? `<section class="kpis" style="padding:0 0 14px">
       ${kc('전 채널 매출', won(grand), `${s} ~ ${e} · 자사몰+스마트스토어+기타`, 'accent')}

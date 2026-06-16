@@ -2184,29 +2184,39 @@ function createPromoCalendar(host, opts) {
     const selMall = promo ? promo.mall : (scopeMall || malls[1] || malls[0]);
     const start = promo ? promo.start : (date || ''), end = promo ? promo.end : (date || '');
     const mallField = scopeMall
-      ? `<label>몰 <input type="text" class="pcv-mall" value="${ae(scopeMall)}" readonly style="background:#f3f4f6;font-weight:700;min-width:120px"></label>`
+      ? `<label>몰 <span class="pcv-mall pcv-locked" data-val="${ae(scopeMall)}">${ae(scopeMall)} <i>고정</i></span></label>`
       : `<label>몰 <select class="pcv-mall">${malls.map((mm) => `<option value="${ae(mm)}" ${mm === selMall ? 'selected' : ''}>${ae(mm)}</option>`).join('')}</select></label>`;
     $('.pcv-edit').innerHTML = `
-      <div class="pc-edhead"><button class="pcv-back btn ghost mini" type="button">‹ 달력으로</button><strong>${promo ? '프로모션 수정' : '새 프로모션 계획'}</strong>${promo ? `<span class="muted" style="font-size:12px">${promo.start} ~ ${promo.end}</span>` : ''}</div>
-      <div class="pc-edform">
-        ${mallField}
-        <label>프로모션명 <input type="text" class="pcv-name" value="${promo ? ae(promo.name) : ''}" placeholder="예: 6월 여름 프로모션"></label>
-        <label>시작 <input type="date" class="pcv-start" value="${start}"></label>
-        <label>종료 <input type="date" class="pcv-end" value="${end}"></label>
+      <div class="pc-edhead">
+        <button class="pcv-back btn ghost mini" type="button">‹ 달력으로</button>
+        <strong>${promo ? '프로모션 수정' : '새 프로모션 계획'}</strong>
+        ${promo ? `<span class="pc-edrange">${promo.start} ~ ${promo.end}</span>` : ''}
       </div>
-      <label class="pc-memo">상세 프로모션 계획 <textarea class="pcv-memo" rows="3" placeholder="혜택 구성 · 배너/노출 위치 · 타깃 · 목표 KPI 등 상세 계획을 메모하세요">${promo ? ae(promo.memo || '') : ''}</textarea></label>
-      <div class="pc-edform" style="margin-top:8px">
-        <label>대상 상품 검색 <input type="text" class="pcv-search" placeholder="상품명 (Cafe24/스마트스토어)"></label>
-        <button class="pcv-searchbtn btn ghost" type="button">검색</button>
-        <span class="pcv-searchmsg muted"></span>
+      <div class="pc-edcard">
+        <div class="pc-edsub">기본 정보</div>
+        <div class="pc-edform">
+          ${mallField}
+          <label class="grow">프로모션명 <input type="text" class="pcv-name" value="${promo ? ae(promo.name) : ''}" placeholder="예: 6월 여름 프로모션"></label>
+          <label>시작 <input type="date" class="pcv-start" value="${start}"></label>
+          <label>종료 <input type="date" class="pcv-end" value="${end}"></label>
+        </div>
+        <label class="pc-memo">상세 프로모션 계획 <textarea class="pcv-memo" rows="3" placeholder="혜택 구성 · 배너/노출 위치 · 타깃 · 목표 KPI 등 상세 계획을 메모하세요">${promo ? ae(promo.memo || '') : ''}</textarea></label>
       </div>
-      <div class="pcv-searchresult"></div>
-      <div class="pc-edform" style="margin-top:8px">
-        <label>일괄 할인율(%) <input type="number" min="0" max="100" class="pcv-bulk" style="width:84px"></label>
-        <button class="pcv-bulkapply btn ghost mini" type="button">전체 적용</button>
-        <span class="muted" style="font-size:12px">상품별 개별 조정도 가능</span>
+      <div class="pc-edcard">
+        <div class="pc-edsub">대상 상품 · 할인율 <span>선택 — 상품 없이 일정만 등록해도 됩니다</span></div>
+        <div class="pc-edform">
+          <label class="grow">상품 검색 <input type="text" class="pcv-search" placeholder="상품명 (Cafe24/스마트스토어)"></label>
+          <button class="pcv-searchbtn btn ghost" type="button">검색</button>
+          <span class="pcv-searchmsg muted"></span>
+        </div>
+        <div class="pcv-searchresult"></div>
+        <div class="pc-edform pc-edbulk">
+          <label>일괄 할인율(%) <input type="number" min="0" max="100" class="pcv-bulk" style="width:84px"></label>
+          <button class="pcv-bulkapply btn ghost mini" type="button">전체 적용</button>
+          <span class="muted" style="font-size:12px">상품별 개별 조정도 가능</span>
+        </div>
+        <div class="pcv-products"></div>
       </div>
-      <div class="pcv-products"></div>
       <div class="pc-edactions">
         <button class="pcv-save btn" type="button">${promo ? '수정 저장' : '프로모션 저장'}</button>
         ${promo ? '<button class="pcv-delete btn danger" type="button">삭제</button>' : ''}

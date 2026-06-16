@@ -76,6 +76,22 @@ a.btn.mini{line-height:1.7}
   background:#FFF6EC;border:1px solid #FFE0BF;border-radius:12px;font-size:12.5px;color:#9A5B00;font-weight:600;line-height:1.5}
 .syncinfo b{color:var(--warn);font-weight:800}
 .syncinfo .si-ico{font-size:15px}
+/* 일일 점검(같은 요일 평균 대비) — 색상 칩 + 큰 ▲▼% 로 직관화 */
+.dh-card{padding:0}
+.dh-title{font-size:12.5px;font-weight:700;color:var(--sub);margin:2px 0 8px}
+.dh-chips{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.dh-chips{grid-template-columns:1fr}}
+.dh-chip{border:1px solid var(--line);border-left-width:5px;border-radius:12px;padding:11px 14px;background:#fff}
+.dh-chip .dh-lbl{font-size:12px;color:var(--muted);font-weight:700}
+.dh-chip .dh-big{font-size:26px;font-weight:800;letter-spacing:-0.02em;line-height:1.1;margin:3px 0 2px}
+.dh-chip .dh-day{font-size:15px;font-weight:700}
+.dh-chip .dh-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.dh-bad{border-left-color:#e5484d;background:#fff6f6}
+.dh-bad .dh-big{color:#e5484d}
+.dh-good{border-left-color:#16a34a;background:#f4fdf7}
+.dh-good .dh-big{color:#16a34a}
+.dh-na{border-left-color:var(--line2)}
+.dh-na .dh-big{color:var(--muted)}
 
 /* KPI */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;padding:6px 24px 10px}

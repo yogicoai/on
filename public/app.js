@@ -2111,7 +2111,7 @@ function createPromoCalendar(host, opts) {
   opts = opts || {};
   const scopeMall = opts.scopeMall || null;
   const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
-  let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [];
+  let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [], lastQuery = '';
   const $ = (s) => host.querySelector(s);
   host.classList.add('pc-host');
   host.innerHTML = `
@@ -2229,6 +2229,24 @@ function createPromoCalendar(host, opts) {
           <span class="pcv-searchmsg muted"></span>
         </div>
         <div class="pcv-searchresult"></div>
+        <details class="pc-bulkreg">
+          <summary>상품명으로 대량 등록</summary>
+          <div class="pc-bulkbox">
+            <div class="pc-bulkdesc">상품명을 <b>줄바꿈으로 여러 개</b> 입력하면, 각 이름으로 Cafe24(또는 스토어)를 검색해 <b>일치하는 상품을 한 번에 모두 추가</b>합니다. 부분일치로 찾고 이미 담긴 상품은 자동 제외돼요. (위에서 검색 후 <b>검색결과 전체 추가</b> 버튼으로도 가능)</div>
+            <textarea class="pcv-bulknames" rows="3" placeholder="예)&#10;요기보 맥스&#10;요기보 미디&#10;요기보 미니"></textarea>
+            <div class="pc-edform" style="margin-top:6px">
+              <button class="pcv-bulkaddbtn btn ghost" type="button">대량 추가</button>
+              <span class="pcv-bulkmsg muted"></span>
+            </div>
+            <div class="pc-bulkup">
+              <div class="pc-bulkdesc"><b>엑셀(CSV) 양식으로 할인율·쿠폰까지</b> 한 번에 올리기 — 양식을 받아 <b>상품명 · 할인율(%) · 쿠폰</b>을 채운 뒤 업로드하면, 각 행의 상품을 찾아 그 행의 <b>할인율·쿠폰</b>을 적용해 추가합니다. (엑셀에서 <b>“CSV UTF-8”</b>로 저장)</div>
+              <div class="pc-edform" style="margin-top:4px">
+                <button class="pcv-tmpl btn ghost mini" type="button">⤓ 엑셀(CSV) 양식 받기</button>
+                <label class="pcv-uplabel btn ghost mini">⤒ 양식 업로드<input type="file" class="pcv-upload" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
+              </div>
+            </div>
+          </div>
+        </details>
         <div class="pc-edform pc-edbulk">
           <label>일괄 할인율(%) <input type="number" min="0" max="100" class="pcv-bulk" style="width:84px"></label>
           <button class="pcv-bulkapply btn ghost mini" type="button">전체 적용</button>
@@ -2246,6 +2264,9 @@ function createPromoCalendar(host, opts) {
     $('.pcv-cancel').addEventListener('click', showCal);
     $('.pcv-searchbtn').addEventListener('click', () => doSearch(false));
     $('.pcv-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(false); } });
+    $('.pcv-bulkaddbtn').addEventListener('click', bulkAddByNames);
+    $('.pcv-tmpl').addEventListener('click', downloadTemplate);
+    $('.pcv-upload').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) uploadCsv(f); e.target.value = ''; });
     $('.pcv-bulkapply').addEventListener('click', () => { const v = Math.max(0, Math.min(100, +$('.pcv-bulk').value || 0)); selected.forEach((p) => { p.discountRate = v; }); renderProducts(); });
     $('.pcv-save').addEventListener('click', save);
     const delBtn = $('.pcv-delete'); if (delBtn) delBtn.addEventListener('click', del);
@@ -2256,15 +2277,16 @@ function createPromoCalendar(host, opts) {
   function renderProducts() {
     const box = $('.pcv-products'); if (!box) return;
     if (!selected.length) { box.innerHTML = '<div class="muted" style="font-size:12px;padding:6px 0">선택된 상품 없음 — 검색 후 추가 (상품 없이 일정만 등록해도 됩니다)</div>'; return; }
-    box.innerHTML = `<table style="width:100%;margin-top:6px"><thead><tr><th>상품</th><th class="num">정가</th><th class="num">할인율</th><th class="num">할인가</th><th></th></tr></thead><tbody>${
-      selected.map((p, i) => `<tr><td>${ae(p.productName)} <span class="muted" style="font-size:11px">${p.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(p.price)}</td><td class="num"><input type="number" min="0" max="100" value="${p.discountRate || 0}" data-i="${i}" class="pcdisc" style="width:56px">%</td><td class="num pcfin">${won(Math.round((p.price || 0) * (1 - (p.discountRate || 0) / 100)))}</td><td class="num"><button class="delx" data-del="${i}">✕</button></td></tr>`).join('')
+    box.innerHTML = `<table style="width:100%;margin-top:6px"><thead><tr><th>상품</th><th class="num">정가</th><th class="num">할인율</th><th class="num">할인가</th><th>쿠폰</th><th></th></tr></thead><tbody>${
+      selected.map((p, i) => `<tr><td>${ae(p.productName)} <span class="muted" style="font-size:11px">${p.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(p.price)}</td><td class="num"><input type="number" min="0" max="100" value="${p.discountRate || 0}" data-i="${i}" class="pcdisc" style="width:56px">%</td><td class="num pcfin">${won(Math.round((p.price || 0) * (1 - (p.discountRate || 0) / 100)))}</td><td><input type="text" value="${ae(p.coupon || '')}" data-ci="${i}" class="pccoupon" placeholder="-" style="width:130px"></td><td class="num"><button class="delx" data-del="${i}">✕</button></td></tr>`).join('')
     }</tbody></table>`;
     box.querySelectorAll('.pcdisc').forEach((inp) => inp.addEventListener('input', () => { const i = +inp.dataset.i, v = Math.max(0, Math.min(100, +inp.value || 0)); selected[i].discountRate = v; const c = inp.closest('tr').querySelector('.pcfin'); if (c) c.textContent = won(Math.round((selected[i].price || 0) * (1 - v / 100))); }));
+    box.querySelectorAll('.pccoupon').forEach((inp) => inp.addEventListener('input', () => { selected[+inp.dataset.ci].coupon = inp.value; }));
     box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { selected.splice(+b.dataset.del, 1); renderProducts(); }));
   }
   async function doSearch(more) {
     const q = $('.pcv-search').value.trim(), mall = scopeMall || $('.pcv-mall').value;
-    if (!more) { searchOffset = 0; searchItems = []; }
+    if (!more) { searchOffset = 0; searchItems = []; lastQuery = q; }
     $('.pcv-searchmsg').textContent = '검색 중…';
     try {
       const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(mall)}&limit=50&offset=${searchOffset}`)).json();
@@ -2279,14 +2301,109 @@ function createPromoCalendar(host, opts) {
   function renderSearch(hasMore) {
     const box = $('.pcv-searchresult'); if (!box) return;
     if (!searchItems.length) { box.innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
-    box.innerHTML = `<div class="prsearchbox"><table style="width:100%"><tbody>${searchItems.map((r) => `<tr><td>${ae(r.productName)} <span class="muted" style="font-size:11px">${r.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table>${hasMore ? `<div class="prmore"><button class="btn ghost mini pcv-more" type="button">더 불러오기 (현재 ${searchItems.length}개)</button></div>` : ''}</div>`;
+    box.innerHTML = `<div class="pc-srhead"><span class="muted" style="font-size:12px">검색결과 ${searchItems.length}개${hasMore ? '+ (더 있음)' : ''}</span>
+      <button class="pcv-addall btn ghost mini" type="button" title="이 검색어에 일치하는 상품을 전부 불러와 한 번에 추가">+ 검색결과 전체 추가${hasMore ? '' : ` (${searchItems.length}개)`}</button></div>
+      <div class="prsearchbox"><table style="width:100%"><tbody>${searchItems.map((r) => `<tr><td>${ae(r.productName)} <span class="muted" style="font-size:11px">${r.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table>${hasMore ? `<div class="prmore"><button class="btn ghost mini pcv-more" type="button">더 불러오기 (현재 ${searchItems.length}개)</button></div>` : ''}</div>`;
     box.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
       const p = JSON.parse(decodeURIComponent(b.dataset.add));
       if (selected.some((x) => x.productNo === p.productNo && x.source === p.source)) { $('.pcv-searchmsg').textContent = '이미 추가된 상품'; return; }
       selected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: (+$('.pcv-bulk').value || 0), source: p.source });
       renderProducts();
     }));
+    const addall = box.querySelector('.pcv-addall'); if (addall) addall.addEventListener('click', addAllSearchResults);
     const more = box.querySelector('.pcv-more'); if (more) more.addEventListener('click', () => doSearch(true));
+  }
+  // ── 대량 추가 ──
+  function dedupAdd(items, override) {
+    const baseRate = (+$('.pcv-bulk').value || 0);
+    let added = 0;
+    for (const p of items) {
+      if (!p || !p.productNo) continue;
+      if (selected.some((x) => x.productNo === p.productNo && x.source === p.source)) continue;
+      selected.push({
+        productNo: p.productNo, productName: p.productName, price: p.price,
+        discountRate: (override && override.discountRate != null) ? override.discountRate : baseRate,
+        coupon: (override && override.coupon) || '',
+        source: p.source,
+      });
+      added++;
+    }
+    if (added) renderProducts();
+    return added;
+  }
+  // 한 검색어에 일치하는 상품을 전 페이지 끝까지 모두 가져옴(안전 상한 50페이지)
+  async function fetchAllMatches(q) {
+    const mall = scopeMall || $('.pcv-mall').value;
+    const all = []; let off = 0;
+    for (let page = 0; page < 50; page++) {
+      const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(mall)}&limit=100&offset=${off}`)).json();
+      if (!j.ok) break;
+      const items = (j.items || []).map((r) => ({ productNo: r.productNo, productName: r.productName, price: r.price, source: r.source || (mall === '스마트스토어' ? 'smartstore' : 'cafe24') }));
+      all.push(...items);
+      if (items.length < 100) break;
+      off += items.length;
+    }
+    return all;
+  }
+  async function addAllSearchResults() {
+    $('.pcv-searchmsg').textContent = '전체 불러와 추가 중…';
+    try {
+      const all = await fetchAllMatches(lastQuery);
+      const added = dedupAdd(all);
+      $('.pcv-searchmsg').textContent = `검색결과 ${all.length}개 중 ${added}개 추가 (중복 제외)`;
+    } catch (e) { $('.pcv-searchmsg').textContent = '오류: ' + e.message; }
+  }
+  async function bulkAddByNames() {
+    const raw = $('.pcv-bulknames').value || '';
+    const names = [...new Set(raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
+    if (!names.length) { $('.pcv-bulkmsg').textContent = '상품명을 한 줄에 하나씩 입력하세요'; return; }
+    $('.pcv-bulkmsg').textContent = `${names.length}개 상품명 검색·추가 중…`;
+    let total = 0, added = 0;
+    try {
+      for (const nm of names) { const m = await fetchAllMatches(nm); total += m.length; added += dedupAdd(m); }
+      $('.pcv-bulkmsg').textContent = `${names.length}개 상품명 · 일치 ${total}개 중 ${added}개 추가 (중복 제외)`;
+    } catch (e) { $('.pcv-bulkmsg').textContent = '오류: ' + e.message; }
+  }
+  // ── 엑셀(CSV) 양식: 상품명 · 할인율(%) · 쿠폰 ──
+  function downloadTemplate() {
+    const sample = [
+      '상품명,할인율(%),쿠폰',
+      '요기보 맥스,20,',
+      '요기보 미디,15,5천원 쿠폰',
+      '줄라 미니,10,10% 추가쿠폰',
+    ].join('\r\n');
+    const blob = new Blob(['﻿' + sample], { type: 'text/csv;charset=utf-8' }); // BOM → 엑셀 한글 정상
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = '프로모션_상품_양식.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  // 따옴표 없는 단순 CSV 한 줄 파싱 (필드 내 콤마는 미지원 — 양식 기준)
+  function parsePromoCsv(text) {
+    const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const out = [];
+    lines.forEach((line, i) => {
+      if (i === 0 && /상품명|할인율|쿠폰/.test(line)) return; // 헤더 스킵
+      const c = line.split(',');
+      const name = (c[0] || '').trim();
+      const rate = Math.max(0, Math.min(100, parseFloat(String(c[1] || '').replace('%', '').trim()) || 0));
+      const coupon = (c.slice(2).join(',') || '').trim();
+      if (name) out.push({ name, rate, coupon });
+    });
+    return out;
+  }
+  async function uploadCsv(file) {
+    let text = '';
+    try { text = await file.text(); } catch (_) { $('.pcv-bulkmsg').textContent = '파일을 읽지 못했어요'; return; }
+    if (/\.xlsx?$/i.test(file.name) && !/[,\n]/.test(text)) { $('.pcv-bulkmsg').textContent = '엑셀(.xlsx)은 “CSV UTF-8”로 저장해 올려주세요'; return; }
+    const rows = parsePromoCsv(text);
+    if (!rows.length) { $('.pcv-bulkmsg').textContent = '양식에서 데이터 행을 찾지 못했어요 (상품명,할인율,쿠폰)'; return; }
+    $('.pcv-bulkmsg').textContent = `${rows.length}행 처리 중…`;
+    let total = 0, added = 0;
+    try {
+      for (const r of rows) { const m = await fetchAllMatches(r.name); total += m.length; added += dedupAdd(m, { discountRate: r.rate, coupon: r.coupon }); }
+      $('.pcv-bulkmsg').textContent = `양식 ${rows.length}행 · 일치 ${total}개 중 ${added}개 추가 (할인율·쿠폰 적용, 중복 제외)`;
+    } catch (e) { $('.pcv-bulkmsg').textContent = '오류: ' + e.message; }
   }
   async function save() {
     const mall = scopeMall || $('.pcv-mall').value, name = $('.pcv-name').value.trim(), start = $('.pcv-start').value, end = $('.pcv-end').value, memo = $('.pcv-memo').value.trim();

@@ -128,7 +128,8 @@
           document.getElementById('subline').innerHTML =
             `이카운트 전체 몰 · 최근 <b>${r.monthsCount}개월</b> 평균(${r.months.join(' · ')}) · 재고 ${r.count}종 중 판매매칭 <b>${r.matchedCount}</b>종 · 🚨발주필요 <b class="text-red-600">${r.needOrderCount}</b>종 · 발주선 ${r.targetMonths}개월치` +
             (r.updatedAt ? ` · 재고 ${new Date(r.updatedAt).toLocaleString('ko-KR')}` : '') +
-            (r.stockError ? ' · <span class="text-red-600">재고 API 연결 실패</span>' : '');
+            (r.stockError ? ' · <span class="text-red-600">재고 API 연결 실패</span>' : '') +
+            `<br><span class="text-[11px] text-slate-400">커버·이너는 등급(프리미엄/플러스/스탠다드)·EPP를 한 제품으로 통합 — 본품 1개 판매 = 커버 1·이너 1 수요. 그 외(인형·리빙)는 품목코드 단위.</span>`;
           renderUnmatched(r.unmatchedSellers);
         } else {
           const r = await fetch(`/api/forecast/sales?months=${months}`).then(r=>r.json());
@@ -199,10 +200,11 @@
           else if (ml===null) mlCell = '∞';
           else { if (ml<1) mlClass='text-red-600 font-extrabold'; else if (ml<2) mlClass='text-orange-500 font-bold'; mlCell = `${ml}개월`; }
           const order = r.needOrder ? `<span class="text-[11px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-extrabold border border-red-200">발주 +${won(r.suggestQty)}</span>` : (r.matched?'<span class="text-slate-300 text-xs">충분</span>':'<span class="text-slate-300 text-xs">-</span>');
+          const mergeBadge = (r.variants > 1) ? ` <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold" title="등급(프리미엄/플러스/스탠다드)·EPP 변형 ${r.variants}개를 한 제품으로 통합">통합 ${r.variants}</span>` : '';
           return `<tr class="${bg} hover:bg-blue-50">
             <td class="px-3 py-2.5 text-center">${catBadge(r.category)}</td>
             <td class="px-3 py-2.5 text-center text-xs text-slate-500 font-mono">${r.code||'-'}</td>
-            <td class="px-3 py-2.5 font-semibold text-slate-700">${r.name}</td>
+            <td class="px-3 py-2.5 font-semibold text-slate-700">${r.name}${mergeBadge}</td>
             <td class="px-3 py-2.5 text-slate-600"><div class="flex items-center gap-2">${colorChip(r.color)}<span>${r.color||'-'}</span></div></td>
             <td class="px-3 py-2.5 text-right font-mono ${r.monthlyAvg>0?'text-slate-800 font-bold':'text-slate-300'}">${r.matched?r.monthlyAvg:'-'}</td>
             <td class="px-3 py-2.5 text-right font-mono ${r.stock<=0?'text-red-500 font-bold':'text-slate-800'}">${won(r.stock)}</td>

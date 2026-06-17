@@ -168,6 +168,17 @@ async function loadDailyHealth() {
   try {
     const j = await (await fetch(`/api/cafe24/daily-health?date=${hd}&weeks=8`)).json();
     if (!j.ok) { box.innerHTML = ''; return; }
+    // 방문수 day값을 상단 KPI(방문수)와 '같은 출처'로 맞춘다.
+    //   overview(=lastData.inflow)는 캐시 스냅샷, daily-health 는 라이브라, 진행중인 오늘은
+    //   값이 어긋난다(예: KPI 345 vs 라이브 359). 화면 일관성을 위해 inflow.daily 의 hd 방문수로 덮어씀.
+    try {
+      const row = lastData && lastData.inflow && lastData.inflow.daily && lastData.inflow.daily.find((r) => r.date === hd);
+      if (row && typeof row.visits === 'number') {
+        j.visits.day = row.visits;
+        j.visits.diff = row.visits - j.visits.avg;
+        j.visits.below = row.visits < j.visits.avg;
+      }
+    } catch (_) {}
     const md = `${+hd.slice(5, 7)}/${+hd.slice(8, 10)}`;
     const chip = (label, m, fmt) => {
       const has = m.avg > 0;

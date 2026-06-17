@@ -157,12 +157,14 @@ async function load(force, funnel) {
 }
 function setStatus(msg, cls) { el('status').innerHTML = `<span class="${cls}">${msg}</span>`; }
 
-// 같은 요일 평균 대비 방문수·일일매출 경고 (Cafe24). 오늘은 진행중이라 직전 완료일(어제) 기준으로 점검.
+// 같은 요일 평균 대비 방문수·일일매출 경고 (Cafe24). 선택한 날짜(=종료일) 기준으로 점검.
+//   오늘을 고르면 오늘을 점검(진행중·미완료라 평균 대비 낮게 나오는 게 정상 → '진행중' 표기).
 async function loadDailyHealth() {
   const box = el('dailyHealth'); if (!box) return;
-  const today = rangeFor('today')[0], yest = rangeFor('yesterday')[0];
+  const today = rangeFor('today')[0];
   const end = el('end').value || today;
-  const hd = (end >= today) ? yest : end;
+  const hd = (end > today) ? today : end; // 선택한 종료일 그대로(미래면 오늘로 클램프)
+  const partial = (hd >= today); // 오늘이면 진행중(미완료일)
   try {
     const j = await (await fetch(`/api/cafe24/daily-health?date=${hd}&weeks=8`)).json();
     if (!j.ok) { box.innerHTML = ''; return; }
@@ -181,7 +183,7 @@ async function loadDailyHealth() {
       </div>`;
     };
     box.innerHTML = `<div class="dh-card">
-      <div class="dh-title">일일 점검 <span class="muted">· ${md}(${j.label}) · 최근 ${j.samples}개 ${j.label}요일 평균 대비</span></div>
+      <div class="dh-title">일일 점검 <span class="muted">· ${md}(${j.label})${partial ? ' <span class="pos">진행중(미완료일)</span>' : ''} · 최근 ${j.samples}개 ${j.label}요일 평균 대비</span></div>
       <div class="dh-chips">${chip('일일 매출', j.sales, won)}${chip('방문수', j.visits, num)}</div>
     </div>`;
   } catch (_) { box.innerHTML = ''; }
@@ -536,7 +538,7 @@ function renderBuyersEvents(events, s, e) {
         ${p.hasCoupons ? `
           <div class="muted" style="font-size:11px;margin-bottom:5px">분석 구간 <b>${p.periodStart} ~ ${p.periodEnd}</b> 기준 (이벤트 기간 ∩ 선택 구간)</div>
           <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(p.totals.orders)}</b>주문 · <b>${num(p.totals.members)}</b>명 · 매출 <b>${won(p.totals.revenue)}</b> · 쿠폰할인 ${won(p.totals.couponDiscount)}</div>
-          ${(p.byCoupon || []).length ? tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], p.byCoupon, (r) => [ae(r.coupon_name), num(r.orders), num(r.members), won(r.revenue), won(r.discount)]) : '<div class="muted" style="font-size:12px">선택 구간에 연결 쿠폰 사용 없음 — “프로모션 기간 매출 확인”으로 전체기간을 보세요</div>'}
+          ${(p.byCoupon || []).length ? couponPerfTable(p.byCoupon, p.periodStart, p.periodEnd) : '<div class="muted" style="font-size:12px">선택 구간에 연결 쿠폰 사용 없음 — “프로모션 기간 매출 확인”으로 전체기간을 보세요</div>'}
         ` : '<div class="muted" style="font-size:13px">연결된 쿠폰이 없습니다 — <b>채널 관리 → 프로모션 편집 → “이 기간 진행 쿠폰 불러오기”</b>로 쿠폰을 연결하면 매출이 집계됩니다.</div>'}
       </div>`).join('')}`;
   box.querySelectorAll('[data-perfid]').forEach((b) => b.addEventListener('click', () => openPromoPerfFull(b.dataset.perfid)));
@@ -551,10 +553,42 @@ async function openPromoPerfFull(id) {
     el('dmBody').innerHTML = `<div class="card">
       <h3>전체기간 쿠폰 성과 <span class="hint">연결 쿠폰 ${num((j.coupons || []).length)}개</span></h3>
       <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(j.totals.orders)}</b>주문 · <b>${num(j.totals.members)}</b>명 · 매출 <b>${won(j.totals.revenue)}</b> · 쿠폰할인 ${won(j.totals.couponDiscount)}</div>
-      ${(j.byCoupon || []).length ? tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], j.byCoupon, (r) => [ae(r.coupon_name), num(r.orders), num(r.members), won(r.revenue), won(r.discount)]) : '<div class="muted">연결 쿠폰 사용 없음</div>'}
+      ${(j.byCoupon || []).length ? couponPerfTable(j.byCoupon, j.periodStart, j.periodEnd) : '<div class="muted">연결 쿠폰 사용 없음</div>'}
       </div>`;
   } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
+
+// 쿠폰 성과 테이블 — 쿠폰명(행) 클릭 시 그 쿠폰의 상품 순위·판매 비중 팝업. s,e = 그 표의 분석 구간.
+function couponPerfTable(byCoupon, s, e) {
+  return tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], byCoupon || [], (r) => [
+    `<button class="linklike cprow" data-cp="${ae(r.coupon_name)}" data-cs="${s || ''}" data-ce="${e || ''}">${ae(r.coupon_name)} ▸</button>`,
+    num(r.orders), num(r.members), won(r.revenue), won(r.discount),
+  ]);
+}
+// 쿠폰 행 클릭 → 상품 순위 + 전체기간(선택구간) 매출 대비 비중 (팝업)
+async function openCouponProductDetail(name, s, e) {
+  openDetailModal(`${ae(name)} <span class="muted" style="font-size:13px;font-weight:500">· 상품 순위 · 판매 비중</span>`, '<div class="empty">불러오는 중…</div>');
+  try {
+    const j = await (await fetch(`/api/promotions/coupon-products?name=${enc(name)}&start=${enc(s)}&end=${enc(e)}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const aov = j.totals.orders ? Math.round(j.totals.revenue / j.totals.orders) : 0;
+    el('dmTitle').innerHTML = `${ae(name)} <span class="muted" style="font-size:13px;font-weight:500">· ${j.start} ~ ${j.end}</span>`;
+    el('dmBody').innerHTML = `
+      <section class="kpis" style="padding:0 0 12px">
+        ${kpiCard('쿠폰 매출', won(j.totals.revenue), `${num(j.totals.orders)}주문 · 객단가 ${won(aov)}`, 'green')}
+        ${kpiCard('판매 비중', pct(j.period.revenue ? j.totals.revenue / j.period.revenue : 0), `전체기간 매출 ${won(j.period.revenue)} 중`, 'accent')}
+        ${kpiCard('판매 수량', num(j.totals.qty) + '개', `상품 ${num(j.products.length)}종`, 'pink')}
+      </section>
+      <div class="card"><h3>가장 많이 팔린 상품 <span class="hint">${j.start} ~ ${j.end} · 수량 많은 순</span></h3>
+      ${j.products.length ? tableHtml(['순위', '상품', '수량', '쿠폰매출', '주문'], j.products, (r, i) => [`<b>${i + 1}</b>`, ae(r.product_name), num(r.qty) + '개', won(r.sales), num(r.orders)]) : '<div class="empty">이 구간에 이 쿠폰을 사용한 주문이 없습니다</div>'}
+      </div>`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+// 쿠폰 성과 테이블 행 클릭 위임 (한 번만 등록)
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('.cprow'); if (!b) return;
+  openCouponProductDetail(b.dataset.cp, b.dataset.cs, b.dataset.ce);
+});
 
 const kpiCard = (l, v, sub, cls) => `<div class="kpi ${cls||''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
 
@@ -2115,7 +2149,7 @@ function renderAdminPerformance(ym) {
       <div class="card" style="margin-top:10px"><h3>${ae(p.name)} <span class="hint">${p.start} ~ ${p.end} · 연결 쿠폰 ${num((p.coupons || []).length)}개</span></h3>
         ${p.hasCoupons ? `
           <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(p.totals.orders)}</b>주문 · <b>${num(p.totals.members)}</b>명 · 매출 <b>${won(p.totals.revenue)}</b> · 쿠폰할인 ${won(p.totals.couponDiscount)}</div>
-          ${(p.byCoupon || []).length ? tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], p.byCoupon, (r) => [ae(r.coupon_name), num(r.orders), num(r.members), won(r.revenue), won(r.discount)]) : '<div class="muted" style="font-size:12px">이 기간 연결 쿠폰 사용 없음</div>'}
+          ${(p.byCoupon || []).length ? couponPerfTable(p.byCoupon, p.periodStart || p.start, p.periodEnd || p.end) : '<div class="muted" style="font-size:12px">이 기간 연결 쿠폰 사용 없음</div>'}
         ` : '<div class="muted" style="font-size:12px">연결된 쿠폰 없음 — 편집기에서 “이 기간 진행 쿠폰 불러오기”로 쿠폰을 연결하세요</div>'}
       </div>`).join('')
       : `<div class="empty">${m}에 진행된 프로모션이 없습니다 ${items.length ? '(달력을 다른 달로 이동)' : ''}</div>`;
@@ -2403,16 +2437,17 @@ function createPromoCalendar(host, opts) {
         <div class="pc-edsub">연결 쿠폰 (자사몰) <span>이 기간 진행한 Cafe24 쿠폰을 불러와 저장 → 성과를 <b>쿠폰 기준</b>으로 집계 · 쿠폰이 삭제돼도 기록 유지</span></div>
         <div class="pc-bulkrow">
           <button class="pcv-loadcoupons btn cal mini" type="button">이 기간 진행 쿠폰 불러오기</button>
-          <button class="pcv-synccoupons btn ghost mini" type="button" title="이 기간 사용된 쿠폰명을 적재해 발급종료·만료 쿠폰도 목록에 뜨게 합니다(수십 초)">만료 쿠폰 포함 갱신</button>
+          <button class="pcv-loadall btn ghost mini" type="button" title="기간 무관 — 적재된 모든 쿠폰(삭제 포함)을 다 불러옵니다">전체 쿠폰 불러오기</button>
+          <button class="pcv-synccoupons btn ghost mini" type="button" title="이 기간 주문에서 사용된 쿠폰명을 적재해 발급종료·삭제 쿠폰도 목록에 뜨게 합니다(수십 초)">만료 쿠폰 포함 갱신</button>
           <span class="pcv-couponmsg muted"></span>
         </div>
         <div class="pcv-couponpick"></div>
         <div class="pcv-couponsel"></div>
-        <details class="pc-cpmanual"><summary>목록에 없는 쿠폰 직접 추가 (만료·삭제 등)</summary>
+        <details class="pc-cpmanual"><summary>삭제·만료 쿠폰 번호로 추가 (발급내역 조회)</summary>
           <div style="padding:8px 0 0">
-            <div class="pc-bulkdesc">Cafe24 쿠폰 관리에서 <b>쿠폰명</b>을 복사해 한 줄에 하나씩 붙여넣으세요. 성과는 그 쿠폰명의 실제 사용분으로 집계됩니다(해당 기간이 적재돼 있어야 매출이 잡힘 — 위 “만료 쿠폰 포함 갱신” 먼저 권장).</div>
-            <textarea class="pcv-cpmanualin" rows="2" placeholder="예) [요기보 원더랜드] 빈백/바디필로우 10% 할인 쿠폰(스탠다드)"></textarea>
-            <button class="pcv-cpmanualadd btn ghost mini" type="button" style="margin-top:4px">쿠폰명 직접 추가</button>
+            <div class="pc-bulkdesc"><b>Cafe24 쿠폰 관리(삭제된 쿠폰 포함)에서 행을 드래그로 여러 개 선택해 복사 → 그대로 붙여넣으세요.</b> 번호와 쿠폰명을 자동으로 인식해 모두 추가합니다(여러 줄 OK). 삭제된 쿠폰이라도 <b>발급내역으로 실제 사용 매출이 집계</b>됩니다. (또는 한 줄에 「번호〔공백〕쿠폰명」 직접 입력)</div>
+            <textarea class="pcv-cpmanualin" rows="4" placeholder="Cafe24 쿠폰 표에서 행들을 복사해 붙여넣기 (번호 + 쿠폰명 자동 인식)&#10;예) 6085098189300001157   [요기보 원더랜드] 빈백/바디필로우 10% 할인 쿠폰(스탠다드)"></textarea>
+            <div class="pc-bulkrow" style="margin-top:4px"><button class="pcv-cpmanualadd btn ghost mini" type="button">번호로 추가 (발급내역 조회)</button><span class="pcv-cpmanualmsg muted" style="font-size:11px"></span></div>
           </div>
         </details>
       </div>` : ''}
@@ -2432,7 +2467,8 @@ function createPromoCalendar(host, opts) {
     $('.pcv-bulkapply').addEventListener('click', () => { const v = Math.max(0, Math.min(100, +$('.pcv-bulk').value || 0)); selected.forEach((p) => { p.discountRate = v; }); renderProducts(); });
     $('.pcv-save').addEventListener('click', save);
     const delBtn = $('.pcv-delete'); if (delBtn) delBtn.addEventListener('click', del);
-    const lcBtn = $('.pcv-loadcoupons'); if (lcBtn) lcBtn.addEventListener('click', loadCouponsForEditor);
+    const lcBtn = $('.pcv-loadcoupons'); if (lcBtn) lcBtn.addEventListener('click', () => loadCouponsForEditor(false));
+    const laBtn = $('.pcv-loadall'); if (laBtn) laBtn.addEventListener('click', () => loadCouponsForEditor(true));
     const scBtn = $('.pcv-synccoupons'); if (scBtn) scBtn.addEventListener('click', syncCouponsForEditor);
     const maBtn = $('.pcv-cpmanualadd'); if (maBtn) maBtn.addEventListener('click', manualAddCoupons);
     renderSelectedCoupons();
@@ -2590,16 +2626,16 @@ function createPromoCalendar(host, opts) {
     catch (_) {}
   }
   // ── 자사몰 연결 쿠폰 (불러오기 → 선택 → 스냅샷 저장) ──
-  async function loadCouponsForEditor() {
+  async function loadCouponsForEditor(all) {
     const s = $('.pcv-start').value, e = $('.pcv-end').value;
     const pick = $('.pcv-couponpick'); if (!pick) return;
-    if (!s || !e) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
-    $('.pcv-couponmsg').textContent = '쿠폰 불러오는 중…'; pick.innerHTML = '<div class="empty">불러오는 중…</div>';
+    if (!all && (!s || !e)) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
+    $('.pcv-couponmsg').textContent = all ? '전체 쿠폰 불러오는 중…' : '쿠폰 불러오는 중…'; pick.innerHTML = '<div class="empty">불러오는 중…</div>';
     try {
-      const j = await (await fetch(`/api/cafe24/coupons?start=${enc(s)}&end=${enc(e)}`)).json();
+      const j = await (await fetch(`/api/cafe24/coupons?start=${enc(s)}&end=${enc(e)}${all ? '&all=1' : ''}`)).json();
       if (!j.ok) throw new Error(j.error);
       couponList = j.coupons || [];
-      $('.pcv-couponmsg').textContent = `전체 ${num(j.count)}개 중 이 기간 사용 ${num(j.used)}개 (사용 많은 순)`;
+      $('.pcv-couponmsg').textContent = all ? `전체 ${num(j.count)}개 불러옴 (삭제 포함, 사용 많은 순)` : `전체 ${num(j.count)}개 중 이 기간 사용 ${num(j.used)}개 (사용 많은 순)`;
       renderCouponPick();
     } catch (err) { $('.pcv-couponmsg').textContent = '오류: ' + err.message; pick.innerHTML = ''; }
   }
@@ -2629,20 +2665,41 @@ function createPromoCalendar(host, opts) {
   async function syncCouponsForEditor() {
     const s = $('.pcv-start').value, e = $('.pcv-end').value;
     if (!s || !e) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
-    $('.pcv-couponmsg').textContent = '만료 포함 쿠폰명 갱신 중… (수십 초)';
+    $('.pcv-couponmsg').textContent = '주문에서 사용 쿠폰명 적재 중… (삭제 쿠폰 포함, 수십 초)';
     try {
-      const r = await (await fetch(`/api/sync-coupon-names?start=${enc(s)}&end=${enc(e)}`)).json();
+      const r = await (await fetch(`/api/cafe24/sync-coupons-from-orders?start=${enc(s)}&end=${enc(e)}`)).json();
       if (!r.ok) throw new Error(r.error || '실패');
-      $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문) — 다시 불러옵니다`;
+      $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문, 삭제 쿠폰 포함) — 다시 불러옵니다`;
       await loadCouponsForEditor();
     } catch (err) { $('.pcv-couponmsg').textContent = '갱신 오류: ' + err.message; }
   }
-  // 목록에 없는 쿠폰(만료·삭제) 쿠폰명으로 직접 추가
-  function manualAddCoupons() {
+  // 삭제·만료 쿠폰을 번호로 추가 — 발급내역(issues)을 조회해 사용 주문을 캐시에 적재 → 성과 집계
+  async function manualAddCoupons() {
     const ta = $('.pcv-cpmanualin'); if (!ta) return;
-    const names = [...new Set((ta.value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean))];
+    const msg = $('.pcv-cpmanualmsg');
+    const s = $('.pcv-start').value, e = $('.pcv-end').value;
+    const lines = (ta.value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    if (!lines.length) { if (msg) msg.textContent = '「번호 쿠폰명」 형식으로 입력하세요'; return; }
+    if (msg) msg.textContent = '발급내역 조회·적재 중…';
     let added = 0;
-    names.forEach((nm) => { if (!selectedCoupons.some((x) => (x.coupon_no || x.coupon_name) === nm)) { selectedCoupons.push({ coupon_no: '', coupon_name: nm, benefitText: '', targetLabel: '(직접 추가)', productNos: [], savedAt: new Date().toISOString() }); added++; } });
+    for (const line of lines) {
+      // Cafe24 표에서 행 복사(탭/다중공백 구분) 또는 "번호 쿠폰명" 단일 형식 모두 대응
+      const parts = line.split(/\t|\s{2,}/).map((x) => x.trim()).filter(Boolean);
+      let no = '', name = '';
+      if (parts.length >= 2) { // 표 붙여넣기: 컬럼 분리됨
+        no = parts.find((x) => /^\d{10,}$/.test(x)) || '';
+        name = parts.find((x) => x.includes('[') && x.includes(']')) || parts.find((x) => /[가-힣]/.test(x) && !/^\d/.test(x) && !/~/.test(x)) || '';
+      }
+      if (!no || !name) { const m = line.match(/^(\d{8,})\s+(.+)$/); if (m) { no = m[1]; name = m[2].trim(); } } // "번호 공백 이름"
+      if (!no || selectedCoupons.some((x) => x.coupon_no === no)) continue;
+      try {
+        const r = await (await fetch(`/api/cafe24/coupon-by-no?no=${enc(no)}&name=${enc(name)}&start=${enc(s)}&end=${enc(e)}`)).json();
+        const cn = (r.ok && r.coupon_name) || name || `쿠폰#${no}`;
+        selectedCoupons.push({ coupon_no: no, coupon_name: cn, benefitText: '', targetLabel: r.ok ? `발급내역 ${num(r.used)}주문 사용` : '(번호 추가)', productNos: [], savedAt: new Date().toISOString() });
+        added += 1;
+      } catch (_) {}
+    }
+    if (msg) msg.textContent = `${added}개 추가 (발급내역 적재 완료) — 저장하면 성과 집계`;
     if (added) { ta.value = ''; renderSelectedCoupons(); renderCouponPick(); }
   }
   function renderSelectedCoupons() {

@@ -102,7 +102,7 @@ async function handle(req, res) {
 
   // 읽기 전용 배포(Vercel)에서는 수집·동기화·설정 변경을 비활성화
   if (process.env.READ_ONLY === '1') {
-    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/target/mall/set', '/api/promo-periods/set', '/api/promo-periods/delete', '/api/promotions/set', '/api/promotions/delete']);
+    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/cafe24/sync-coupons-from-orders', '/api/cafe24/coupon-by-no', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/target/mall/set', '/api/promo-periods/set', '/api/promo-periods/delete', '/api/promotions/set', '/api/promotions/delete']);
     if (req.method === 'POST' || WRITE.has(u.pathname)) {
       return sendJson(res, 403, { ok: false, error: '읽기 전용 배포입니다. 수집·동기화·설정 변경은 로컬에서 실행하세요.' });
     }
@@ -402,7 +402,8 @@ async function handle(req, res) {
   if (u.pathname === '/api/cafe24/coupons') {
     const start = u.searchParams.get('start') || '';
     const end = u.searchParams.get('end') || '';
-    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.listCoupons(start, end)) }); }
+    const all = u.searchParams.get('all') === '1';
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.listCoupons(start, end, { all })) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   // 자사몰: 프로모션별 쿠폰기준 성과 — start/end 주면 '프로모션 기간 ∩ 분석구간'으로 집계
@@ -412,11 +413,40 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.forMallCoupons(u.searchParams.get('mall') || '', start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 주문(embed=coupons)에서 쿠폰명을 직접 적재 — 삭제 쿠폰까지 그 기간 사용분 전부 캡처('만료 쿠폰 포함 갱신')
+  if (u.pathname === '/api/cafe24/sync-coupons-from-orders') {
+    const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
+    const end = u.searchParams.get('end') || Y();
+    console.log(`[${new Date().toISOString()}] /api/cafe24/sync-coupons-from-orders ${start}~${end}`);
+    try {
+      const r = await couponsLib.syncCouponNamesFromOrders(start, end, { onProgress: (p) => { if (p.done % 40 === 0) console.log(`  주문쿠폰 적재 ${p.done}/${p.total} · 매핑 ${p.mapped}`); } });
+      return sendJson(res, 200, { ok: true, ...r });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 쿠폰번호로 발급내역 적재 — /coupons 가 안 주는 '삭제 쿠폰'을 번호로 살려 성과 집계되게
+  if (u.pathname === '/api/cafe24/coupon-by-no') {
+    const no = u.searchParams.get('no') || '';
+    const name = u.searchParams.get('name') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!no) return sendJson(res, 400, { ok: false, error: '쿠폰번호(no) 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.syncCouponByNo(no, name, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   // 단일 프로모션 전체기간(또는 지정구간) 쿠폰성과 — '프로모션 기간 매출 확인' 버튼
   if (u.pathname === '/api/promotions/coupon-perf-one') {
     const id = u.searchParams.get('id') || '';
     if (!id) return sendJson(res, 400, { ok: false, error: 'id 필요' });
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponPerfForPromo(id, u.searchParams.get('start') || '', u.searchParams.get('end') || '')) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 단일 쿠폰 — 사용 주문의 상품 순위 + 전체기간 매출 대비 비중 (쿠폰 행 클릭 팝업)
+  if (u.pathname === '/api/promotions/coupon-products') {
+    const name = u.searchParams.get('name') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!name) return sendJson(res, 400, { ok: false, error: 'name 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponProductBreakdown(name, start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 

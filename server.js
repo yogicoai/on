@@ -398,9 +398,18 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.listCoupons(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  // 자사몰: 프로모션별 쿠폰기준 성과 (저장된 쿠폰의 실제 사용 매출/고객/할인)
+  // 자사몰: 프로모션별 쿠폰기준 성과 — start/end 주면 '프로모션 기간 ∩ 분석구간'으로 집계
   if (u.pathname === '/api/promotions/coupon-performance') {
-    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.forMallCoupons(u.searchParams.get('mall') || '')) }); }
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.forMallCoupons(u.searchParams.get('mall') || '', start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 단일 프로모션 전체기간(또는 지정구간) 쿠폰성과 — '프로모션 기간 매출 확인' 버튼
+  if (u.pathname === '/api/promotions/coupon-perf-one') {
+    const id = u.searchParams.get('id') || '';
+    if (!id) return sendJson(res, 400, { ok: false, error: 'id 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponPerfForPromo(id, u.searchParams.get('start') || '', u.searchParams.get('end') || '')) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 

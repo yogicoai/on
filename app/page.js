@@ -51,19 +51,17 @@ const SHELL = `
     <nav class="tabs">
       <button class="tab active" data-tab="inflow">① 유입</button>
       <button class="tab" data-tab="members">② 회원 · 비회원</button>
-      <button class="tab" data-tab="promo">③ 프로모션(쿠폰)</button>
-      <button class="tab" data-tab="buyers">④ 프로모션 매출</button>
-      <button class="tab" data-tab="tagpromo">⑤ 상품태그별 매출</button>
-      <button class="tab" data-tab="segment">⑥ 적립금·쿠폰</button>
-      <button class="tab" data-tab="groupbuy">⑦ 공동구매</button>
-      <button class="tab" data-tab="product">⑧ 상품 분석</button>
-      <button class="tab" data-tab="bizpromote">⑨ 비즈 유도 고객</button>
+      <button class="tab" data-tab="buyers">③ 프로모션 매출</button>
+      <button class="tab" data-tab="tagpromo">④ 상품태그별 매출</button>
+      <button class="tab" data-tab="segment">⑤ 적립금·쿠폰</button>
+      <button class="tab" data-tab="groupbuy">⑥ 공동구매</button>
+      <button class="tab" data-tab="product">⑦ 상품 분석</button>
+      <button class="tab" data-tab="bizpromote">⑧ 비즈 유도 고객</button>
     </nav>
 
     <main>
       <section class="panel active" id="tab-inflow"></section>
       <section class="panel" id="tab-members"></section>
-      <section class="panel" id="tab-promo"></section>
       <section class="panel" id="tab-buyers"></section>
       <section class="panel" id="tab-tagpromo"></section>
       <section class="panel" id="tab-segment"></section>
@@ -138,7 +136,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260617n" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260617r" strategy="afterInteractive" />
     </>
   );
 }

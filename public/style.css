@@ -240,6 +240,10 @@ body.spinning #spinner{display:flex}
 .prsearchbox{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:6px;background:#fff}
 .prsearchbox table td{padding:7px 10px;border-bottom:1px solid var(--line)}
 .prmore{text-align:center;padding:8px;position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line)}
+/* 통합 분석 — 채널이 아닌 교차분석 뷰. 헤더에서 별도 디자인(다크 → 활성 시 블루·바이올렛) */
+.btn.cmp{background:linear-gradient(135deg,#111827,#334155);color:#fff;border:none;font-weight:800;letter-spacing:-.01em;box-shadow:0 4px 12px rgba(15,23,42,.22)}
+.btn.cmp:hover{filter:brightness(1.14)}
+.btn.cmp.active{background:linear-gradient(135deg,#2563eb,#7c3aed);box-shadow:0 6px 18px rgba(99,102,241,.42)}
 /* AI 판매 분석 — 헤더 버튼 + 팝업 모달 */
 .btn.ai{background:linear-gradient(135deg,var(--accent),#6d5efc);color:#fff;border:none;font-weight:800}
 .btn.ai:hover{filter:brightness(1.06)}

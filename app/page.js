@@ -22,6 +22,7 @@ const SHELL = `
       <button id="apply" class="btn">조회</button>
       <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
       <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 00시 자동 실행)">⟳ 오늘 재취합(API)</button>
+      <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="자사몰 + 스마트스토어 + 기타 채널을 한 화면에서 통합 비교 분석">통합 분석</button>
       <button id="btnPromoCal" class="btn cal" type="button" title="전 몰 프로모션을 월간 달력으로 보고 상세 계획을 편집">프로모션 달력</button>
       <button id="btnAi" class="btn ai" type="button" title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
     </div>
@@ -37,7 +38,6 @@ const SHELL = `
     <button class="chtab active" data-ch="cafe24">Cafe24 (자사몰)</button>
     <button class="chtab" data-ch="smartstore">스마트스토어</button>
     <!-- 기타 채널 그룹 탭(쿠팡·롯데·현대·신세계…)은 app.js buildGroupTabs() 가 여기 동적 삽입 -->
-    <button class="chtab" id="chtabCompare" data-ch="compare">통합 비교</button>
   </nav>
   <div class="content">
   <div id="status" class="status"></div>
@@ -138,7 +138,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260617g" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260617i" strategy="afterInteractive" />
     </>
   );
 }

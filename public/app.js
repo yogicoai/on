@@ -868,10 +868,13 @@ el('channelTabs').addEventListener('click', (ev) => {
   const b = ev.target.closest('.chtab');
   if (b) switchChannel(b);
 });
+// 통합 분석은 채널이 아니라 헤더 버튼(별도 디자인)으로 분리 — 클릭 시 동일한 뷰 전환 로직 사용
+const _btnCmp = el('btnCompare'); if (_btnCmp) _btnCmp.addEventListener('click', () => switchChannel(_btnCmp));
 function switchChannel(b) {
   document.querySelectorAll('.chtab').forEach((x) => x.classList.remove('active'));
   b.classList.add('active');
   const ch = b.dataset.ch;
+  if (el('btnCompare')) el('btnCompare').classList.toggle('active', ch === 'compare'); // 헤더 통합분석 버튼 활성 동기화
   curCh = ch; // 상단 날짜 칩/조회/갱신이 이 채널 뷰를 제어하도록
   curGroup = ch === 'group' ? b.dataset.group : null;
   el('view-cafe24').style.display = ch === 'cafe24' ? '' : 'none';
@@ -1499,17 +1502,29 @@ function renderCmpTab() {
 // ① 프로모션 매출 = 전사 프로모션 기간별 매출 비교표(행클릭 기간전환) + 카테고리별 프로모션 성과
 function renderCmpPromo() {
   const { s, e, promos, cat } = cmpCache; const p = el('cmpPanel');
-  const promoRows = (promos.ok && promos.promos) || [];
+  const allPromos = (promos.ok && promos.promos) || [];
+  const promoRows = allPromos.filter((q) => q.start <= e && q.end >= s); // 선택 구간에 진행된(겹치는) 전사 프로모션만
   const catRows = (cat.ok && cat.rows) || [];
   p.innerHTML = `
-    <div class="card"><h3>전사 프로모션 기간별 매출 비교 <span class="hint">행 클릭 시 그 기간으로 전환(전체 비교 반영) · 자사몰+스마트스토어</span></h3>
+    <div class="card"><h3>전사 프로모션 기간별 매출 비교 <span class="hint">선택 구간에 진행된 프로모션만 · 행 클릭 시 그 기간으로 전환 · 자사몰+스마트스토어</span></h3>
       ${promoRows.length ? tableHtml(['프로모션', '기간', '일수', '총매출', '일평균', '자사몰', '스마트스토어', '객단가', '전7일', '후7일'], promoRows,
-        (q) => [`<button class="linklike" data-ps="${q.start}" data-pe="${q.end}">${q.name} ▸</button>`, `${q.start}~${q.end}`, q.days + '일', won(q.total.revenue), won(q.dailyAvg), won(q.cafe24.revenue), won(q.smartstore.revenue), won(q.aov), won(q.before7.revenue), won(q.after7.revenue)]) : '<div class="empty">저장된 전사 프로모션 없음 — 목표·프로모션 설정에서 기간을 입력하세요</div>'}
+        (q) => [`<button class="linklike" data-ps="${q.start}" data-pe="${q.end}">${q.name} ▸</button>`, `${q.start}~${q.end}`, q.days + '일', won(q.total.revenue), won(q.dailyAvg), won(q.cafe24.revenue), won(q.smartstore.revenue), won(q.aov), won(q.before7.revenue), won(q.after7.revenue)]) : `<div class="empty">선택 구간(${s} ~ ${e})에 진행된 전사 프로모션이 없습니다 · 등록 전사 프로모션 ${num(allPromos.length)}건</div>`}
     </div>
-    <div class="card" style="margin-top:16px"><h3>카테고리별 프로모션 성과 <span class="hint">전월 동기간 대비 (자사몰) · ${s} ~ ${e}</span></h3>
-      ${tableHtml(['카테고리', '매출', '비중', '전월비'], catRows, (r) => [r.cat, won(r.sales), pct(r.share), cmpRt(r.momRate)])}
+    <div class="card" style="margin-top:16px"><h3>카테고리별 프로모션 성과 <span class="hint">행 클릭 시 상품 상세(팝업) · 전월 동기간 대비 (자사몰) · ${s} ~ ${e}</span></h3>
+      ${tableHtml(['카테고리', '매출', '비중', '전월비'], catRows, (r) => [`<button class="linklike" data-cat="${enc(r.cat)}">${ae(r.cat)} ▸</button>`, won(r.sales), pct(r.share), cmpRt(r.momRate)])}
     </div>`;
   p.querySelectorAll('button[data-ps]').forEach((b) => b.addEventListener('click', () => { el('cmpStart').value = b.dataset.ps; el('cmpEnd').value = b.dataset.pe; loadCompare(); }));
+  p.querySelectorAll('button[data-cat]').forEach((b) => b.addEventListener('click', () => openCmpCategoryDetail(decodeURIComponent(b.dataset.cat), s, e)));
+}
+// 카테고리별 프로모션 성과 행 클릭 → 그 카테고리 상품 상세 (자사몰, 팝업)
+async function openCmpCategoryDetail(cat, s, e) {
+  openDetailModal(`${ae(cat)} <span class="muted" style="font-size:13px;font-weight:500">· 카테고리 상품 상세 (자사몰) · ${s} ~ ${e}</span>`, '<div class="empty">불러오는 중…</div>');
+  try {
+    const j = await (await fetch(`/api/compare/category-products?cat=${enc(cat)}&start=${s}&end=${e}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const prods = j.products || []; const tot = prods.reduce((a, x) => a + x.sales, 0);
+    el('dmBody').innerHTML = `<div class="card"><h3>${ae(cat)} 상품별 매출 <span class="hint">${num(prods.length)}종 · 합계 ${won(tot)}</span></h3>${prods.length ? tableHtml(['상품', '매출', '수량', '비중'], prods, (r) => [r.name, won(r.sales), num(r.qty), pct(tot ? r.sales / tot : 0)]) : '<div class="empty">이 카테고리 판매 없음</div>'}</div>`;
+  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // ② 트래픽 현황 = 자사몰 방문/PV/구매/가입 풀세트(일별·월별YoY·요일평균·Top10). 별도 API(느려서 탭 진입 시 fetch+캐시)
@@ -1902,7 +1917,7 @@ el('prReset').addEventListener('click', prReset);
 //  채널 인라인 관리 — 각 채널 화면 하단: 이번 달 목표(달성률) + 프로모션(등록/목록)
 //   자사몰·스마트스토어·기타 그룹 공통. 단일 노드를 활성 채널 뷰 하단으로 이동해 사용.
 // ══════════════════════════════════════════════
-let admNode = null, admMall = null, admPrCalInstance = null;
+let admNode = null, admMall = null, admPrCalInstance = null, admTgMonth = null;
 function curYM() { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}`; }
 function buildChannelAdmin() {
   if (admNode) return admNode;
@@ -1911,7 +1926,7 @@ function buildChannelAdmin() {
   n.style.cssText = 'max-width:1400px;margin:8px auto 0;padding:0 24px 40px';
   n.innerHTML = `
     <div class="card" style="margin-top:18px;border-top:3px solid var(--line2)">
-      <h3>이번 달 목표 매출 <span class="hint" id="admTgInfo"></span></h3>
+      <h3>월 목표 매출 <span class="hint" id="admTgInfo"></span><span class="muted" style="margin-left:auto;font-size:11px;font-weight:500">아래 달력의 월에 맞춰 입력·저장 (월별 따로)</span></h3>
       <div class="tgform">
         <div class="tginput-group">
           <span class="tgaffix">₩</span>
@@ -2007,9 +2022,9 @@ function openChannelAdminModal(mall) {
   el('adminModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   admMall = mall;
-  loadAdminTarget();
-  admPrCalInstance = createPromoCalendar(el('admPrCalHost'), { scopeMall: mall, onChange: loadAdminPerformance });
-  admPrCalInstance.openMonth((el('start') && el('start').value) || null);
+  // 목표는 '달력의 현재 월'에 연동 — 달력이 월을 바꾸면 onMonthChange 로 그 달 목표를 다시 불러옴(월별 따로 관리)
+  admPrCalInstance = createPromoCalendar(el('admPrCalHost'), { scopeMall: mall, onChange: loadAdminPerformance, onMonthChange: (ym) => loadAdminTarget(ym) });
+  admPrCalInstance.openMonth((el('start') && el('start').value) || null); // → onMonthChange → loadAdminTarget(달력월)
   loadAdminPerformance();
 }
 function closeChannelAdminModal() {
@@ -2030,8 +2045,10 @@ async function loadAdminPerformance() {
       : '<div class="empty">등록된 프로모션이 없습니다 (프로모션을 등록하면 그 상품의 기간 내 실제 판매가 여기 집계됩니다)</div>';
   } catch (e) { box.innerHTML = `<span class="muted">성과 조회 오류: ${e.message}</span>`; }
 }
-async function loadAdminTarget() {
-  const ym = curYM();
+async function loadAdminTarget(month) {
+  const ym = (month && /^\d{4}-\d{2}$/.test(month)) ? month : curYM();
+  admTgMonth = ym; // 저장 시 이 달로 저장
+  if (!el('admTgInfo')) return;
   el('admTgInfo').textContent = `${admMall} · ${ym}`;
   el('admTgStatus').innerHTML = '<span class="muted">불러오는 중…</span>';
   try {
@@ -2042,17 +2059,18 @@ async function loadAdminTarget() {
     const rate = j.rate || 0, pace = j.totalDays ? j.elapsedDays / j.totalDays : 0;
     const cls = rate >= 1 ? 'var(--green)' : (rate >= pace ? 'var(--accent)' : 'var(--warn)');
     el('admTgStatus').innerHTML = j.target
-      ? `<div class="insightline" style="border-left-color:${cls}">목표 <b>${won(j.target)}</b> · 실적 <b>${won(j.actual)}</b> · 달성률 <b>${pct(rate)}</b> <span class="muted">· 페이스대비 ${j.vsPace >= 0 ? '+' : ''}${won(j.vsPace)} · 예상 ${won(j.forecast)} · 남은목표 ${won(j.remain)}(일 ${won(j.needPerDay)})</span></div>`
-      : `<div class="muted" style="font-size:12px">이번 달 실적 ${won(j.actual)} · 위에 목표(만원)를 입력하면 달성률이 표시됩니다</div>`;
+      ? `<div class="insightline" style="border-left-color:${cls}">${ym} 목표 <b>${won(j.target)}</b> · 실적 <b>${won(j.actual)}</b> · 달성률 <b>${pct(rate)}</b> <span class="muted">· 페이스대비 ${j.vsPace >= 0 ? '+' : ''}${won(j.vsPace)} · 예상 ${won(j.forecast)} · 남은목표 ${won(j.remain)}(일 ${won(j.needPerDay)})</span></div>`
+      : `<div class="muted" style="font-size:12px">${ym} 실적 ${won(j.actual)} · 위에 <b>${ym}</b> 목표(만원)를 입력하면 달성률이 표시됩니다</div>`;
   } catch (e) { el('admTgStatus').innerHTML = `<span class="muted">목표 조회 오류: ${e.message}</span>`; }
 }
 async function saveAdminTarget() {
   const amount = Math.round((+el('admTgInput').value || 0) * 10000);
+  const month = admTgMonth || curYM();
   el('admTgMsg').textContent = '저장 중…';
   try {
-    const j = await (await fetch('/api/target/mall/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: curYM(), mall: admMall, amount }) })).json();
+    const j = await (await fetch('/api/target/mall/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month, mall: admMall, amount }) })).json();
     if (!j.ok) throw new Error(j.error);
-    el('admTgMsg').textContent = '저장됨'; loadAdminTarget();
+    el('admTgMsg').textContent = `${month} 저장됨`; loadAdminTarget(month);
   } catch (e) { el('admTgMsg').textContent = '오류: ' + e.message; }
 }
 // (구) 평면 프로모션 폼/검색/리스트 함수는 채널 모달 내장 달력(createPromoCalendar scopeMall)으로 대체됨.
@@ -2155,6 +2173,7 @@ function createPromoCalendar(host, opts) {
   opts = opts || {};
   const scopeMall = opts.scopeMall || null;
   const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
+  const onMonthChange = typeof opts.onMonthChange === 'function' ? opts.onMonthChange : null; // 달력 월 변경 시 (YYYY-MM)
   let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [], lastQuery = '';
   const $ = (s) => host.querySelector(s);
   host.classList.add('pc-host');
@@ -2185,6 +2204,7 @@ function createPromoCalendar(host, opts) {
   async function load() {
     showCal();
     $('.pcv-title').textContent = `${month.y}년 ${month.m + 1}월`;
+    if (onMonthChange) onMonthChange(`${month.y}-${pad(month.m + 1)}`); // 목표 카드 등 외부 동기화
     $('.pcv-grid').innerHTML = '<div class="empty">불러오는 중…</div>';
     try { const url = scopeMall ? `/api/promotions/list?mall=${enc(scopeMall)}` : '/api/promotions/list'; const j = await (await fetch(url)).json(); promos = (j.ok && j.items) || []; }
     catch (_) { promos = []; }

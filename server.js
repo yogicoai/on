@@ -230,6 +230,15 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await compare.categoryPromo(start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 카테고리 성과 드릴다운 — 그 카테고리의 상품별 매출(자사몰)
+  if (u.pathname === '/api/compare/category-products') {
+    const cat = u.searchParams.get('cat') || '';
+    const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
+    const end = u.searchParams.get('end') || Y();
+    if (!cat) return sendJson(res, 400, { ok: false, error: 'cat 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await compare.categoryProducts(cat, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   if (u.pathname === '/api/compare/promos') {
     try { return sendJson(res, 200, { ok: true, ...(await compare.promoCompare()) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

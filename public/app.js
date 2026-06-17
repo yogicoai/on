@@ -25,12 +25,20 @@ function syncDateInputs(s, e) {
   for (const id of ['start', 'cmpStart', 'ssStart']) { const x = el(id); if (x) x.value = s; }
   for (const id of ['end', 'cmpEnd', 'ssEnd']) { const x = el(id); if (x) x.value = e; }
 }
-// 날짜 입력을 수동 변경(change)해도 즉시 다른 곳에 반영
+// 상단 날짜 입력을 수동 변경(change)하면: 다른 입력칸 동기화 + 칩 해제 + 활성 채널에 즉시 적용.
+//   → "조회"를 안 눌러도 지정 날짜가 곧바로 반영되고, 모든 몰이 같은 날짜를 쓰도록 보장(탭 이동 시 일관).
+let _dateMirrorTimer = null;
 function wireDateMirror(sId, eId) {
   const sx = el(sId), ex = el(eId);
-  const mirror = () => syncDateInputs((el(sId) || {}).value, (el(eId) || {}).value);
-  if (sx) sx.addEventListener('change', mirror);
-  if (ex) ex.addEventListener('change', mirror);
+  const onChange = () => {
+    const s = (el(sId) || {}).value, e = (el(eId) || {}).value;
+    syncDateInputs(s, e);
+    document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active')); // 사용자 지정 구간 → 빠른 칩 해제
+    clearTimeout(_dateMirrorTimer);
+    _dateMirrorTimer = setTimeout(() => { if (s && e && s <= e && typeof applyRangeToActiveView === 'function') applyRangeToActiveView(s, e); }, 200);
+  };
+  if (sx) sx.addEventListener('change', onChange);
+  if (ex) ex.addEventListener('change', onChange);
 }
 
 let lastData = null;
@@ -475,16 +483,11 @@ const enc = encodeURIComponent;
 
 // ── ④ 프로모션 구매고객 (상품태그 / 쿠폰 토글) ──
 let buyersInit = false;
-let promoMode = 'tag'; // 'tag' | 'coupon'
 function initBuyers() {
   if (buyersInit) return; buyersInit = true;
   el('tab-buyers').innerHTML = `
     <div class="card" style="margin-bottom:14px">
       <div class="panelctl">
-        <div class="ranges">
-          <button id="mTag" class="chip active">상품태그 프로모션</button>
-          <button id="mCoupon" class="chip">쿠폰 프로모션</button>
-        </div>
         <label>전사 프로모션 <select id="bPromo"><option value="">(기간 직접 선택)</option></select></label>
         <label>시작 <input type="date" id="bStart"></label>
         <label>종료 <input type="date" id="bEnd"></label>
@@ -492,15 +495,13 @@ function initBuyers() {
         <button id="bIngest" class="btn ghost" title="주문 거울(orders_raw) 최신화">⟲ 주문 거울 갱신</button>
         <span id="bStatus" class="muted" style="font-size:12px"></span>
       </div>
-      <div class="muted" style="font-size:12px;margin-top:8px">상품태그 = 상품명 <code>[클리어런스]</code>·<code>[공동구매]</code> 등으로 묶은 프로모션 (기간할인 포함) · 쿠폰 = 다운로드→구매</div>
+      <div class="muted" style="font-size:12px;margin-top:8px">프로모션 기간 중 <b>쿠폰 다운로드 → 구매</b>로 진행된 매출 (자사몰) · 할인율(%)별 성과 · 상품태그별 매출은 <b>⑤ 상품태그별 매출</b> 탭에서</div>
     </div>
     <div id="bResult"></div>
     <div id="bBuyers" style="margin-top:16px"></div>`;
   el('bStart').value = monthStart(); el('bEnd').value = rangeFor('yesterday')[1];
   el('bLoad').addEventListener('click', loadBuyers);
   el('bIngest').addEventListener('click', runIngest);
-  el('mTag').addEventListener('click', () => { promoMode = 'tag'; el('mTag').classList.add('active'); el('mCoupon').classList.remove('active'); loadBuyers(); });
-  el('mCoupon').addEventListener('click', () => { promoMode = 'coupon'; el('mCoupon').classList.add('active'); el('mTag').classList.remove('active'); loadBuyers(); });
   el('bPromo').addEventListener('change', () => {
     const o = el('bPromo').selectedOptions[0]; if (o && o.dataset.start) { el('bStart').value = o.dataset.start; el('bEnd').value = o.dataset.end; loadBuyers(); }
   });
@@ -530,19 +531,53 @@ async function runIngest() {
   } catch (e) { el('bStatus').textContent = '오류: ' + e.message; }
   finally { btn.disabled = false; }
 }
-function loadBuyers() { return promoMode === 'tag' ? loadTagPromos() : loadCouponPromos(); }
+function loadBuyers() { return loadCouponPromos(); }
 
 const kpiCard = (l, v, sub, cls) => `<div class="kpi ${cls||''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
 
-// 상품태그 프로모션 ([클리어런스]/[공동구매]...) — 집계
+// ⑤ 상품태그별 매출 (별도 탭) — 상품명 [브래킷] 태그 단위 집계
+let tagPromoInit = false;
+function initTagPromo() {
+  if (tagPromoInit) return; tagPromoInit = true;
+  el('tab-tagpromo').innerHTML = `
+    <div class="card" style="margin-bottom:14px">
+      <div class="panelctl">
+        <label>전사 프로모션 <select id="tgpPromo"><option value="">(기간 직접 선택)</option></select></label>
+        <label>시작 <input type="date" id="tgpStart"></label>
+        <label>종료 <input type="date" id="tgpEnd"></label>
+        <button id="tgpLoad" class="btn">조회</button>
+        <span id="tgpStatus" class="muted" style="font-size:12px"></span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:8px">상품태그 = 상품명 <code>[클리어런스]</code>·<code>[공동구매]</code>·<code>[리퍼]</code> 등 브래킷으로 묶은 프로모션 단위 매출 (기간할인·쿠폰할인 포함) · 다중태그 상품은 각 태그에 귀속 · 쿠폰 다운 기준 프로모션 매출은 <b>④ 프로모션 매출</b> 탭</div>
+    </div>
+    <div id="tgpResult"></div>`;
+  el('tgpStart').value = monthStart(); el('tgpEnd').value = rangeFor('yesterday')[1];
+  el('tgpLoad').addEventListener('click', loadTagPromos);
+  el('tgpPromo').addEventListener('change', () => {
+    const o = el('tgpPromo').selectedOptions[0]; if (o && o.dataset.start) { el('tgpStart').value = o.dataset.start; el('tgpEnd').value = o.dataset.end; loadTagPromos(); }
+  });
+  loadTagPromoPromos();
+}
+async function loadTagPromoPromos() {
+  try {
+    const j = await (await fetch('/api/promo-periods/list')).json();
+    const items = (j.ok && j.items) || [];
+    el('tgpPromo').innerHTML = '<option value="">(기간 직접 선택)</option>' +
+      items.map((r) => `<option value="${r.month}" data-start="${r.start}" data-end="${r.end}">${r.name} (${r.start}~${r.end})</option>`).join('');
+    const cm = monthStart().slice(0, 7);
+    const opt = [...el('tgpPromo').options].find((o) => o.value === cm);
+    if (opt) { el('tgpPromo').value = cm; el('tgpStart').value = opt.dataset.start; el('tgpEnd').value = opt.dataset.end; }
+  } catch (_) {}
+  loadTagPromos();
+}
 async function loadTagPromos() {
-  const s = el('bStart').value, e = el('bEnd').value;
-  el('bResult').innerHTML = '<div class="empty">불러오는 중…</div>'; el('bBuyers').innerHTML = '';
+  const s = el('tgpStart').value, e = el('tgpEnd').value;
+  el('tgpResult').innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
     const j = await (await fetch(`/api/tag-promotions?start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
     const t = j.totals;
-    el('bResult').innerHTML = `
+    el('tgpResult').innerHTML = `
       <section class="kpis" style="padding:0 0 14px">
         ${kpiCard('프로모션 태그', num(t.tags)+'개', `${s} ~ ${e}`, 'accent')}
         ${kpiCard('태그 매출 합', won(t.sales), `수량 ${num(t.qty)} · 주문 ${num(t.orders)}`, 'green')}
@@ -555,9 +590,9 @@ async function loadTagPromos() {
         (r) => [`<button class="linklike" data-tag="${encodeURIComponent(r.tag)}">[${r.tag}]</button>`, won(r.sales), num(r.qty), num(r.orders),
           won(r.directDiscount), won(r.couponDiscount), won(r.totalDiscount), num(r.productCount)+'종'])}
       </div>`;
-    el('bResult').querySelectorAll('button[data-tag]').forEach((b) =>
+    el('tgpResult').querySelectorAll('button[data-tag]').forEach((b) =>
       b.addEventListener('click', () => loadTagDetail(decodeURIComponent(b.dataset.tag), s, e)));
-  } catch (err) { el('bResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+  } catch (err) { el('tgpResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 async function loadTagDetail(tag, s, e) {
   openDetailModal(`[${ae(tag)}] 프로모션 상세`, '<div class="empty">상세 불러오는 중…</div>');
@@ -817,6 +852,7 @@ async function loadProduct() {
 // 탭 활성화 시 지연 초기화
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
   if (b.dataset.tab === 'buyers') initBuyers();
+  if (b.dataset.tab === 'tagpromo') initTagPromo();
   if (b.dataset.tab === 'segment') initSegment();
   if (b.dataset.tab === 'groupbuy') initGroupbuy();
   if (b.dataset.tab === 'product') initProduct();
@@ -1876,12 +1912,17 @@ function buildChannelAdmin() {
   n.innerHTML = `
     <div class="card" style="margin-top:18px;border-top:3px solid var(--line2)">
       <h3>이번 달 목표 매출 <span class="hint" id="admTgInfo"></span></h3>
-      <div class="panelctl">
-        <label>목표(만원) <input type="number" id="admTgInput" placeholder="예: 2000" style="width:120px"></label>
+      <div class="tgform">
+        <div class="tginput-group">
+          <span class="tgaffix">₩</span>
+          <input type="number" id="admTgInput" placeholder="0" min="0" inputmode="numeric">
+          <span class="tgaffix r">만원</span>
+        </div>
         <button id="admTgSave" class="btn">목표 저장</button>
+        <span id="admTgConv" class="tgconv"></span>
         <span id="admTgMsg" class="muted"></span>
       </div>
-      <div id="admTgStatus" style="margin-top:10px"></div>
+      <div id="admTgStatus" style="margin-top:12px"></div>
     </div>
     <div class="card" style="margin-top:14px">
       <h3>프로모션 <span class="hint">이 채널 · 달력에서 날짜/바를 눌러 등록·수정 (명·기간·상품·할인율·상세계획)</span></h3>
@@ -1893,6 +1934,8 @@ function buildChannelAdmin() {
     </div>`;
   admNode = n;
   n.querySelector('#admTgSave').addEventListener('click', saveAdminTarget);
+  const tgInp = n.querySelector('#admTgInput');
+  if (tgInp) tgInp.addEventListener('input', () => { const v = +tgInp.value || 0; const cv = n.querySelector('#admTgConv'); if (cv) cv.textContent = v ? `= ${won(v * 10000)}` : ''; });
   return n;
 }
 // 각 채널 뷰 하단에는 "컴팩트 요약 + 관리 버튼"만. 클릭 시 팝업(모달)에서 목표·프로모션 관리.
@@ -1995,6 +2038,7 @@ async function loadAdminTarget() {
     const j = await (await fetch(`/api/target/mall?month=${ym}&mall=${enc(admMall)}`)).json();
     if (!j.ok) throw new Error(j.error);
     el('admTgInput').value = j.target ? Math.round(j.target / 10000) : '';
+    if (el('admTgConv')) el('admTgConv').textContent = j.target ? `= ${won(j.target)}` : '';
     const rate = j.rate || 0, pace = j.totalDays ? j.elapsedDays / j.totalDays : 0;
     const cls = rate >= 1 ? 'var(--green)' : (rate >= pace ? 'var(--accent)' : 'var(--warn)');
     el('admTgStatus').innerHTML = j.target
@@ -2229,24 +2273,20 @@ function createPromoCalendar(host, opts) {
           <span class="pcv-searchmsg muted"></span>
         </div>
         <div class="pcv-searchresult"></div>
-        <details class="pc-bulkreg">
-          <summary>상품명으로 대량 등록</summary>
-          <div class="pc-bulkbox">
-            <div class="pc-bulkdesc">상품명을 <b>줄바꿈으로 여러 개</b> 입력하면, 각 이름으로 Cafe24(또는 스토어)를 검색해 <b>일치하는 상품을 한 번에 모두 추가</b>합니다. 부분일치로 찾고 이미 담긴 상품은 자동 제외돼요. (위에서 검색 후 <b>검색결과 전체 추가</b> 버튼으로도 가능)</div>
-            <textarea class="pcv-bulknames" rows="3" placeholder="예)&#10;요기보 맥스&#10;요기보 미디&#10;요기보 미니"></textarea>
-            <div class="pc-edform" style="margin-top:6px">
-              <button class="pcv-bulkaddbtn btn ghost" type="button">대량 추가</button>
-              <span class="pcv-bulkmsg muted"></span>
-            </div>
-            <div class="pc-bulkup">
-              <div class="pc-bulkdesc"><b>엑셀(CSV) 양식으로 할인율·쿠폰까지</b> 한 번에 올리기 — 양식을 받아 <b>상품명 · 할인율(%) · 쿠폰</b>을 채운 뒤 업로드하면, 각 행의 상품을 찾아 그 행의 <b>할인율·쿠폰</b>을 적용해 추가합니다. (엑셀에서 <b>“CSV UTF-8”</b>로 저장)</div>
-              <div class="pc-edform" style="margin-top:4px">
-                <button class="pcv-tmpl btn ghost mini" type="button">⤓ 엑셀(CSV) 양식 받기</button>
-                <label class="pcv-uplabel btn ghost mini">⤒ 양식 업로드<input type="file" class="pcv-upload" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
-              </div>
-            </div>
+        <div class="pc-bulkreg">
+          <div class="pc-bulkhead">엑셀(CSV) 양식으로 대량 등록 <span>상품별 할인율·쿠폰까지 한 번에</span></div>
+          <div class="pc-bulkrow">
+            <button class="pcv-tmpl btn cal mini" type="button">⤓ 엑셀(CSV) 양식 받기</button>
+            <label class="pcv-uplabel btn ghost mini">⤒ 양식 업로드<input type="file" class="pcv-upload" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
+            <span class="pcv-bulkmsg muted"></span>
           </div>
-        </details>
+          <div class="pc-bulkdesc">양식을 받아 <b>상품명(Cafe24 기준) · 할인율(%) · 쿠폰</b>을 채운 뒤 업로드하면, 각 행의 상품을 찾아 그 행의 <b>할인율·쿠폰</b>을 적용해 일괄 추가합니다. 상품 검색은 모든 몰이 <b>Cafe24 상품명 기준</b>으로 매칭되니 Cafe24 상품명을 사용하세요. (엑셀에서 <b>“CSV UTF-8”</b>로 저장 · 부분일치 · 중복 자동 제외) <span style="color:var(--muted)">쿠폰 칸은 주로 기타 채널 표기용 — Cafe24는 할인율/쿠폰할인으로 확인됩니다.</span></div>
+          <div class="pc-bulkdesc" style="margin-top:8px">또는 상품명을 <b>줄바꿈으로 여러 개</b> 붙여넣어 추가 (할인율은 아래 ‘일괄 할인율’ 적용):</div>
+          <textarea class="pcv-bulknames" rows="2" placeholder="예) 요기보 맥스↵요기보 미디↵요기보 미니 (줄바꿈으로 구분)"></textarea>
+          <div class="pc-bulkrow" style="margin-top:6px">
+            <button class="pcv-bulkaddbtn btn ghost mini" type="button">상품명 대량 추가</button>
+          </div>
+        </div>
         <div class="pc-edform pc-edbulk">
           <label>일괄 할인율(%) <input type="number" min="0" max="100" class="pcv-bulk" style="width:84px"></label>
           <button class="pcv-bulkapply btn ghost mini" type="button">전체 적용</button>
@@ -2367,10 +2407,10 @@ function createPromoCalendar(host, opts) {
   // ── 엑셀(CSV) 양식: 상품명 · 할인율(%) · 쿠폰 ──
   function downloadTemplate() {
     const sample = [
-      '상품명,할인율(%),쿠폰',
+      '상품명(Cafe24 기준),할인율(%),쿠폰',
       '요기보 맥스,20,',
-      '요기보 미디,15,5천원 쿠폰',
-      '줄라 미니,10,10% 추가쿠폰',
+      '요기보 미디,15,5천원 쿠폰다운',
+      '줄라 미니,10,10% 쿠폰할인',
     ].join('\r\n');
     const blob = new Blob(['﻿' + sample], { type: 'text/csv;charset=utf-8' }); // BOM → 엑셀 한글 정상
     const a = document.createElement('a');

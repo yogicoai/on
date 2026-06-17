@@ -31,13 +31,15 @@ const SHELL = `
     <span>매일 <b>00:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합(API)</b> 버튼을 눌러 최신 API를 취합하세요.</span>
   </div>
 
+  <div class="layout">
   <nav class="channel-tabs" id="channelTabs">
+    <div class="chnav-sec">판매 채널</div>
     <button class="chtab active" data-ch="cafe24">Cafe24 (자사몰)</button>
     <button class="chtab" data-ch="smartstore">스마트스토어</button>
     <!-- 기타 채널 그룹 탭(쿠팡·롯데·현대·신세계…)은 app.js buildGroupTabs() 가 여기 동적 삽입 -->
     <button class="chtab" id="chtabCompare" data-ch="compare">통합 비교</button>
   </nav>
-
+  <div class="content">
   <div id="status" class="status"></div>
 
   <div id="view-cafe24">
@@ -51,10 +53,11 @@ const SHELL = `
       <button class="tab" data-tab="members">② 회원 · 비회원</button>
       <button class="tab" data-tab="promo">③ 프로모션(쿠폰)</button>
       <button class="tab" data-tab="buyers">④ 프로모션 매출</button>
-      <button class="tab" data-tab="segment">⑤ 적립금·쿠폰</button>
-      <button class="tab" data-tab="groupbuy">⑥ 공동구매</button>
-      <button class="tab" data-tab="product">⑦ 상품 분석</button>
-      <button class="tab" data-tab="bizpromote">⑧ 비즈 유도 고객</button>
+      <button class="tab" data-tab="tagpromo">⑤ 상품태그별 매출</button>
+      <button class="tab" data-tab="segment">⑥ 적립금·쿠폰</button>
+      <button class="tab" data-tab="groupbuy">⑦ 공동구매</button>
+      <button class="tab" data-tab="product">⑧ 상품 분석</button>
+      <button class="tab" data-tab="bizpromote">⑨ 비즈 유도 고객</button>
     </nav>
 
     <main>
@@ -62,6 +65,7 @@ const SHELL = `
       <section class="panel" id="tab-members"></section>
       <section class="panel" id="tab-promo"></section>
       <section class="panel" id="tab-buyers"></section>
+      <section class="panel" id="tab-tagpromo"></section>
       <section class="panel" id="tab-segment"></section>
       <section class="panel" id="tab-groupbuy"></section>
       <section class="panel" id="tab-product"></section>
@@ -73,6 +77,8 @@ const SHELL = `
 
   <div id="view-other" style="display:none"><main id="otherMain"></main></div>
   <div id="view-compare" style="display:none"><main id="cmpMain"></main></div>
+  </div><!-- /content -->
+  </div><!-- /layout -->
 
   <footer class="foot muted">
     데이터: Cafe24 통계 API(유입) + Admin API(주문·쿠폰) · 토큰은 yogiChat 단일소유 읽기전용 재사용 ·
@@ -132,7 +138,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260617e" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260617g" strategy="afterInteractive" />
     </>
   );
 }

@@ -40,6 +40,7 @@ const mallPromos = require('./lib/mallPromotions');
 const cafe24Products = require('./lib/cafe24Products');
 const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
+const cafe24Coupons = require('./lib/cafe24Coupons');
 const ai = require('./lib/ai');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -390,6 +391,18 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await promoPerformance.forMall(u.searchParams.get('mall') || '')) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 자사몰: 그 기간 Cafe24 쿠폰 목록(혜택·대상상품 + 사용 주문수) — 프로모션 편집기 '쿠폰 불러오기'용
+  if (u.pathname === '/api/cafe24/coupons') {
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.listCoupons(start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 자사몰: 프로모션별 쿠폰기준 성과 (저장된 쿠폰의 실제 사용 매출/고객/할인)
+  if (u.pathname === '/api/promotions/coupon-performance') {
+    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.forMallCoupons(u.searchParams.get('mall') || '')) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
 
   // ── AI 판매 분석 (Claude API, mkboard 방식) — GET 으로 두어 읽기전용 배포에서도 동작 ──
   if (u.pathname === '/api/ai/status') {
@@ -538,6 +551,20 @@ async function handle(req, res) {
         const H = ['회원ID', '이름', '연락처', '이메일', '가입일', '가입개월', '등급', '구분', '주문수', '구매액', '사용일', '구매상품'];
         const rows = data.rows.map((r) => [r.member_id, r.name, r.cellphone, r.email, r.created_date, r.tenureMonths, r.group_no, r.segment, r.orders, r.amount, r.usedDate, (r.products || []).join(' / ')]);
         return sendCsv(res, `프로모션구매고객_${couponNo}_${start}_${end}.csv`, H, rows);
+      }
+      return sendJson(res, 200, { ok: true, ...data });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 자사몰: 쿠폰 사용(coupon_discount>0) 구매 고객 명단 — 사용 쿠폰명 포함 (JSON / CSV)
+  if (u.pathname === '/api/cafe24/coupon-used-buyers' || u.pathname === '/api/cafe24/coupon-used-buyers.csv') {
+    const start = u.searchParams.get('start') || report.todayStr().slice(0, 8) + '01';
+    const end = u.searchParams.get('end') || Y();
+    try {
+      const data = await promotions.couponUsedBuyers(start, end);
+      if (u.pathname.endsWith('.csv')) {
+        const H = ['이름', '회원ID', '연락처', '이메일', '가입일', '등급', '구분', '주문수', '구매액', '쿠폰할인', '사용 쿠폰', '구매상품', '최근구매일'];
+        const rows = data.rows.map((r) => [r.name, r.member_id, r.cellphone, r.email, r.created_date, r.group_no, r.segment, r.orders, r.amount, r.couponDiscount, (r.coupons || []).join(' | '), (r.products || []).slice(0, 5).join(', '), r.lastDate]);
+        return sendCsv(res, `쿠폰사용구매고객_${start}_${end}.csv`, H, rows);
       }
       return sendJson(res, 200, { ok: true, ...data });
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

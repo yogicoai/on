@@ -483,55 +483,57 @@ const enc = encodeURIComponent;
 
 // ── ④ 프로모션 구매고객 (상품태그 / 쿠폰 토글) ──
 let buyersInit = false;
+let buyersMonth = null; // {y, m} — 보고 있는 달
 function initBuyers() {
   if (buyersInit) return; buyersInit = true;
+  const t = new Date(); buyersMonth = { y: t.getFullYear(), m: t.getMonth() };
   el('tab-buyers').innerHTML = `
-    <div class="card" style="margin-bottom:14px">
-      <div class="panelctl">
-        <label>전사 프로모션 <select id="bPromo"><option value="">(기간 직접 선택)</option></select></label>
-        <label>시작 <input type="date" id="bStart"></label>
-        <label>종료 <input type="date" id="bEnd"></label>
-        <button id="bLoad" class="btn">조회</button>
-        <button id="bIngest" class="btn ghost" title="주문 거울(orders_raw) 최신화">⟲ 주문 거울 갱신</button>
-        <span id="bStatus" class="muted" style="font-size:12px"></span>
-      </div>
-      <div class="muted" style="font-size:12px;margin-top:8px">프로모션 기간 중 <b>쿠폰 다운로드 → 구매</b>로 진행된 매출 (자사몰) · 할인율(%)별 성과 · 상품태그별 매출은 <b>⑤ 상품태그별 매출</b> 탭에서</div>
-    </div>
+    <div class="card" style="margin-bottom:14px"><div class="panelctl">
+      <button id="bPrev" class="btn ghost mini" type="button">‹ 이전달</button>
+      <strong id="bMonthLbl" style="min-width:120px;text-align:center;font-size:15px"></strong>
+      <button id="bNext" class="btn ghost mini" type="button">다음달 ›</button>
+      <button id="bThis" class="btn ghost mini" type="button">이번 달</button>
+      <span class="muted" style="font-size:12px;margin-left:8px">그 달에 진행된 <b>프로모션(이벤트)</b>별 매출 분석 — 자사몰은 <b>연결 쿠폰 실사용 기준</b> · 상품태그별은 ⑤ 탭</span>
+    </div></div>
     <div id="bResult"></div>
     <div id="bBuyers" style="margin-top:16px"></div>`;
-  el('bStart').value = monthStart(); el('bEnd').value = rangeFor('yesterday')[1];
-  el('bLoad').addEventListener('click', loadBuyers);
-  el('bIngest').addEventListener('click', runIngest);
-  el('bPromo').addEventListener('change', () => {
-    const o = el('bPromo').selectedOptions[0]; if (o && o.dataset.start) { el('bStart').value = o.dataset.start; el('bEnd').value = o.dataset.end; loadBuyers(); }
-  });
-  loadBuyersPromos();
-}
-async function loadBuyersPromos() {
-  try {
-    const j = await (await fetch('/api/promo-periods/list')).json();
-    const items = (j.ok && j.items) || [];
-    el('bPromo').innerHTML = '<option value="">(기간 직접 선택)</option>' +
-      items.map((r) => `<option value="${r.month}" data-start="${r.start}" data-end="${r.end}">${r.name} (${r.start}~${r.end})</option>`).join('');
-    // 1차: 그달(현재 월) 전사 프로모션 자동 선택
-    const cm = monthStart().slice(0, 7);
-    const opt = [...el('bPromo').options].find((o) => o.value === cm);
-    if (opt) { el('bPromo').value = cm; el('bStart').value = opt.dataset.start; el('bEnd').value = opt.dataset.end; }
-  } catch (_) {}
+  el('bPrev').addEventListener('click', () => shiftBuyersMonth(-1));
+  el('bNext').addEventListener('click', () => shiftBuyersMonth(1));
+  el('bThis').addEventListener('click', () => { const n = new Date(); buyersMonth = { y: n.getFullYear(), m: n.getMonth() }; loadBuyers(); });
   loadBuyers();
 }
-async function runIngest() {
-  const btn = el('bIngest'); btn.disabled = true;
-  el('bStatus').textContent = '주문 거울 적재 중… (1년, 수십 초)';
+function shiftBuyersMonth(d) { let y = buyersMonth.y, m = buyersMonth.m + d; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } buyersMonth = { y, m }; loadBuyers(); }
+function buyersRange() { const { y, m } = buyersMonth; const ym = `${y}-${pad(m + 1)}`; const last = new Date(y, m + 1, 0).getDate(); return { ym, s: `${ym}-01`, e: `${ym}-${pad(last)}` }; }
+async function loadBuyers() {
+  const { ym, s, e } = buyersRange();
+  if (el('bMonthLbl')) el('bMonthLbl').textContent = `${buyersMonth.y}년 ${buyersMonth.m + 1}월`;
+  el('bResult').innerHTML = '<div class="empty">불러오는 중…</div>'; el('bBuyers').innerHTML = '';
   try {
-    const j = await (await fetch('/api/ingest?months=12')).json();
+    const j = await (await fetch(`/api/promotions/coupon-performance?mall=${enc('자사몰')}`)).json();
     if (!j.ok) throw new Error(j.error);
-    el('bStatus').textContent = `거울 갱신 완료: ${num(j.count)}건 (${j.from}~${j.to})`;
-    loadBuyers();
-  } catch (e) { el('bStatus').textContent = '오류: ' + e.message; }
-  finally { btn.disabled = false; }
+    const events = (j.promotions || []).filter((p) => p.start <= e && p.end >= s); // 그 달에 걸친 이벤트만
+    renderBuyersEvents(events, ym);
+    loadCouponUsedBuyers(s, e); // 그 달 쿠폰 사용 구매 고객 명단(하단)
+  } catch (err) { el('bResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
-function loadBuyers() { return loadCouponPromos(); }
+function renderBuyersEvents(events, ym) {
+  const box = el('bResult');
+  if (!events.length) { box.innerHTML = `<div class="empty">${ym}에 진행된 프로모션(이벤트)이 없습니다 — 프로모션 달력/채널 관리에서 등록하세요</div>`; return; }
+  const tot = events.reduce((a, p) => { if (p.hasCoupons) { a.orders += p.totals.orders; a.members += p.totals.members; a.revenue += p.totals.revenue; a.disc += p.totals.couponDiscount; a.withCp += 1; } return a; }, { orders: 0, members: 0, revenue: 0, disc: 0, withCp: 0 });
+  box.innerHTML = `
+    <section class="kpis" style="padding:0 0 14px">
+      ${kpiCard(`${ym} 이벤트`, num(events.length) + '개', `쿠폰 연결 ${num(tot.withCp)}개`, 'accent')}
+      ${kpiCard('쿠폰 사용 매출 합', won(tot.revenue), `${num(tot.orders)}주문 · 자사몰`, 'green')}
+      ${kpiCard('쿠폰할인 합', won(tot.disc), `객단가 ${won(tot.orders ? Math.round(tot.revenue / tot.orders) : 0)}`, 'pink')}
+    </section>
+    ${events.map((p) => `
+      <div class="card" style="margin-top:12px"><h3>${ae(p.name)} <span class="hint">${p.start} ~ ${p.end} · 연결 쿠폰 ${num((p.coupons || []).length)}개</span></h3>
+        ${p.hasCoupons ? `
+          <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(p.totals.orders)}</b>주문 · <b>${num(p.totals.members)}</b>명 · 매출 <b>${won(p.totals.revenue)}</b> · 쿠폰할인 ${won(p.totals.couponDiscount)}</div>
+          ${(p.byCoupon || []).length ? tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], p.byCoupon, (r) => [ae(r.coupon_name), num(r.orders), num(r.members), won(r.revenue), won(r.discount)]) : '<div class="muted" style="font-size:12px">이 기간 연결 쿠폰 사용 없음</div>'}
+        ` : '<div class="muted" style="font-size:13px">연결된 쿠폰이 없습니다 — <b>채널 관리 → 프로모션 편집 → “이 기간 진행 쿠폰 불러오기”</b>로 쿠폰을 연결하면 매출이 집계됩니다.</div>'}
+      </div>`).join('')}`;
+}
 
 const kpiCard = (l, v, sub, cls) => `<div class="kpi ${cls||''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
 
@@ -649,7 +651,32 @@ async function loadCouponPromos() {
       </div>`;
     el('bResult').querySelectorAll('button[data-i]').forEach((b) =>
       b.addEventListener('click', () => showCouponProducts(+b.dataset.i)));
+    loadCouponUsedBuyers(s, e); // 하단: 쿠폰 사용 구매 고객 명단(사용 쿠폰명 포함)
   } catch (err) { el('bResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+// 쿠폰 사용(coupon_discount>0) 구매 고객 명단 — 사용 쿠폰명 포함 + CSV
+async function loadCouponUsedBuyers(s, e) {
+  const box = el('bBuyers'); if (!box) return;
+  box.innerHTML = '<div class="card"><div class="empty">쿠폰 사용 구매 고객 집계 중…</div></div>';
+  try {
+    const j = await (await fetch(`/api/cafe24/coupon-used-buyers?start=${s}&end=${e}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const t = j.totals, csv = `/api/cafe24/coupon-used-buyers.csv?start=${s}&end=${e}`;
+    box.innerHTML = `
+      <section class="kpis" style="padding:6px 0 14px">
+        ${kpiCard('쿠폰 사용 고객', num(j.count) + '명', `${s} ~ ${e} · 자사몰`, 'accent')}
+        ${kpiCard('쿠폰 사용 주문', num(t.orders), `구매액 ${won(t.amount)}`, 'green')}
+        ${kpiCard('쿠폰할인 합', won(t.couponDiscount), `객단가 ${won(t.orders ? Math.round(t.amount / t.orders) : 0)}`, 'pink')}
+        ${kpiCard('사용 쿠폰명 확인', num(t.named) + '명', `${j.count ? pct(t.named / j.count) : '-'} 매핑 · 나머지 자동적용`, '')}
+      </section>
+      <div class="card"><h3>쿠폰 사용 구매 고객 명단 <span class="hint">쿠폰할인 큰 순 · 어떤 쿠폰 썼는지 포함 · ${num(j.count)}명</span>
+        <a class="btn mini" href="${csv}">⤓ CSV</a></h3>
+        ${j.rows.length ? tableHtml(['이름', '연락처', '이메일', '구분', '주문', '구매액', '쿠폰할인', '사용 쿠폰', '구매상품'], j.rows.slice(0, 300),
+          (r) => [r.name || '-', r.cellphone || '-', r.email || '-', `<span class="tag ${r.isNew ? 'tag-new' : ''}">${r.segment}</span>`, num(r.orders), won(r.amount), won(r.couponDiscount),
+            (r.coupons || []).length ? (r.coupons || []).map((cn) => ae(cn)).join('<br>') : '<span class="muted">(자동적용·미확인)</span>', (r.products || []).slice(0, 3).join(', ')])
+          : '<div class="empty">이 기간 쿠폰 사용 구매가 없습니다</div>'}
+      </div>`;
+  } catch (err) { box.innerHTML = `<div class="card"><div class="empty">쿠폰 고객 조회 오류: ${err.message}</div></div>`; }
 }
 async function showCouponProducts(i) {
   const c = couponCache[i]; if (!c) return;
@@ -1917,7 +1944,7 @@ el('prReset').addEventListener('click', prReset);
 //  채널 인라인 관리 — 각 채널 화면 하단: 이번 달 목표(달성률) + 프로모션(등록/목록)
 //   자사몰·스마트스토어·기타 그룹 공통. 단일 노드를 활성 채널 뷰 하단으로 이동해 사용.
 // ══════════════════════════════════════════════
-let admNode = null, admMall = null, admPrCalInstance = null, admTgMonth = null;
+let admNode = null, admMall = null, admPrCalInstance = null, admTgMonth = null, admPerfCache = null;
 function curYM() { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}`; }
 function buildChannelAdmin() {
   if (admNode) return admNode;
@@ -1944,7 +1971,7 @@ function buildChannelAdmin() {
       <div id="admPrCalHost" class="pc-embed"></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h3>프로모션 성과 <span class="hint">등록 프로모션 상품의 실제 판매(기간 내) · 자사몰=상품번호, 그 외=상품명 매칭</span></h3>
+      <h3>프로모션 성과 <span class="hint">달력 월 기준 · 자사몰=연결 쿠폰 실사용 기준(쿠폰별 분해), 그 외=상품명 매칭</span></h3>
       <div id="admPrPerf"></div>
     </div>`;
   admNode = n;
@@ -2022,9 +2049,10 @@ function openChannelAdminModal(mall) {
   el('adminModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   admMall = mall;
-  // 목표는 '달력의 현재 월'에 연동 — 달력이 월을 바꾸면 onMonthChange 로 그 달 목표를 다시 불러옴(월별 따로 관리)
-  admPrCalInstance = createPromoCalendar(el('admPrCalHost'), { scopeMall: mall, onChange: loadAdminPerformance, onMonthChange: (ym) => loadAdminTarget(ym) });
-  admPrCalInstance.openMonth((el('start') && el('start').value) || null); // → onMonthChange → loadAdminTarget(달력월)
+  admPerfCache = null; // 채널 바뀌면 성과 캐시 초기화
+  // 목표·프로모션 성과는 '달력의 현재 월'에 연동 — 달력이 월을 바꾸면 그 달 목표/성과를 다시 표시(월별 따로)
+  admPrCalInstance = createPromoCalendar(el('admPrCalHost'), { scopeMall: mall, onChange: loadAdminPerformance, onMonthChange: (ym) => { loadAdminTarget(ym); renderAdminPerformance(ym); } });
+  admPrCalInstance.openMonth((el('start') && el('start').value) || null); // → onMonthChange → loadAdminTarget + renderAdminPerformance(달력월)
   loadAdminPerformance();
 }
 function closeChannelAdminModal() {
@@ -2036,14 +2064,39 @@ async function loadAdminPerformance() {
   const box = el('admPrPerf'); if (!box) return;
   box.innerHTML = '<span class="muted">집계 중…</span>';
   try {
-    const j = await (await fetch(`/api/promotions/performance?mall=${enc(admMall)}`)).json();
+    const coupon = (admMall === '자사몰'); // 자사몰은 쿠폰 기준, 그 외는 상품명 매칭
+    const url = coupon ? `/api/promotions/coupon-performance?mall=${enc(admMall)}` : `/api/promotions/performance?mall=${enc(admMall)}`;
+    const j = await (await fetch(url)).json();
     if (!j.ok) throw new Error(j.error);
-    const ps = j.promotions || [];
-    box.innerHTML = ps.length
-      ? tableHtml(['프로모션', '기간', '대상상품', '프로모션 매출', '수량', '주문'], ps,
-          (r) => [`<b>${ae(r.name)}</b>`, `${r.start} ~ ${r.end}`, `${num(r.products)}개`, won(r.sales), num(r.qty), num(r.orders)])
-      : '<div class="empty">등록된 프로모션이 없습니다 (프로모션을 등록하면 그 상품의 기간 내 실제 판매가 여기 집계됩니다)</div>';
-  } catch (e) { box.innerHTML = `<span class="muted">성과 조회 오류: ${e.message}</span>`; }
+    admPerfCache = { mode: coupon ? 'coupon' : 'product', items: j.promotions || [] };
+    renderAdminPerformance(admTgMonth);
+  } catch (e) { admPerfCache = null; box.innerHTML = `<span class="muted">성과 조회 오류: ${e.message}</span>`; }
+}
+// 달력의 현재 월에 진행된(겹치는) 프로모션만 표시 · 자사몰=쿠폰 기준 분해, 그 외=상품명 매칭
+function renderAdminPerformance(ym) {
+  const box = el('admPrPerf'); if (!box) return;
+  if (admPerfCache === null) { box.innerHTML = '<span class="muted">집계 중…</span>'; return; }
+  const m = (ym && /^\d{4}-\d{2}$/.test(ym)) ? ym : curYM();
+  const mStart = `${m}-01`, mEnd = `${m}-31`;
+  const items = admPerfCache.items || [];
+  const rows = items.filter((r) => r.start <= mEnd && r.end >= mStart);
+  const hidden = items.length - rows.length;
+  let html;
+  if (admPerfCache.mode === 'coupon') {
+    html = rows.length ? rows.map((p) => `
+      <div class="card" style="margin-top:10px"><h3>${ae(p.name)} <span class="hint">${p.start} ~ ${p.end} · 연결 쿠폰 ${num((p.coupons || []).length)}개</span></h3>
+        ${p.hasCoupons ? `
+          <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(p.totals.orders)}</b>주문 · <b>${num(p.totals.members)}</b>명 · 매출 <b>${won(p.totals.revenue)}</b> · 쿠폰할인 ${won(p.totals.couponDiscount)}</div>
+          ${(p.byCoupon || []).length ? tableHtml(['쿠폰', '사용주문', '고객', '매출', '쿠폰할인'], p.byCoupon, (r) => [ae(r.coupon_name), num(r.orders), num(r.members), won(r.revenue), won(r.discount)]) : '<div class="muted" style="font-size:12px">이 기간 연결 쿠폰 사용 없음</div>'}
+        ` : '<div class="muted" style="font-size:12px">연결된 쿠폰 없음 — 편집기에서 “이 기간 진행 쿠폰 불러오기”로 쿠폰을 연결하세요</div>'}
+      </div>`).join('')
+      : `<div class="empty">${m}에 진행된 프로모션이 없습니다 ${items.length ? '(달력을 다른 달로 이동)' : ''}</div>`;
+  } else {
+    html = rows.length
+      ? tableHtml(['프로모션', '기간', '대상상품', '프로모션 매출', '수량', '주문'], rows, (r) => [`<b>${ae(r.name)}</b>`, `${r.start} ~ ${r.end}`, `${num(r.products)}개`, won(r.sales), num(r.qty), num(r.orders)])
+      : `<div class="empty">${m}에 진행된 프로모션이 없습니다 ${items.length ? '(달력을 다른 달로 이동)' : '— 프로모션을 등록하면 집계됩니다'}</div>`;
+  }
+  box.innerHTML = html + (hidden > 0 ? `<div class="muted" style="font-size:12px;margin-top:8px">다른 달 프로모션 ${num(hidden)}건은 숨김 — 달력 월을 이동하면 그 달 것이 표시됩니다.</div>` : '');
 }
 async function loadAdminTarget(month) {
   const ym = (month && /^\d{4}-\d{2}$/.test(month)) ? month : curYM();
@@ -2174,7 +2227,7 @@ function createPromoCalendar(host, opts) {
   const scopeMall = opts.scopeMall || null;
   const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
   const onMonthChange = typeof opts.onMonthChange === 'function' ? opts.onMonthChange : null; // 달력 월 변경 시 (YYYY-MM)
-  let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [], lastQuery = '';
+  let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [], lastQuery = '', selectedCoupons = [], couponList = [];
   const $ = (s) => host.querySelector(s);
   host.classList.add('pc-host');
   host.innerHTML = `
@@ -2260,11 +2313,14 @@ function createPromoCalendar(host, opts) {
     $('.pcv-cal').style.display = 'none'; $('.pcv-edit').style.display = '';
     editId = promo ? promo.id : null;
     selected = promo ? (promo.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0, source: p.source })) : [];
+    selectedCoupons = promo ? (promo.coupons || []).map((c) => ({ ...c })) : []; // 자사몰 연결 쿠폰(스냅샷)
+    couponList = [];
     searchOffset = 0; searchItems = [];
     const malls = pcMallOptions(scopeMall);
     // 전 몰 달력에서 기존 프로모션 편집 시, 그 몰이 현재 채널탭에 없어도 옵션에 포함(저장 시 몰이 바뀌는 것 방지)
     if (!scopeMall && promo && promo.mall && !malls.includes(promo.mall)) malls.push(promo.mall);
     const selMall = promo ? promo.mall : (scopeMall || malls[1] || malls[0]);
+    const isCafe24 = (scopeMall || selMall) === '자사몰'; // 쿠폰 연결은 자사몰만
     const start = promo ? promo.start : (date || ''), end = promo ? promo.end : (date || '');
     const mallField = scopeMall
       ? `<label>몰 <span class="pcv-mall pcv-locked" data-val="${ae(scopeMall)}">${ae(scopeMall)} <i>고정</i></span></label>`
@@ -2314,6 +2370,16 @@ function createPromoCalendar(host, opts) {
         </div>
         <div class="pcv-products"></div>
       </div>
+      ${isCafe24 ? `
+      <div class="pc-edcard pcv-couponcard">
+        <div class="pc-edsub">연결 쿠폰 (자사몰) <span>이 기간 진행한 Cafe24 쿠폰을 불러와 저장 → 성과를 <b>쿠폰 기준</b>으로 집계 · 쿠폰이 삭제돼도 기록 유지</span></div>
+        <div class="pc-bulkrow">
+          <button class="pcv-loadcoupons btn cal mini" type="button">이 기간 진행 쿠폰 불러오기</button>
+          <span class="pcv-couponmsg muted"></span>
+        </div>
+        <div class="pcv-couponpick"></div>
+        <div class="pcv-couponsel"></div>
+      </div>` : ''}
       <div class="pc-edactions">
         <button class="pcv-save btn" type="button">${promo ? '수정 저장' : '프로모션 저장'}</button>
         ${promo ? '<button class="pcv-delete btn danger" type="button">삭제</button>' : ''}
@@ -2330,6 +2396,8 @@ function createPromoCalendar(host, opts) {
     $('.pcv-bulkapply').addEventListener('click', () => { const v = Math.max(0, Math.min(100, +$('.pcv-bulk').value || 0)); selected.forEach((p) => { p.discountRate = v; }); renderProducts(); });
     $('.pcv-save').addEventListener('click', save);
     const delBtn = $('.pcv-delete'); if (delBtn) delBtn.addEventListener('click', del);
+    const lcBtn = $('.pcv-loadcoupons'); if (lcBtn) lcBtn.addEventListener('click', loadCouponsForEditor);
+    renderSelectedCoupons();
     const rates = [...new Set(selected.map((p) => p.discountRate))];
     $('.pcv-bulk').value = rates.length === 1 ? rates[0] : '';
     renderProducts();
@@ -2471,7 +2539,7 @@ function createPromoCalendar(host, opts) {
     if (end < start) { $('.pcv-msg').textContent = '종료일이 시작일보다 빠릅니다'; return; }
     $('.pcv-msg').textContent = '저장 중…';
     try {
-      const body = { mall, name, start, end, memo, products: selected };
+      const body = { mall, name, start, end, memo, products: selected, coupons: selectedCoupons };
       if (editId) body.id = editId;
       const j = await (await fetch('/api/promotions/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
       if (!j.ok) throw new Error(j.error);
@@ -2482,6 +2550,50 @@ function createPromoCalendar(host, opts) {
     if (!editId || !confirm('이 프로모션을 삭제할까요?')) return;
     try { await fetch('/api/promotions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId }) }); showCal(); await load(); if (onChange) onChange(); }
     catch (_) {}
+  }
+  // ── 자사몰 연결 쿠폰 (불러오기 → 선택 → 스냅샷 저장) ──
+  async function loadCouponsForEditor() {
+    const s = $('.pcv-start').value, e = $('.pcv-end').value;
+    const pick = $('.pcv-couponpick'); if (!pick) return;
+    if (!s || !e) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
+    $('.pcv-couponmsg').textContent = '쿠폰 불러오는 중…'; pick.innerHTML = '<div class="empty">불러오는 중…</div>';
+    try {
+      const j = await (await fetch(`/api/cafe24/coupons?start=${enc(s)}&end=${enc(e)}`)).json();
+      if (!j.ok) throw new Error(j.error);
+      couponList = j.coupons || [];
+      $('.pcv-couponmsg').textContent = `전체 ${num(j.count)}개 중 이 기간 사용 ${num(j.used)}개 (사용 많은 순)`;
+      renderCouponPick();
+    } catch (err) { $('.pcv-couponmsg').textContent = '오류: ' + err.message; pick.innerHTML = ''; }
+  }
+  function renderCouponPick() {
+    const pick = $('.pcv-couponpick'); if (!pick) return;
+    if (!couponList.length) { pick.innerHTML = '<div class="empty">쿠폰 없음</div>'; return; }
+    const ckey = (c) => c.coupon_no || c.coupon_name; // 만료쿠폰은 번호가 없어 이름을 키로
+    const selSet = new Set(selectedCoupons.map(ckey));
+    pick.innerHTML = `<div class="prsearchbox" style="max-height:260px;margin-top:6px">
+      <div class="pcv-cphead"><input type="text" class="pcv-couponq" placeholder="쿠폰명 검색"><button class="pcv-couponadd btn mini" type="button">체크한 쿠폰 추가</button></div>
+      <table style="width:100%"><tbody>${couponList.map((c, i) => `<tr>
+        <td style="width:28px;text-align:center"><input type="checkbox" class="pcv-cpck" data-i="${i}" ${selSet.has(ckey(c)) ? 'checked disabled' : ''}></td>
+        <td>${ae(c.coupon_name)} <span class="muted" style="font-size:11px">· ${ae(c.benefitText)} · ${ae(c.targetLabel)}${c.usedOrders ? ` · <span class="pos">이 기간 ${c.usedOrders}주문</span>` : ''}${c.expired ? ' · <span class="neg">만료</span>' : ''}</span></td></tr>`).join('')}</tbody></table></div>`;
+    const q = pick.querySelector('.pcv-couponq');
+    if (q) q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); pick.querySelectorAll('tbody tr').forEach((tr, i) => { tr.style.display = (!v || (couponList[i].coupon_name || '').toLowerCase().includes(v)) ? '' : 'none'; }); });
+    const addBtn = pick.querySelector('.pcv-couponadd');
+    if (addBtn) addBtn.addEventListener('click', () => {
+      pick.querySelectorAll('.pcv-cpck:checked:not(:disabled)').forEach((cb) => {
+        const c = couponList[+cb.dataset.i]; if (!c) return;
+        const k = c.coupon_no || c.coupon_name;
+        if (!selectedCoupons.some((x) => (x.coupon_no || x.coupon_name) === k)) selectedCoupons.push({ coupon_no: c.coupon_no, coupon_name: c.coupon_name, benefitText: c.benefitText, targetLabel: c.targetLabel, productNos: c.productNos || [], savedAt: new Date().toISOString() });
+      });
+      renderSelectedCoupons(); renderCouponPick();
+    });
+  }
+  function renderSelectedCoupons() {
+    const box = $('.pcv-couponsel'); if (!box) return;
+    if (!selectedCoupons.length) { box.innerHTML = '<div class="muted" style="font-size:12px;padding:8px 0">연결된 쿠폰 없음 — 위 버튼으로 이 프로모션의 쿠폰을 불러와 선택하세요</div>'; return; }
+    const prodTot = selectedCoupons.reduce((a, c) => a + (c.productNos ? c.productNos.length : 0), 0);
+    box.innerHTML = `<div class="muted" style="font-size:12px;margin:8px 0 4px">연결 쿠폰 <b>${num(selectedCoupons.length)}개</b> · 대상상품 합계 ${num(prodTot)}개 — 성과는 이 쿠폰들의 <b>실제 사용분</b>으로 집계됩니다.</div>
+      <table style="width:100%"><tbody>${selectedCoupons.map((c, i) => `<tr><td>${ae(c.coupon_name)} <span class="muted" style="font-size:11px">· ${ae(c.benefitText || '')} · ${ae(c.targetLabel || '')}</span></td><td class="num" style="width:36px"><button class="delx" data-cdel="${i}">✕</button></td></tr>`).join('')}</tbody></table>`;
+    box.querySelectorAll('[data-cdel]').forEach((b) => b.addEventListener('click', () => { selectedCoupons.splice(+b.dataset.cdel, 1); renderSelectedCoupons(); renderCouponPick(); }));
   }
   return {
     openMonth(dateStr) { const t = dateStr ? pcParse(dateStr) : new Date(); month = { y: t.getFullYear(), m: t.getMonth() }; showCal(); load(); },

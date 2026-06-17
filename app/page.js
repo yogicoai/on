@@ -24,6 +24,7 @@ const SHELL = `
       <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 00시 자동 실행)">⟳ 오늘 재취합(API)</button>
       <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="자사몰 + 스마트스토어 + 기타 채널을 한 화면에서 통합 비교 분석">통합 분석</button>
       <button id="btnPromoCal" class="btn cal" type="button" title="전 몰 프로모션을 월간 달력으로 보고 상세 계획을 편집">프로모션 달력</button>
+      <a id="btnForecast" href="/forecast.html" target="_blank" class="btn cmp" style="text-decoration:none" title="이카운트 전체 몰 판매 기준 제품×색상 월평균 판매수량 → 재고 대비 발주 판단(별도 대시보드)">📦 발주 예측</a>
       <button id="btnAi" class="btn ai" type="button" title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
     </div>
   </header>

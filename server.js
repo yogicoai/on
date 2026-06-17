@@ -41,6 +41,7 @@ const cafe24Products = require('./lib/cafe24Products');
 const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
 const cafe24Coupons = require('./lib/cafe24Coupons');
+const forecast = require('./lib/forecast');
 const ai = require('./lib/ai');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -447,6 +448,19 @@ async function handle(req, res) {
     const end = u.searchParams.get('end') || '';
     if (!name) return sendJson(res, 400, { ok: false, error: 'name 필요' });
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponProductBreakdown(name, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 발주 예측 — 이카운트 전체 몰 (productName×color) 최근 N완료월 월평균 판매수량
+  if (u.pathname === '/api/forecast/sales') {
+    const months = Math.max(1, Math.min(+u.searchParams.get('months') || 3, 12));
+    try { return sendJson(res, 200, { ok: true, ...(await forecast.salesForecast({ months })) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 발주 판단 — 실시간 재고 ↔ 판매예측 조인 (소진예상·발주필요·제안수량)
+  if (u.pathname === '/api/forecast/reorder') {
+    const months = Math.max(1, Math.min(+u.searchParams.get('months') || 3, 12));
+    const targetMonths = Math.max(0.5, Math.min(+u.searchParams.get('target') || 1, 6));
+    try { return sendJson(res, 200, { ok: true, ...(await forecast.reorderPlan({ months, targetMonths })) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 

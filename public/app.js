@@ -1478,7 +1478,7 @@ async function loadCompare() {
   el('cmpFixed').innerHTML = '';
   el('cmpPanel').innerHTML = '<div class="empty">분석 중…</div>';
   try {
-    const [per, best, cat, promos, extra, prod, mon, montier, other, otherCmp, growth, tier3] = await Promise.all([
+    const [per, best, cat, promos, extra, prod, mon, montier, other, otherCmp, growth, tier3, promoPerf] = await Promise.all([
       (await fetch(`/api/compare/period?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/best?start=${s}&end=${e}`)).json(),
       (await fetch(`/api/compare/category-promo?start=${s}&end=${e}`)).json(),
@@ -1491,8 +1491,9 @@ async function loadCompare() {
       (await fetch(`/api/other/period-compare?start=${s}&end=${e}`)).json(), // 기타 채널 그룹별 전주/전월/전년
       (await fetch(`/api/compare/growth?start=${s}&end=${e}`)).json(), // 성장 Top10 (전년비/전월비)
       (await fetch(`/api/compare/tier-3period?start=${s}&end=${e}`)).json(), // 충전재 현재/전월/전년 3기간
+      (await fetch(`/api/compare/promo-performance?start=${s}&end=${e}`)).json(), // 그 기간 진행 전 몰 프로모션 성과
     ]);
-    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier, other, otherCmp, growth, tier3 };
+    cmpCache = { s, e, per, best, cat, promos, extra, prod, mon, montier, other, otherCmp, growth, tier3, promoPerf };
     renderCmpFixed();
     renderCmpTab();
   } catch (err) {
@@ -1549,19 +1550,25 @@ function renderCmpTab() {
 
 // ① 프로모션 매출 = 전사 프로모션 기간별 매출 비교표(행클릭 기간전환) + 카테고리별 프로모션 성과
 function renderCmpPromo() {
-  const { s, e, promos, cat } = cmpCache; const p = el('cmpPanel');
-  const allPromos = (promos.ok && promos.promos) || [];
-  const promoRows = allPromos.filter((q) => q.start <= e && q.end >= s); // 선택 구간에 진행된(겹치는) 전사 프로모션만
+  const { s, e, cat, promoPerf } = cmpCache; const p = el('cmpPanel');
+  const rows = (promoPerf && promoPerf.ok && promoPerf.promotions) || [];
+  const t = (promoPerf && promoPerf.ok && promoPerf.totals) || { sales: 0, orders: 0, count: 0 };
   const catRows = (cat.ok && cat.rows) || [];
+  const chTag = (mall) => `<span class="tag" style="background:${pcColor(mall === '자사몰' ? '자사몰' : mall === '스마트스토어' ? '스마트스토어' : mall)}20;color:${pcColor(mall)};font-weight:700">${ae(mall)}</span>`;
   p.innerHTML = `
-    <div class="card"><h3>전사 프로모션 기간별 매출 비교 <span class="hint">선택 구간에 진행된 프로모션만 · 행 클릭 시 그 기간으로 전환 · 자사몰+스마트스토어</span></h3>
-      ${promoRows.length ? tableHtml(['프로모션', '기간', '일수', '총매출', '일평균', '자사몰', '스마트스토어', '객단가', '전7일', '후7일'], promoRows,
-        (q) => [`<button class="linklike" data-ps="${q.start}" data-pe="${q.end}">${q.name} ▸</button>`, `${q.start}~${q.end}`, q.days + '일', won(q.total.revenue), won(q.dailyAvg), won(q.cafe24.revenue), won(q.smartstore.revenue), won(q.aov), won(q.before7.revenue), won(q.after7.revenue)]) : `<div class="empty">선택 구간(${s} ~ ${e})에 진행된 전사 프로모션이 없습니다 · 등록 전사 프로모션 ${num(allPromos.length)}건</div>`}
+    <section class="kpis" style="padding:0 0 14px">
+      ${kpiCard('진행 프로모션', num(t.count) + '개', `${s} ~ ${e} · 전 채널`, 'accent')}
+      ${kpiCard('프로모션 성과 합', won(t.sales), `${num(t.orders)}주문 · 선택 구간 기준`, 'green')}
+      ${kpiCard('성과 1위', rows[0] ? ae(rows[0].name) : '-', rows[0] ? `${ae(rows[0].mall)} · ${won(rows[0].sales)}` : '', 'pink')}
+    </section>
+    <div class="card"><h3>그 기간 진행 프로모션 — 채널 · 프로모션명별 성과 <span class="hint">선택 구간 ∩ 프로모션 기간 · 자사몰=연결 쿠폰 실사용, 그 외=대상 상품 매칭 · 매출순</span></h3>
+      ${rows.length ? tableHtml(['채널', '프로모션', '이벤트 기간', '집계 구간', '기준', '매출', '주문'], rows,
+        (r) => [chTag(r.mall), `<b>${ae(r.name)}</b>`, `${r.start}~${r.end}`, `${r.periodStart}~${r.periodEnd}`, `<span class="muted" style="font-size:11px">${r.method}</span>`, won(r.sales), num(r.orders)])
+        : `<div class="empty">${s} ~ ${e} 구간에 진행된 프로모션이 없습니다 — 프로모션 달력/채널 관리에서 등록하세요</div>`}
     </div>
     <div class="card" style="margin-top:16px"><h3>카테고리별 프로모션 성과 <span class="hint">행 클릭 시 상품 상세(팝업) · 전월 동기간 대비 (자사몰) · ${s} ~ ${e}</span></h3>
       ${tableHtml(['카테고리', '매출', '비중', '전월비'], catRows, (r) => [`<button class="linklike" data-cat="${enc(r.cat)}">${ae(r.cat)} ▸</button>`, won(r.sales), pct(r.share), cmpRt(r.momRate)])}
     </div>`;
-  p.querySelectorAll('button[data-ps]').forEach((b) => b.addEventListener('click', () => { el('cmpStart').value = b.dataset.ps; el('cmpEnd').value = b.dataset.pe; loadCompare(); }));
   p.querySelectorAll('button[data-cat]').forEach((b) => b.addEventListener('click', () => openCmpCategoryDetail(decodeURIComponent(b.dataset.cat), s, e)));
 }
 // 카테고리별 프로모션 성과 행 클릭 → 그 카테고리 상품 상세 (자사몰, 팝업)
@@ -2396,10 +2403,18 @@ function createPromoCalendar(host, opts) {
         <div class="pc-edsub">연결 쿠폰 (자사몰) <span>이 기간 진행한 Cafe24 쿠폰을 불러와 저장 → 성과를 <b>쿠폰 기준</b>으로 집계 · 쿠폰이 삭제돼도 기록 유지</span></div>
         <div class="pc-bulkrow">
           <button class="pcv-loadcoupons btn cal mini" type="button">이 기간 진행 쿠폰 불러오기</button>
+          <button class="pcv-synccoupons btn ghost mini" type="button" title="이 기간 사용된 쿠폰명을 적재해 발급종료·만료 쿠폰도 목록에 뜨게 합니다(수십 초)">만료 쿠폰 포함 갱신</button>
           <span class="pcv-couponmsg muted"></span>
         </div>
         <div class="pcv-couponpick"></div>
         <div class="pcv-couponsel"></div>
+        <details class="pc-cpmanual"><summary>목록에 없는 쿠폰 직접 추가 (만료·삭제 등)</summary>
+          <div style="padding:8px 0 0">
+            <div class="pc-bulkdesc">Cafe24 쿠폰 관리에서 <b>쿠폰명</b>을 복사해 한 줄에 하나씩 붙여넣으세요. 성과는 그 쿠폰명의 실제 사용분으로 집계됩니다(해당 기간이 적재돼 있어야 매출이 잡힘 — 위 “만료 쿠폰 포함 갱신” 먼저 권장).</div>
+            <textarea class="pcv-cpmanualin" rows="2" placeholder="예) [요기보 원더랜드] 빈백/바디필로우 10% 할인 쿠폰(스탠다드)"></textarea>
+            <button class="pcv-cpmanualadd btn ghost mini" type="button" style="margin-top:4px">쿠폰명 직접 추가</button>
+          </div>
+        </details>
       </div>` : ''}
       <div class="pc-edactions">
         <button class="pcv-save btn" type="button">${promo ? '수정 저장' : '프로모션 저장'}</button>
@@ -2418,6 +2433,8 @@ function createPromoCalendar(host, opts) {
     $('.pcv-save').addEventListener('click', save);
     const delBtn = $('.pcv-delete'); if (delBtn) delBtn.addEventListener('click', del);
     const lcBtn = $('.pcv-loadcoupons'); if (lcBtn) lcBtn.addEventListener('click', loadCouponsForEditor);
+    const scBtn = $('.pcv-synccoupons'); if (scBtn) scBtn.addEventListener('click', syncCouponsForEditor);
+    const maBtn = $('.pcv-cpmanualadd'); if (maBtn) maBtn.addEventListener('click', manualAddCoupons);
     renderSelectedCoupons();
     const rates = [...new Set(selected.map((p) => p.discountRate))];
     $('.pcv-bulk').value = rates.length === 1 ? rates[0] : '';
@@ -2607,6 +2624,26 @@ function createPromoCalendar(host, opts) {
       });
       renderSelectedCoupons(); renderCouponPick();
     });
+  }
+  // 만료·발급종료 쿠폰도 목록에 뜨게 — 이 기간 issues를 캐시에 적재 후 재조회
+  async function syncCouponsForEditor() {
+    const s = $('.pcv-start').value, e = $('.pcv-end').value;
+    if (!s || !e) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
+    $('.pcv-couponmsg').textContent = '만료 포함 쿠폰명 갱신 중… (수십 초)';
+    try {
+      const r = await (await fetch(`/api/sync-coupon-names?start=${enc(s)}&end=${enc(e)}`)).json();
+      if (!r.ok) throw new Error(r.error || '실패');
+      $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문) — 다시 불러옵니다`;
+      await loadCouponsForEditor();
+    } catch (err) { $('.pcv-couponmsg').textContent = '갱신 오류: ' + err.message; }
+  }
+  // 목록에 없는 쿠폰(만료·삭제) 쿠폰명으로 직접 추가
+  function manualAddCoupons() {
+    const ta = $('.pcv-cpmanualin'); if (!ta) return;
+    const names = [...new Set((ta.value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean))];
+    let added = 0;
+    names.forEach((nm) => { if (!selectedCoupons.some((x) => (x.coupon_no || x.coupon_name) === nm)) { selectedCoupons.push({ coupon_no: '', coupon_name: nm, benefitText: '', targetLabel: '(직접 추가)', productNos: [], savedAt: new Date().toISOString() }); added++; } });
+    if (added) { ta.value = ''; renderSelectedCoupons(); renderCouponPick(); }
   }
   function renderSelectedCoupons() {
     const box = $('.pcv-couponsel'); if (!box) return;

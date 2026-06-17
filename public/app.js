@@ -1188,7 +1188,7 @@ function renderSSPanel() {
           <a class="btn ghost" id="ssBzCsv" href="/api/smartstore/biz-promote.csv?months=3">⤓ CSV 다운로드</a>
           <span id="ssBzStatus" class="muted" style="font-size:12px"></span>
         </div>
-        <div class="muted" style="font-size:12px;margin-top:8px">본품(소파·바디필로우·메이트) 구매 후 N개월 경과 · <strong>리필(비즈) 미구매</strong> 주문자 = 리필 유도 대상. 네이버 주문자 <strong>이름·연락처</strong>가 제공되어 알림톡/직접연락 모두 가능합니다. <strong>과거 수집분엔 주문자 정보가 없어</strong> 정확한 집계를 위해 <strong>⟲ 최근 7일 동기화</strong> 또는 전체 재수집이 필요합니다.</div>
+        <div class="muted" style="font-size:12px;margin-top:8px">본품(소파·바디필로우) 구매 후 N개월 경과 · <strong>리필(비즈) 미구매</strong> 주문자 = 리필 유도 대상. <span class="muted">(메이트는 비즈 리필 수요가 작아 대상에서 제외)</span> 네이버 주문자 <strong>이름·연락처</strong>가 제공되어 알림톡/직접연락 모두 가능합니다. <strong>과거 수집분엔 주문자 정보가 없어</strong> 정확한 집계를 위해 <strong>⟲ 최근 7일 동기화</strong> 또는 전체 재수집이 필요합니다.</div>
       </div>
       <div id="ssBzResult"><div class="empty">조건을 선택하고 <strong>찾기</strong>를 누르세요.</div></div>`;
     el('ssBzLoad').addEventListener('click', loadSSBizPromote);

@@ -42,6 +42,7 @@ const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
 const cafe24Coupons = require('./lib/cafe24Coupons');
 const forecast = require('./lib/forecast');
+const bizadvisor = require('./lib/bizadvisor');
 const ai = require('./lib/ai');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -471,6 +472,32 @@ async function handle(req, res) {
     if (!storeName) return sendJson(res, 400, { ok: false, error: 'store 필요' });
     try { return sendJson(res, 200, { ok: true, ...(await otherChannels.storeRevenue(storeName, start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+
+  // 마케팅 분석 — 비즈어드바이저 일별×채널 유입수 (on.bizInflow). JSON(도표) + .csv(기간 다운로드).
+  if (u.pathname === '/api/bizadvisor/inflow' || u.pathname === '/api/bizadvisor/inflow.csv') {
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    try {
+      const s = await bizadvisor.summary(start, end);
+      if (u.pathname.endsWith('.csv')) {
+        const H = ['날짜', ...s.channels, '총합계'];
+        const rows = s.days.map((d) => [d.date, ...s.channels.map((c) => d.ch[c] || 0), d.total]);
+        return sendCsv(res, `비즈어드바이저_유입수_${s.from || start || ''}_${s.to || end || ''}.csv`, H, rows);
+      }
+      return sendJson(res, 200, { ok: true, ...s });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 마케팅 분석 데이터 갱신 — 사용자 cURL(토큰)로 비즈어드바이저 호출 → DB 적재. POST=로컬 전용(READ_ONLY 차단).
+  if (u.pathname === '/api/bizadvisor/refresh' && req.method === 'POST') {
+    try {
+      const b = await readBody(req);
+      if (!b.curl) return sendJson(res, 400, { ok: false, error: 'curl(붙여넣은 cURL)이 필요합니다' });
+      const opt = {};
+      if (b.fromYear) opt.fromYear = +b.fromYear;
+      if (b.fromMonth) opt.fromMonth = +b.fromMonth;
+      return sendJson(res, 200, await bizadvisor.refresh(b.curl, opt));
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message), partial: e.partial || null }); }
   }
 
   // ── AI 판매 분석 (Claude API, mkboard 방식) — GET 으로 두어 읽기전용 배포에서도 동작 ──

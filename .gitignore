@@ -7,6 +7,10 @@ node_modules/
 *.pem
 *.key
 
+# 비즈어드바이저 인증 cURL(토큰/쿠키) + 추출 산출물 — 커밋 금지
+scripts/bizadvisor-curl.txt
+bizadvisor_out/
+
 *.log
 tmp/
 

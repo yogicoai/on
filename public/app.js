@@ -1067,6 +1067,7 @@ function initSmartstore() {
       <button class="tab" data-sstab="discount">④ 할인 · 정산</button>
       <button class="tab" data-sstab="payment">⑤ 결제 · 혜택</button>
       <button class="tab" data-sstab="bizpromote">⑥ 비즈 유도</button>
+      <button class="tab" data-sstab="bizmarketing">⑦ 마케팅 분석</button>
     </nav>
     <div id="ssPanel"></div>`;
   el('ssStart').value = el('start').value || monthStart(); el('ssEnd').value = el('end').value || rangeFor('yesterday')[1]; // 상단 구간 사용
@@ -1130,7 +1131,7 @@ function renderSSPanel() {
   if (ssTab === 'inflow') {
     p.innerHTML = `<div class="card"><h3>유입경로별 주문·매출 <span class="hint">네이버 제공 유입경로 · 상위 ${j.inflow.length} · 클릭 시 상세</span></h3>
       ${tableHtml(['유입경로', '주문', '매출', '비중'], j.inflow, (r) => [dlink('inflow', r.inflow), num(r.orders), won(r.sales), pct(j.kpis.revenue ? r.sales / j.kpis.revenue : 0)])}
-      <div class="insightline">스마트스토어는 사이트 방문수 통계가 별도라, 주문 단위 <strong>유입경로(검색/광고/장바구니 등)</strong>로 분석합니다. 방문수 API 제공 여부 확인 중 — 가능하면 추가합니다.</div></div>`;
+      <div class="insightline">여기는 <strong>주문 단위 유입경로</strong>(결제로 이어진 경로)입니다. 일별 <strong>사이트 방문/유입수(전체)</strong>는 커머스 API 미제공 영역이라 <strong>⑦ 마케팅 분석</strong> 탭에서 비즈어드바이저 기준으로 따로 봅니다.</div></div>`;
   } else if (ssTab === 'product') {
     p.innerHTML = `
       <div class="grid two">
@@ -1206,7 +1207,122 @@ function renderSSPanel() {
       <div id="ssBzResult"><div class="empty">조건을 선택하고 <strong>찾기</strong>를 누르세요.</div></div>`;
     el('ssBzLoad').addEventListener('click', loadSSBizPromote);
     el('ssBzMonths').addEventListener('change', () => { const m = el('ssBzMonths').value; el('ssBzCsv').href = `/api/smartstore/biz-promote.csv?months=${m}`; el('ssBzResult').innerHTML = `<div class="empty">${m}개월↑ 조건으로 <strong>찾기</strong>를 눌러주세요.</div>`; });
+  } else if (ssTab === 'bizmarketing') {
+    p.innerHTML = `
+      <div class="card" style="margin-bottom:14px">
+        <div class="panelctl" style="flex-wrap:wrap;gap:10px">
+          <strong>📈 마케팅채널 유입수 <span class="hint">일별 · 비즈어드바이저</span></strong>
+          <span style="flex:1"></span>
+          <label style="font-size:12px;color:var(--muted)">조회 월 <input type="month" id="bizMonth" style="font-size:12px"></label>
+          <a class="btn ghost" id="bizCsv" href="#">⤓ 기간 다운로드</a>
+          <button id="bizRefreshBtn" class="btn warn">🔄 데이터 갱신</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">이 탭은 <b>조회 월</b>로 따로 봅니다(상단 날짜와 별개) · 그래프는 그 달 1일~말일(이번 달은 오늘까지) · 네이버 비즈어드바이저 일별 채널 유입수 · 갱신은 로컬에서 토큰으로 받아옵니다.</div>
+        <div id="bizRefreshBox" style="display:none;margin-top:10px;background:#fff8e1;border:1px solid #fde68a;border-radius:10px;padding:12px">
+          <div style="font-weight:700;margin-bottom:6px">🔄 비즈어드바이저에서 받아오기 <span class="muted" style="font-weight:500">(로컬 전용)</span></div>
+          <ol style="font-size:12px;color:#92400e;margin:0 0 8px 18px;padding:0;line-height:1.7">
+            <li>비즈어드바이저 마케팅분석 화면 → F12 → 네트워크 → <code>report?useIndex=</code> 요청</li>
+            <li>우클릭 → Copy → <b>Copy as cURL (bash)</b></li>
+            <li>아래에 붙여넣고 [받아오기] · 토큰은 저장 안 함(끝나면 로그아웃→재로그인 권장)</li>
+          </ol>
+          <textarea id="bizCurl" placeholder="curl 'https://bizadvisor.naver.com/api/v3/sites/...'  -H 'authorization: Bearer ...'  -b '...'" style="width:100%;height:84px;font-family:monospace;font-size:11px;box-sizing:border-box"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <label style="font-size:12px">시작월 <input id="bizFromYm" type="month" value="2025-01"></label>
+            <button id="bizRunRefresh" class="btn">받아오기</button>
+            <span id="bizRefreshMsg" class="muted" style="font-size:12px"></span>
+          </div>
+        </div>
+      </div>
+      <section class="kpis" id="bizKpis" style="padding:0 0 14px"></section>
+      <div class="card"><h3>일별 채널 유입수 <span class="hint" id="bizRangeHint"></span></h3>
+        <div id="bizChart"><div class="empty">불러오는 중…</div></div>
+        <div id="bizLegend" style="margin-top:10px"></div></div>
+      <div id="bizTable" style="margin-top:16px"></div>`;
+    el('bizRefreshBtn').addEventListener('click', () => { const b = el('bizRefreshBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; });
+    el('bizRunRefresh').addEventListener('click', runBizRefresh);
+    el('bizMonth').value = bizMonthSel || curMonth();
+    el('bizMonth').addEventListener('change', () => { bizMonthSel = el('bizMonth').value; loadBizMarketing(); });
+    loadBizMarketing();
   }
+}
+// ── 마케팅 분석 (비즈어드바이저 일별 채널 유입수) ──
+const BIZ_COLORS = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#0891b2', '#7c3aed', '#65a30d', '#dc2626', '#0d9488', '#9333ea', '#ca8a04', '#e11d48', '#4f46e5', '#059669', '#f59e0b', '#94a3b8'];
+const bizColor = (channels, c) => BIZ_COLORS[Math.max(0, channels.indexOf(c)) % BIZ_COLORS.length];
+let bizMonthSel = ''; // 이 탭 전용 조회 월(YYYY-MM) — 상단 날짜와 독립
+const curMonth = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+function bizMonthRange(ym) {
+  const [y, m] = (ym || curMonth()).split('-').map(Number);
+  const today = new Date();
+  const isCur = (y === today.getFullYear() && m === today.getMonth() + 1);
+  const last = new Date(y, m, 0).getDate();
+  return [`${y}-${pad(m)}-01`, isCur ? ymd(today) : `${y}-${pad(m)}-${pad(last)}`]; // 이번 달은 오늘까지
+}
+function bizChartHtml(days, channels) {
+  if (!days || !days.length) return '<div class="empty">이 구간에 데이터가 없습니다. 우측 <b>🔄 데이터 갱신</b>으로 비즈어드바이저에서 받아오세요.</div>';
+  const max = Math.max(1, ...days.map((d) => d.total));
+  const step = Math.ceil(days.length / 16);
+  const cols = days.map((d) => {
+    const segs = channels.map((c) => {
+      const v = d.ch[c] || 0; if (!v) return '';
+      return `<div class="bar" style="height:${(v / max * 100).toFixed(2)}%;background:${bizColor(channels, c)};border-radius:0;min-height:1px"></div>`;
+    }).join('');
+    return `<div class="col" title="${d.date} · 총 ${num(d.total)}">${segs}</div>`;
+  }).join('');
+  const labels = days.map((d, i) => `<span>${i % step === 0 ? d.date.slice(5) : ''}</span>`).join('');
+  return `<div class="bars stack">${cols}</div><div class="barlabels">${labels}</div>`;
+}
+async function loadBizMarketing() {
+  const ym = (el('bizMonth') && el('bizMonth').value) || bizMonthSel || curMonth();
+  bizMonthSel = ym;
+  const [s, e] = bizMonthRange(ym);
+  const csv = el('bizCsv'); if (csv) csv.href = `/api/bizadvisor/inflow.csv?start=${enc(s)}&end=${enc(e)}`;
+  const chart = el('bizChart'); if (chart) chart.innerHTML = '<div class="empty">불러오는 중…</div>';
+  try {
+    const j = await (await fetch(`/api/bizadvisor/inflow?start=${enc(s)}&end=${enc(e)}`)).json();
+    if (!j.ok) throw new Error(j.error || '조회 실패');
+    renderBizMarketing(j);
+  } catch (err) { if (el('bizChart')) el('bizChart').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+function renderBizMarketing(j) {
+  const hint = el('bizRangeHint');
+  if (hint) hint.textContent = (j.days && j.days.length) ? `${j.from} ~ ${j.to} · ${j.days.length}일 · ${j.channels.length}채널 · 최신 ${j.latestDate || '-'}` : '데이터 없음 — 갱신 필요';
+  const kpi = el('bizKpis');
+  if (kpi) {
+    if (j.days && j.days.length) {
+      const avg = Math.round(j.grandTotal / Math.max(1, j.days.length));
+      kpi.innerHTML = [
+        ['총 유입수', num(j.grandTotal), `${j.days.length}일 합계`],
+        ['일평균 유입', num(avg), '하루 평균'],
+        ['채널 수', num(j.channels.length), '유입 채널'],
+        ['데이터 최신일', j.latestDate || '-', '비즈어드바이저'],
+      ].map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`).join('');
+    } else kpi.innerHTML = '';
+  }
+  if (el('bizChart')) el('bizChart').innerHTML = bizChartHtml(j.days, j.channels);
+  if (el('bizLegend')) el('bizLegend').innerHTML = (j.channels || []).map((c) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 14px 4px 0;font-size:12px"><i style="width:11px;height:11px;border-radius:2px;background:${bizColor(j.channels, c)};display:inline-block"></i>${c} <b>${num(j.totalsByChannel[c] || 0)}</b></span>`).join('');
+  if (el('bizTable')) el('bizTable').innerHTML = (j.channels && j.channels.length)
+    ? `<div class="card"><h3>채널별 유입수 <span class="hint">전체 구간 합계 · 비중</span></h3>${tableHtml(['채널', '유입수', '비중'], j.channels.map((c) => ({ c })), (r) => [r.c, num(j.totalsByChannel[r.c] || 0), pct((j.totalsByChannel[r.c] || 0) / (j.grandTotal || 1))])}</div>`
+    : '';
+}
+async function runBizRefresh() {
+  const curl = (el('bizCurl').value || '').trim();
+  const msg = el('bizRefreshMsg');
+  if (!curl) { msg.textContent = 'cURL을 붙여넣어 주세요'; return; }
+  const ym = (el('bizFromYm').value || '2025-01').split('-');
+  const btn = el('bizRunRefresh'); btn.disabled = true;
+  msg.textContent = '받아오는 중… (몇 달치면 1~2분 걸릴 수 있어요)';
+  try {
+    const j = await (await fetch('/api/bizadvisor/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ curl, fromYear: +ym[0], fromMonth: +ym[1] }) })).json();
+    if (!j.ok) throw new Error(j.error || '갱신 실패');
+    msg.innerHTML = `✅ ${num(j.totalRows)}행 적재 · 최초 데이터 ${j.firstWithData || '-'} · <span class="muted">토큰 폐기(로그아웃) 권장</span>`;
+    el('bizCurl').value = '';
+    loadBizMarketing();
+  } catch (err) {
+    let m = err.message;
+    if (/읽기 전용/.test(m)) m = '읽기 전용 배포(Vercel)에선 갱신이 막혀요. 로컬(localhost:5200)에서 실행하세요.';
+    msg.textContent = '오류: ' + m;
+  } finally { btn.disabled = false; }
 }
 async function loadSSBizPromote() {
   const m = el('ssBzMonths').value;

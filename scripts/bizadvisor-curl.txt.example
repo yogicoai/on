@@ -1,0 +1,18 @@
+# ── 비즈어드바이저 인증 붙여넣기 (이 파일은 .example 템플릿) ──────────────
+#
+# 1) 크롬 DevTools(F12) → 네트워크 탭 → 필터에 report?useIndex= 입력
+# 2) 마케팅분석 화면을 열어 뜨는 report?useIndex=revenue-all-channel-detail 요청을
+#    우클릭 → Copy → "Copy as cURL (bash)"
+# 3) 그 내용을 통째로 같은 폴더의  bizadvisor-curl.txt  파일에 붙여넣고 저장
+#    (이 .example 이 아니라, .example 을 뗀 bizadvisor-curl.txt 에!)
+# 4) node scripts/bizadvisor-export.js
+#
+# ⚠️ bizadvisor-curl.txt 에는 로그인 토큰/쿠키(=비밀번호급)가 들어있습니다.
+#    .gitignore 에 등록돼 있어 커밋되지 않습니다. 실행 후에는 비즈어드바이저
+#    로그아웃→재로그인으로 세션을 갈아주세요.
+#
+# 아래는 형태 예시 (실제 값 아님):
+# curl 'https://bizadvisor.naver.com/api/v3/sites/s_XXXXXXXX/report?useIndex=revenue-all-channel-detail&startDate=2025-01-01&endDate=2025-03-31&dimensions=date_time&dimensions=mapped_channel_name&metrics=num_interaction&service=biz_advisor' \
+#   -H 'accept: application/json' \
+#   -H 'authorization: Bearer <토큰>' \
+#   -b '<쿠키들>'

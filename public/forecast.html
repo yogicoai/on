@@ -42,6 +42,7 @@
               <option value="0.5">0.5개월치</option><option value="1" selected>1개월치</option><option value="2">2개월치</option>
             </select>
           </label>
+          <button id="btnGuide" type="button" onclick="openGuide()" class="text-sm font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded-md px-3 py-1.5 shadow-sm hover:bg-amber-100 whitespace-nowrap">📖 사용 가이드</button>
         </div>
       </div>
 
@@ -62,6 +63,57 @@
         </div>
       </div>
     </header>
+
+    <div id="guideModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onclick="if(event.target===this)closeGuide()">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[88vh] overflow-auto">
+        <div class="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between rounded-t-2xl z-10">
+          <h3 class="font-extrabold text-slate-900 text-lg">📖 발주 예측 사용 가이드</h3>
+          <button type="button" onclick="closeGuide()" class="text-slate-400 hover:text-slate-800 text-2xl leading-none font-bold px-2">×</button>
+        </div>
+        <div class="px-6 py-5 text-sm text-slate-700 leading-relaxed grid md:grid-cols-2 gap-x-8 gap-y-5">
+        <div>
+          <h4 class="font-extrabold text-slate-900 mb-1">① 이 화면은?</h4>
+          <p class="text-slate-600">이카운트에 쌓인 <b>전 채널 판매</b>(홈페이지·스마트스토어·쿠팡·롯데 등)로 다음 1개월 <b>수요</b>를 예측하고, <b>실시간 재고</b>와 맞춰 <b>발주 시점·수량</b>을 제안합니다. (자사몰/스마트스토어 API가 아니라 <b>이카운트 출고 기준</b>)</p>
+        </div>
+        <div>
+          <h4 class="font-extrabold text-slate-900 mb-1">② 월평균 수요 계산</h4>
+          <ul class="list-disc ml-4 text-slate-600 space-y-0.5">
+            <li><b>월평균 = 최근 N개 “완료월” 판매 ÷ N</b> (진행 중인 당월은 미완료라 제외)</li>
+            <li>상단 <b>기준</b>에서 3·6·12개월 선택</li>
+            <li>리퍼브(재판매)는 <b>포함</b>, <b>케어서비스·수선비(A/S)는 제외</b></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-extrabold text-slate-900 mb-1">③ 커버 / 이너 (BOM)</h4>
+          <ul class="list-disc ml-4 text-slate-600 space-y-0.5">
+            <li><b>본품 1개 판매 → 그 색상 커버 1 + 사이즈 이너 1</b> 소요</li>
+            <li><b>커버 = 컬렉션 + 색상별</b> (맥스 커버 / 줄라 맥스 커버 / 럭스 맥스 커버는 각각 다름). 커버만 산 것도 커버 수요에 포함</li>
+            <li><b>이너 = 사이즈별, 색상 무관</b>. 맥스·줄라 맥스·럭스 맥스 → 모두 <b>맥스 이너</b> (줄라/럭스는 커버 컬렉션). 단 롤·카터필러 등 형태가 다르면 별도 이너. 커버만 산 것은 이너 수요에 미포함</li>
+            <li>등급(프리미엄/플러스/스탠다드)·<b>EPP</b>는 한 제품으로 <b>통합</b> (행의 <span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold">통합 N</span> = 합쳐진 품목코드 수)</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-extrabold text-slate-900 mb-1">④ 발주선 · 발주 판단</h4>
+          <ul class="list-disc ml-4 text-slate-600 space-y-0.5">
+            <li><b>소진예상(개월) = 현재고 ÷ 월평균 수요</b></li>
+            <li><b>발주선</b> = 최소 보유 기준(예: 1개월치). 상단에서 0.5·1·2개월 선택</li>
+            <li><b>🚨 발주 필요 = 현재고 &lt; 월평균 × 발주선</b></li>
+            <li><b>발주 제안수량 = (월평균 × 발주선) − 현재고</b> (올림)</li>
+            <li><span class="text-orange-500 font-bold">주황</span>=소진 2개월 이내, <span class="text-red-600 font-bold">빨강</span>=1개월 이내</li>
+          </ul>
+        </div>
+        <div class="md:col-span-2">
+          <h4 class="font-extrabold text-slate-900 mb-1">⑤ 사용법 / 용어</h4>
+          <ul class="list-disc ml-4 text-slate-600 space-y-0.5">
+            <li><b>발주 판단</b>(재고 조인) / <b>판매 예측</b>(이카운트 전 SKU 월평균) 모드 전환</li>
+            <li>카테고리 탭(커버·이너·인형·리빙) · <b>🚨 발주 필요만</b>(과잉재고 숨김) · 검색(탭 바꾸면 검색어 자동 초기화)</li>
+            <li>“판매없음”=최근 N개월 판매 0(저회전/단종) · 표 헤더 클릭=정렬</li>
+            <li>재고·매칭은 이카운트 <b>품목코드</b> 기준(매칭 안 된 판매는 하단 “미매핑” 패널에 노출)</li>
+          </ul>
+        </div>
+        </div>
+      </div>
+    </div>
 
     <div class="bg-white border border-slate-300 rounded-lg shadow-sm flex-grow overflow-hidden flex flex-col relative">
       <div class="overflow-auto flex-grow">
@@ -93,6 +145,10 @@
     let DATA = null;          // 마지막 응답
     let SORT = { col: 'monthsLeft', asc: true }; // 발주판단 기본: 소진 임박순
 
+    function openGuide() { document.getElementById('guideModal').classList.remove('hidden'); }
+    function closeGuide() { document.getElementById('guideModal').classList.add('hidden'); }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGuide(); });
+
     function setMode(m) {
       MODE = m;
       document.getElementById('mode-reorder').className = 'mode-btn px-3 py-1.5 text-sm font-bold rounded-md ' + (m==='reorder'?'bg-slate-800 text-white':'text-slate-600 hover:bg-slate-100');
@@ -102,11 +158,13 @@
       document.getElementById('needWrap').style.display = m==='sales' ? 'none' : '';
       document.getElementById('targetWrap').style.display = m==='sales' ? 'none' : '';
       document.getElementById('unmatchedBox').classList.add('hidden');
+      document.getElementById('search').value = ''; // 모드 전환 시 검색어 초기화
       SORT = m==='reorder' ? { col:'monthsLeft', asc:true } : { col:'monthlyAvg', asc:false };
       reload();
     }
     function setCat(c, btn) {
       CAT = c;
+      document.getElementById('search').value = ''; // 탭 바꾸면 검색어 초기화(이전 검색어가 남아 빈 화면 방지)
       document.querySelectorAll('.cat-btn').forEach(b => b.className = 'cat-btn px-3 py-1.5 text-sm font-bold rounded-md text-slate-600 hover:bg-slate-100');
       btn.className = 'cat-btn px-3 py-1.5 text-sm font-bold rounded-md bg-blue-600 text-white';
       render();
@@ -181,6 +239,16 @@
       const tbody = document.getElementById('rows');
       const empty = document.getElementById('empty');
       empty.classList.toggle('hidden', rows.length>0);
+      if (rows.length===0) {
+        let msg = '데이터가 없습니다.';
+        if (MODE==='reorder' && needOnly) {
+          let inCat = (DATA.items||[]).slice();
+          if (CAT!=='전체') inCat = inCat.filter(r => r.category === CAT);
+          if (kws.length) inCat = inCat.filter(r => { const t=((r.code||'')+' '+r.name+' '+r.color).toLowerCase(); return kws.every(k=>t.includes(k)); });
+          if (inCat.length>0) msg = `${CAT!=='전체'?CAT+' ':''}${inCat.length}종 모두 재고 충분 — 발주 필요 없음<br><span class="text-sm text-slate-400">🚨 “발주 필요만” 체크를 해제하면 표시됩니다</span>`;
+        }
+        empty.querySelector('p').innerHTML = msg;
+      }
 
       if (MODE==='reorder') {
         thead.innerHTML = `<tr>

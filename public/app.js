@@ -214,7 +214,7 @@ function renderKpis(d) {
   const funnelPending = d.funnel && d.funnel.pending; // 아직 워밍 안 된 구간 → 쿠폰 집계 준비중
   const cards = [
     { label: '방문수', val: num(t.visits), sub: `신규 ${pct(t.newRatio)} · 일평균 ${num(t.avgDaily)}`, cls: 'accent', act: 'tab:inflow' },
-    { label: '총 매출', val: won(m.revenue), sub: `결제 ${num(m.paidOrders)}건 · 객단가 ${won(m.aov)} · 클릭=카테고리×등급`, cls: 'green', act: 'sales' },
+    { label: '총 매출 <span class="hint" style="font-weight:500">주문일·API</span>', val: won(m.revenue), sub: `결제 ${num(m.paidOrders)}건 · 객단가 ${won(m.aov)} · 클릭=카테고리×등급<br><span id="kpiEcRev" class="muted" style="font-size:11px">🧾 이카운트 판매 집계중…</span>`, cls: 'green', act: 'sales' },
     { label: '회원 매출비중', val: pct(m.memberRevenueShare), sub: `회원주문 ${pct(m.memberOrderShare)}`, act: 'tab:members' },
     { label: '프로모션 성과', val: '<span id="kpiPromoPerf" class="muted" style="font-size:18px">집계 중…</span>', sub: '<span id="kpiPromoSub">그달 진행 프로모션 · 자사몰 쿠폰 기준 · 클릭 시 ③ 프로모션 매출</span>', cls: 'pink', act: 'tab:buyers' },
     { label: '쿠폰 사용(프로모션)',
@@ -236,6 +236,18 @@ function renderKpis(d) {
   const fn = el('funnelNow');
   if (fn) fn.addEventListener('click', (ev) => { ev.stopPropagation(); load(true, true); });
   loadKpiPromoPerf(); // '프로모션 성과' 카드 값(이번 달 진행 프로모션 쿠폰 매출) 비동기 채움
+  loadKpiEcountRevenue('홈페이지'); // 총매출 카드에 이카운트 판매금액(출고 기준) 병기
+}
+// 이카운트 판매 금액(출고 기준)을 KPI에 병기 — MD 보고/회계 기준과 일치. API(주문일)와 성격이 다름을 명시.
+async function loadKpiEcountRevenue(storeName, spanId, startId, endId) {
+  const v = el(spanId || 'kpiEcRev'); if (!v) return;
+  try {
+    const s = el(startId || 'start').value, e = el(endId || 'end').value;
+    const j = await (await fetch(`/api/ecount/revenue?store=${enc(storeName)}&start=${enc(s)}&end=${enc(e)}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    const incomplete = j.latestDate && e > j.latestDate; // 선택 종료일이 적재일보다 뒤 → 미출고분 누락
+    v.innerHTML = `🧾 이카운트 판매 <b>${won(j.amount)}</b><br><span class="muted" style="font-size:10px">출고일 기준 집계${incomplete ? ` · ⚠️ ${j.latestDate}까지 적재(이후 미출고)` : ''}</span>`;
+  } catch (_) { v.textContent = '🧾 이카운트 매출 -'; }
 }
 // 자사몰 '프로모션 성과' KPI — 이번 달 진행 프로모션(이벤트)의 연결 쿠폰 실사용 매출 합
 async function loadKpiPromoPerf() {
@@ -1100,7 +1112,7 @@ function renderSSKpis() {
   const k = ssData.kpis;
   const discRate = (k.revenue + k.discount) ? k.discount / (k.revenue + k.discount) : 0;
   el('ssKpis').innerHTML = [
-    ssKc('매출(결제)', won(k.revenue), `주문 ${num(k.orders)} · 상품 ${num(k.lines)} · 클릭=충전재 분해`, 'green', 'break'),
+    ssKc('매출(결제) <span class="hint" style="font-weight:500">주문일·API</span>', won(k.revenue), `주문 ${num(k.orders)} · 상품 ${num(k.lines)}<br><span id="ssKpiEcRev" class="muted" style="font-size:11px">🧾 이카운트 판매 집계중…</span>`, 'green', 'break'),
     ssKc('정산액(예상)', won(k.settlement), `수수료 ${won(k.commission)} (${pct(k.commissionRate)})`, 'accent', 'tab:discount'),
     ssKc('객단가', won(k.aov), `수량 ${num(k.qty)}개`, '', ''),
     ssKc('소파 / 바디필로우', num(k.sofaQty) + ' / ' + num(k.bodyQty), `총 ${num(k.totalQty)}개`, 'pink', 'tab:product'),
@@ -1111,6 +1123,7 @@ function renderSSKpis() {
     if (a === 'break') toggleSSBreakdown();
     else if (a.startsWith('tab:')) { const t = a.slice(4); el('ssTabs').querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x.dataset.sstab === t)); ssTab = t; renderSSPanel(); }
   }));
+  loadKpiEcountRevenue('스마트스토어', 'ssKpiEcRev', 'ssStart', 'ssEnd'); // 이카운트 판매금액 병기
 }
 function renderSSPanel() {
   const j = ssData, p = el('ssPanel'); if (!j) return;

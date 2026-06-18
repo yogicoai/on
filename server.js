@@ -463,6 +463,15 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await forecast.reorderPlan({ months, targetMonths })) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 이카운트 확정 매출(출고 기준) — store별(홈페이지=자사몰, 스마트스토어). 대시보드 API매출 옆 병기용.
+  if (u.pathname === '/api/ecount/revenue') {
+    const storeName = u.searchParams.get('store') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!storeName) return sendJson(res, 400, { ok: false, error: 'store 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await otherChannels.storeRevenue(storeName, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
 
   // ── AI 판매 분석 (Claude API, mkboard 방식) — GET 으로 두어 읽기전용 배포에서도 동작 ──
   if (u.pathname === '/api/ai/status') {

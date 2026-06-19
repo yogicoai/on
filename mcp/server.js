@@ -22,10 +22,13 @@ const otherChannels = require('../lib/otherChannels');
 const compare = require('../lib/compare');
 const target = require('../lib/target');
 const mallPromos = require('../lib/mallPromotions');
+const productPrices = require('../lib/productPrices');
+const forecast = require('../lib/forecast');
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
 const wrap = (fn) => async (args) => { try { return ok(await fn(args)); } catch (e) { return fail(e); } };
+const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 
 function build() {
   const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' });
@@ -75,9 +78,24 @@ function build() {
 
   server.registerTool('other_channels', {
     title: '기타채널 매출(쿠팡·롯데·현대·신세계·오늘의집 등)',
-    description: '기간 기타채널 그룹별 매출·주문 (이카운트 집계)',
+    description: '기간 기타채널 그룹별 매출·주문 (이카운트 집계). 특정 채널의 상품별 상세는 other_channel_detail 사용.',
     inputSchema: D,
   }, wrap(({ start, end }) => otherChannels.overview(start, end)));
+
+  server.registerTool('other_channel_detail', {
+    title: '기타채널 상세 — 상품별·카테고리·색상 [확정집계]',
+    description: '특정 기타채널(group: 쿠팡·롯데홈쇼핑·현대·신세계몰·오늘의집 등)의 ' +
+      '상품별 매출·수량·주문 + 카테고리·충전재(등급)·색상·입점몰별 상세 (이카운트 productName 기준). ' +
+      '"상품별 데이터 미제공"이 아니라 이 도구로 품목 단위까지 분석.',
+    inputSchema: { group: z.string().describe('채널 그룹명 (예: 쿠팡, 롯데홈쇼핑, 현대, 신세계몰, 오늘의집, 29CM)'), start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD') },
+  }, wrap(async ({ group, start, end }) => {
+    const d = await otherChannels.groupDetail(group, start || '', end || '');
+    return {
+      group, totals: d.totals,
+      상품TOP: (d.products || []).slice(0, 40),
+      카테고리: d.byCategory, 충전재등급: d.byBead, 색상: (d.byColor || []).slice(0, 20), 입점몰별: d.subs,
+    };
+  }));
 
   server.registerTool('channel_comparison', {
     title: '채널 비교(전년/전월/전주)',
@@ -90,6 +108,56 @@ function build() {
     description: '채널별 월 매출 시계열 (자사몰·스마트스토어·합계)',
     inputSchema: {},
   }, wrap(() => compare.monthlySeries('2024-01-01')));
+
+  server.registerTool('discount_analysis', {
+    title: '자사몰 할인율 분석 (정상가 대비) [확정집계]',
+    description: '기간 Cafe24 품목별 "실판매단가 vs 정상가 → 할인율" + 가중평균 할인율. ' +
+      '정상가는 주문이력에서 추출(정상가 불변 전제). 쿠폰 데이터가 없는 기간도 할인 깊이를 산출 — 쿠폰/프로모션 분석을 보완.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => productPrices.discountAnalysis(start, end)));
+
+  server.registerTool('sales_forecast', {
+    title: '판매 예측 — 제품×색상 월평균 [확정집계]',
+    description: '이카운트 전체몰 기준 제품×색상 최근 N완료월 월평균 판매수량. search로 품목명/색상 필터(없으면 판매량 상위 60).',
+    inputSchema: { months: z.number().int().optional().describe('기준 완료월 수(기본 3)'), search: z.string().optional().describe('품목명/색상 필터') },
+  }, wrap(async ({ months, search }) => {
+    const m = num(months, 3);
+    const r = await forecast.salesForecast({ months: m });
+    let items = r.items || [];
+    if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
+    return { months: m, total: r.count, count: items.length, items: items.slice(0, 60).map((x) => ({ 품목: x.name, 색상: x.color, 월평균: x.monthlyAvg, 누적: x.total })) };
+  }));
+
+  server.registerTool('reorder_plan', {
+    title: '발주 판단 — 재고↔판매예측 [확정집계]',
+    description: '실시간 재고 vs 판매예측 조인 → 소진예상개월·발주필요·제안수량. 기본은 "발주 필요" 품목만. search=품목명 필터, all=true면 전체. (커버/이너 BOM 반영)',
+    inputSchema: { months: z.number().int().optional(), target: z.number().optional().describe('발주 목표 개월수(기본 1)'), search: z.string().optional(), all: z.boolean().optional() },
+  }, wrap(async ({ months, target, search, all }) => {
+    const m = num(months, 3), tg = num(target, 1);
+    const r = await forecast.reorderPlan({ months: m, targetMonths: tg });
+    const allItems = Array.isArray(r) ? r : (r.items || r.rows || []);
+    let items = allItems;
+    if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
+    else if (!all) items = items.filter((x) => x.needOrder);
+    items = [...items].sort((a, b) => (a.monthsLeft == null ? 999 : a.monthsLeft) - (b.monthsLeft == null ? 999 : b.monthsLeft));
+    return { months: m, targetMonths: tg, 발주필요_품목수: allItems.filter((x) => x.needOrder).length, count: items.length, items: items.slice(0, 80) };
+  }));
+
+  server.registerTool('stock_list', {
+    title: '실시간 재고 조회',
+    description: '현재 실시간 재고(품목코드·품목명·색상·수량 qty). search로 품목명 필터 권장. search 없으면 재고 적은 순 상위 40 + 총개수.',
+    inputSchema: { search: z.string().optional().describe('품목명/색상 필터(예: 맥스 커버)') },
+  }, wrap(async ({ search }) => {
+    const rows = await forecast.stockList();
+    const items = Array.isArray(rows) ? rows : [];
+    const total = items.length;
+    if (search) {
+      const f = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
+      return { total, count: f.length, items: f.slice(0, 80) };
+    }
+    const low = [...items].sort((a, b) => (a.qty || 0) - (b.qty || 0)).slice(0, 40);
+    return { total, 안내: '품목명으로 search하면 정확히 조회됩니다. 아래는 재고 적은 순 상위 40.', 재고적은순: low };
+  }));
 
   server.registerTool('target_status', {
     title: '월 목표 달성률 [확정집계]',

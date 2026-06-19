@@ -42,8 +42,9 @@ function build() {
   }, wrap(({ start, end }) => productAnalysis.analyze(start, end)));
 
   server.registerTool('smartstore_analysis', {
-    title: '스마트스토어 상세 분석',
-    description: '기간별 스마트스토어 매출·상품·카테고리·충전재·유입경로·적용쿠폰·할인이벤트·결제패턴',
+    title: '스마트스토어 상세 분석 — 상품별 TOP 포함 [확정집계]',
+    description: '기간별 스마트스토어 매출·**상품별 매출 TOP(productTop)**·카테고리·충전재·유입경로·적용쿠폰·할인이벤트·결제패턴. ' +
+      '스마트스토어도 상품 단위 데이터를 제공함 — 자사몰 기준 추정 금지, 상품 TOP 질문엔 이 도구를 직접 호출.',
     inputSchema: D,
   }, wrap(({ start, end }) => smartstoreAnalysis.analyze(start, end)));
 

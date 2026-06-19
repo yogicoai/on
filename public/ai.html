@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yogibo AI 판매 분석</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+  <style>
+    :root { --bg:#f4f6f9; --card:#fff; --line:#e5e7eb; --muted:#64748b; --accent:#2563eb; --ink:#0f172a; --user:#2563eb; --warn:#d97706; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Pretendard,system-ui,sans-serif; background:var(--bg); color:var(--ink); height:100vh; overflow:hidden; }
+    .app { display:flex; height:100vh; }
+    /* 사이드바 */
+    .sidebar { width:260px; min-width:260px; background:#0f172a; color:#cbd5e1; display:flex; flex-direction:column; }
+    .side-head { padding:14px; display:flex; flex-direction:column; gap:10px; border-bottom:1px solid #1e293b; }
+    .back { color:#94a3b8; text-decoration:none; font-size:13px; }
+    .back:hover { color:#fff; }
+    .btn-new { background:#2563eb; color:#fff; border:0; border-radius:9px; padding:10px; font-size:14px; font-weight:600; cursor:pointer; }
+    .btn-new:hover { background:#1d4ed8; }
+    .chat-list { flex:1; overflow:auto; padding:8px; }
+    .chat-item { padding:10px 11px; border-radius:9px; cursor:pointer; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+    .chat-item:hover { background:#1e293b; }
+    .chat-item.active { background:#1e293b; }
+    .chat-item .ti { flex:1; min-width:0; }
+    .chat-item .t { font-size:13px; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .chat-item .m { font-size:11px; color:#64748b; margin-top:2px; }
+    .chat-item .del { opacity:0; color:#94a3b8; background:0; border:0; cursor:pointer; font-size:14px; padding:2px 4px; border-radius:6px; }
+    .chat-item:hover .del { opacity:1; }
+    .chat-item .del:hover { background:#7f1d1d; color:#fff; }
+    .list-empty { color:#64748b; font-size:12px; padding:14px; text-align:center; }
+    /* 메인 */
+    .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+    .top { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+    .title { font-size:16px; font-weight:700; }
+    .muted { color:var(--muted); font-weight:500; font-size:12px; }
+    .period { margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+    .period input { font-family:inherit; font-size:13px; padding:4px 6px; border:1px solid var(--line); border-radius:7px; }
+    .guide { background:#fff8e1; border-bottom:1px solid #fde68a; color:#92400e; font-size:12.5px; padding:9px 20px; }
+    .messages { flex:1; overflow:auto; padding:22px; }
+    .row { display:flex; margin-bottom:18px; }
+    .row.user { justify-content:flex-end; }
+    .bubble { max-width:760px; padding:13px 16px; border-radius:14px; font-size:14.5px; line-height:1.62; }
+    .row.user .bubble { background:var(--user); color:#fff; border-bottom-right-radius:4px; white-space:pre-wrap; }
+    .row.ai .bubble { background:var(--card); border:1px solid var(--line); border-bottom-left-radius:4px; }
+    .bubble h4 { margin:12px 0 6px; font-size:15px; }
+    .bubble h4:first-child { margin-top:0; }
+    .bubble p { margin:5px 0; }
+    .bubble ul { margin:5px 0; padding-left:20px; }
+    .bubble li { margin:3px 0; }
+    .bubble table.md { border-collapse:collapse; margin:9px 0; font-size:13px; width:100%; }
+    .bubble table.md th, .bubble table.md td { border:1px solid var(--line); padding:5px 9px; text-align:left; vertical-align:top; }
+    .bubble table.md th { background:#f1f5f9; font-weight:600; white-space:nowrap; }
+    .meta { font-size:11px; color:var(--muted); margin-top:7px; }
+    .typing { color:var(--muted); font-size:13px; }
+    .empty-chat { max-width:620px; margin:40px auto; text-align:center; color:var(--muted); }
+    .empty-chat h2 { color:var(--ink); font-size:20px; margin-bottom:6px; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:18px; }
+    .chip { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:8px 14px; font-size:13px; cursor:pointer; color:var(--ink); }
+    .chip:hover { border-color:var(--accent); color:var(--accent); }
+    /* 입력 */
+    .composer { display:flex; gap:10px; padding:14px 20px; background:var(--card); border-top:1px solid var(--line); align-items:flex-end; }
+    .composer textarea { flex:1; resize:none; height:48px; max-height:160px; font-family:inherit; font-size:14.5px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; outline:none; }
+    .composer textarea:focus { border-color:var(--accent); }
+    .composer button { background:var(--accent); color:#fff; border:0; border-radius:12px; padding:0 22px; height:48px; font-size:15px; font-weight:600; cursor:pointer; }
+    .composer button:disabled { opacity:.5; cursor:default; }
+    .err { color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:10px 14px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="side-head">
+        <a href="/" class="back">← 대시보드로</a>
+        <button type="button" id="newChat" class="btn-new">+ 새 대화</button>
+      </div>
+      <div id="chatList" class="chat-list"></div>
+    </aside>
+    <main class="main">
+      <header class="top">
+        <div class="title">🤖 AI 판매 분석 <span id="modelTag" class="muted"></span></div>
+        <div class="period">기간 <input type="date" id="start" title="분석 시작일"> ~ <input type="date" id="end" title="분석 종료일"></div>
+      </header>
+      <div class="guide">💡 분석할 <b>기간</b>을 먼저 맞춰주세요 — 프로모션·이벤트 분석은 <b>그 기간</b>으로 설정한 뒤 질문해야 정확합니다. (예: “6월 프로모션 성과” → 기간을 6/1~6/30 으로) · 기간 데이터로 매출·목표·채널·프로모션 성과를 분석합니다.</div>
+      <div id="messages" class="messages"></div>
+      <div class="composer">
+        <textarea id="input" placeholder="질문을 입력하세요 (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+        <button type="button" id="send">전송</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const enc = encodeURIComponent;
+    const pad = (n) => String(n).padStart(2, '0');
+    const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // 경량 마크다운: ## 제목 / **굵게** / - 목록 / | 표 | / 줄바꿈
+    function mdLite(t) {
+      const inline = (s) => s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      const cells = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      const lines = esc(t).split('\n');
+      let html = '', inList = false, i = 0;
+      const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+      while (i < lines.length) {
+        const line = lines[i].trimEnd();
+        // 표: |...| 헤더 + 다음 줄이 구분선(---)
+        if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && /-/.test(lines[i + 1])) {
+          closeList();
+          const header = cells(line); i += 2; const rows = [];
+          while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+          html += '<table class="md"><thead><tr>' + header.map((h) => `<th>${inline(h)}</th>`).join('') + '</tr></thead><tbody>' +
+            rows.map((r) => '<tr>' + r.map((c) => `<td>${inline(c)}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+          continue;
+        }
+        if (/^#{1,6}\s/.test(line)) { closeList(); html += `<h4>${inline(line.replace(/^#{1,6}\s/, ''))}</h4>`; i++; continue; }
+        if (/^\s*[-*]\s+/.test(line)) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${inline(line.replace(/^\s*[-*]\s+/, ''))}</li>`; i++; continue; }
+        if (!line.trim()) { closeList(); i++; continue; }
+        closeList();
+        html += `<p>${inline(line)}</p>`; i++;
+      }
+      closeList();
+      return html;
+    }
+
+    const SUGGEST = ['이번 달 매출 요약해줘', '자사몰 vs 스마트스토어 비교', '이 기간 프로모션 성과 분석해줘', '목표 달성률 평가해줘', '기타 채널 중 가장 큰 곳은?'];
+    let currentId = null, busy = false, periodTouched = false;
+
+    function welcome() {
+      $('messages').innerHTML = `<div class="empty-chat">
+        <h2>무엇을 분석해 드릴까요?</h2>
+        <div>위 <b>기간</b>을 분석 대상에 맞춘 뒤 질문하세요.</div>
+        <div class="chips">${SUGGEST.map((s) => `<button class="chip">${s}</button>`).join('')}</div>
+      </div>`;
+      $('messages').querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => { $('input').value = b.textContent; send(); }));
+    }
+
+    function addRow(role, html, meta) {
+      const empty = $('messages').querySelector('.empty-chat'); if (empty) empty.remove();
+      const row = document.createElement('div');
+      row.className = 'row ' + (role === 'user' ? 'user' : 'ai');
+      row.innerHTML = `<div class="bubble">${html}${meta ? `<div class="meta">${meta}</div>` : ''}</div>`;
+      $('messages').appendChild(row);
+      $('messages').scrollTop = $('messages').scrollHeight;
+      return row;
+    }
+
+    function renderMessages(msgs) {
+      $('messages').innerHTML = '';
+      if (!msgs || !msgs.length) { welcome(); return; }
+      for (const m of msgs) {
+        if (m.role === 'user') addRow('user', esc(m.content));
+        else addRow('ai', mdLite(m.content), m.model ? `모델 ${esc(m.model)}` : '');
+      }
+    }
+
+    async function send() {
+      if (busy) return;
+      const q = $('input').value.trim();
+      if (!q) { $('input').focus(); return; }
+      const s = $('start').value, e = $('end').value;
+      // 기간 가드 — 토큰 절약: 기간 미설정/미확인 시 전송 전 경고 (취소하면 토큰 미발생)
+      if (!s || !e) { alert('⚠️ 분석 기간(시작·종료 날짜)을 먼저 설정해 주세요.\n기간 없이는 정확한 데이터가 나오지 않습니다.'); $('start').focus(); return; }
+      if (!periodTouched) {
+        const ok = confirm(`⚠️ 분석 기간을 직접 설정하지 않았습니다.\n\n현재 기간: ${s} ~ ${e}\n\n확인하려는 기간이 이게 맞습니까? 정확한 기간을 설정해야 정확한 데이터가 나오고, 질문마다 토큰(비용)이 소모됩니다.\n\n이 기간으로 진행할까요?`);
+        if (!ok) { $('start').focus(); return; }
+        periodTouched = true; // 한 번 확인하면 다시 묻지 않음
+      }
+      $('input').value = '';
+      addRow('user', esc(q));
+      busy = true; $('send').disabled = true;
+      const t = addRow('ai', '<span class="typing">분석 중… (수 초 소요)</span>');
+      try {
+        const url = `/api/ai/chat?msg=${enc(q)}&start=${enc(s)}&end=${enc(e)}` + (currentId ? `&id=${enc(currentId)}` : '');
+        const j = await (await fetch(url)).json();
+        if (!j.ok) throw new Error(j.error || '실패');
+        currentId = j.id;
+        t.querySelector('.bubble').innerHTML = mdLite(j.text || '(빈 응답)') + `<div class="meta">모델 ${esc(j.model || '')} · 구간 ${esc(s || '?')} ~ ${esc(e || '?')}</div>`;
+        $('messages').scrollTop = $('messages').scrollHeight;
+        loadList();
+      } catch (err) {
+        const miss = /키 미설정|insufficient_quota|quota/i.test(err.message);
+        t.querySelector('.bubble').innerHTML = `<div class="err">오류: ${esc(err.message)}${miss ? '<br>OpenAI/Anthropic 키·크레딧을 확인하세요.' : ''}</div>`;
+      } finally { busy = false; $('send').disabled = false; $('input').focus(); }
+    }
+
+    async function loadList() {
+      try {
+        const j = await (await fetch('/api/ai/chats')).json();
+        const box = $('chatList');
+        if (!j.ok || !j.chats.length) { box.innerHTML = '<div class="list-empty">아직 저장된 대화가 없습니다.</div>'; return; }
+        box.innerHTML = j.chats.map((c) => `
+          <div class="chat-item${c.id === currentId ? ' active' : ''}" data-id="${c.id}">
+            <div class="ti"><div class="t">${esc(c.title || '대화')}</div><div class="m">${(c.start || '') + (c.start ? '~' + (c.end || '') : '')} · ${c.turns}문답</div></div>
+            <button class="del" data-del="${c.id}" title="삭제">🗑</button>
+          </div>`).join('');
+        box.querySelectorAll('.chat-item').forEach((it) => it.addEventListener('click', (ev) => {
+          if (ev.target.closest('.del')) return;
+          openChat(it.dataset.id);
+        }));
+        box.querySelectorAll('.del').forEach((b) => b.addEventListener('click', (ev) => { ev.stopPropagation(); delChat(b.dataset.del); }));
+      } catch (_) {}
+    }
+
+    async function openChat(id) {
+      try {
+        const j = await (await fetch(`/api/ai/chat/get?id=${enc(id)}`)).json();
+        if (!j.ok) throw new Error(j.error);
+        currentId = j.chat.id;
+        if (j.chat.start) $('start').value = j.chat.start;
+        if (j.chat.end) $('end').value = j.chat.end;
+        renderMessages(j.chat.messages);
+        loadList();
+      } catch (_) {}
+    }
+
+    async function delChat(id) {
+      if (!confirm('이 대화를 삭제할까요?')) return;
+      try {
+        await fetch(`/api/ai/chat/delete?id=${enc(id)}`);
+        if (id === currentId) newChat();
+        loadList();
+      } catch (_) {}
+    }
+
+    function newChat() { currentId = null; welcome(); loadList(); $('input').focus(); }
+
+    // 초기화
+    (function init() {
+      const qs = new URLSearchParams(location.search);
+      const today = new Date();
+      $('start').value = qs.get('start') || `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+      $('end').value = qs.get('end') || ymd(today);
+      // 대시보드에서 구간을 들고 넘어왔으면(=의도적으로 설정) 경고 생략
+      if (qs.get('start') && qs.get('end')) periodTouched = true;
+      ['start', 'end'].forEach((id) => $(id).addEventListener('change', () => { periodTouched = true; }));
+      $('newChat').addEventListener('click', newChat);
+      $('send').addEventListener('click', send);
+      $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+      fetch('/api/ai/status').then((r) => r.json()).then((j) => { if (j && j.model) $('modelTag').textContent = '· ' + j.model; }).catch(() => {});
+      welcome();
+      loadList();
+    })();
+  </script>
+</body>
+</html>

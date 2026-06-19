@@ -41,9 +41,9 @@ const cafe24Products = require('./lib/cafe24Products');
 const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
 const cafe24Coupons = require('./lib/cafe24Coupons');
-const forecast = require('./lib/forecast');
 const bizadvisor = require('./lib/bizadvisor');
 const ai = require('./lib/ai');
+const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
 const PUBLIC = path.join(__dirname, 'public');
@@ -451,19 +451,6 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponProductBreakdown(name, start, end)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  // 발주 예측 — 이카운트 전체 몰 (productName×color) 최근 N완료월 월평균 판매수량
-  if (u.pathname === '/api/forecast/sales') {
-    const months = Math.max(1, Math.min(+u.searchParams.get('months') || 3, 12));
-    try { return sendJson(res, 200, { ok: true, ...(await forecast.salesForecast({ months })) }); }
-    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
-  }
-  // 발주 판단 — 실시간 재고 ↔ 판매예측 조인 (소진예상·발주필요·제안수량)
-  if (u.pathname === '/api/forecast/reorder') {
-    const months = Math.max(1, Math.min(+u.searchParams.get('months') || 3, 12));
-    const targetMonths = Math.max(0.5, Math.min(+u.searchParams.get('target') || 1, 6));
-    try { return sendJson(res, 200, { ok: true, ...(await forecast.reorderPlan({ months, targetMonths })) }); }
-    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
-  }
   // 이카운트 확정 매출(출고 기준) — store별(홈페이지=자사몰, 스마트스토어). 대시보드 API매출 옆 병기용.
   if (u.pathname === '/api/ecount/revenue') {
     const storeName = u.searchParams.get('store') || '';
@@ -510,6 +497,40 @@ async function handle(req, res) {
     const end = u.searchParams.get('end') || '';
     if (!q.trim()) return sendJson(res, 400, { ok: false, error: '질문을 입력하세요' });
     try { return sendJson(res, 200, { ok: true, ...(await ai.ask(q, start, end)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // ── AI 채팅(멀티턴) — 대화 히스토리는 DB(ai_chats)가 source of truth. GET 으로 두어 읽기전용 배포에서도 동작 ──
+  if (u.pathname === '/api/ai/chat') {
+    const id = u.searchParams.get('id') || '';
+    const msg = u.searchParams.get('msg') || '';
+    const start = u.searchParams.get('start') || '';
+    const end = u.searchParams.get('end') || '';
+    if (!msg.trim()) return sendJson(res, 400, { ok: false, error: '질문을 입력하세요' });
+    try {
+      let conv = id ? await aiChats.get(id) : null;
+      if (!conv) conv = await aiChats.create(start, end);
+      conv.messages = conv.messages || [];
+      const now = new Date().toISOString();
+      conv.messages.push({ role: 'user', content: msg, ts: now });
+      if (!conv.title || conv.title === '새 대화') conv.title = msg.slice(0, 40);
+      if (start) conv.start = start;
+      if (end) conv.end = end;
+      const r = await ai.chat(conv.messages, conv.start, conv.end);
+      conv.messages.push({ role: 'assistant', content: r.text, ts: new Date().toISOString(), model: r.model });
+      await aiChats.save(conv);
+      return sendJson(res, 200, { ok: true, id: conv.id, title: conv.title, text: r.text, model: r.model });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/ai/chats') { // 대화 목록
+    try { return sendJson(res, 200, { ok: true, chats: await aiChats.list() }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/ai/chat/get') { // 대화 1건(전체 메시지)
+    try { const conv = await aiChats.get(u.searchParams.get('id') || ''); return sendJson(res, conv ? 200 : 404, conv ? { ok: true, chat: conv } : { ok: false, error: '대화 없음' }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/ai/chat/delete') { // 대화 삭제
+    try { const n = await aiChats.remove(u.searchParams.get('id') || ''); return sendJson(res, 200, { ok: true, deleted: n }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   // ── Cafe24 상품 검색 (프로모션 대상 선택용) ──

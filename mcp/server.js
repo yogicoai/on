@@ -69,12 +69,21 @@ function build() {
   }));
 
   server.registerTool('marketing_inflow', {
-    title: '마케팅채널 유입수(비즈어드바이저)',
-    description: '기간 채널별 유입수 합계 (스마트스토어 비즈어드바이저 적재 기준, on.bizInflow)',
+    title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',
+    description: '기간 스마트스토어 유입수: 일별 총유입 + 채널별 합계 + (기간 짧으면)일별×채널 상세. ' +
+      'on.bizInflow에 일별 데이터가 적재돼 있음 — "일별 유입은 월합산만" 같은 추정 금지, 일별까지 이 도구로 제공.',
     inputSchema: D,
   }, wrap(async ({ start, end }) => {
     const s = await bizadvisor.summary(start, end);
-    return { from: s.from, to: s.to, 합계유입: s.grandTotal, 채널별: s.channels.map((c) => ({ 채널: c, 유입수: s.totalsByChannel[c] })) };
+    const days = s.days || [];
+    const out = {
+      from: s.from, to: s.to, 합계유입: s.grandTotal,
+      채널별합계: s.channels.map((c) => ({ 채널: c, 유입수: s.totalsByChannel[c] })),
+      일별총유입: days.map((d) => ({ 날짜: d.date, 총유입: d.total })),
+    };
+    if (days.length <= 62) out.일별채널별 = days; // 날짜×채널 상세(기간 짧을 때)
+    else out.안내 = '기간이 길어 일별×채널 상세는 생략(일별총유입·채널합계만). 한 달 이내로 좁히면 일별×채널도 제공.';
+    return out;
   }));
 
   server.registerTool('other_channels', {

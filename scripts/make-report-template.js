@@ -40,6 +40,18 @@ html = removeBetween(html, '<button class="tab" data-tab="t7">', '</button>');
   if (e < 0) { console.warn('  ⚠ TARGET_CONFIG 닫는 }; 못 찾음'); return; }
   html = html.slice(0, s) + 'const TARGET_CONFIG = __DS_TARGET__;' + html.slice(e + 3);
 })();
+// ②-3 헤더에 '← 판매 분석'(대시보드 복귀) 버튼 추가 — 첫 번째 .controls(헤더)
+html = html.replace('<div class="controls">', '<div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a>');
+// ②-4 하드코딩 EXT_CHANNELS(외부채널 사이트별 목표) → placeholder (byMall 목표 주입)
+(function () {
+  const s = html.indexOf('const EXT_CHANNELS = [');
+  if (s < 0) { console.warn('  ⚠ EXT_CHANNELS 못 찾음'); return; }
+  const e = html.indexOf('\n];', s); // 최상위 닫는 ]; (col 0)
+  if (e < 0) { console.warn('  ⚠ EXT_CHANNELS 닫는 ]; 못 찾음'); return; }
+  html = html.slice(0, s) + 'const EXT_CHANNELS = __DS_EXT__;' + html.slice(e + 3);
+})();
+// ②-5 5월 프로모션 리뷰 섹션 제거(숨김) — 데이터 하드코딩 + 월 고정이라 제외
+html = html.replace('<div id="mayPromoReviewSection" style="', '<div id="mayPromoReviewSection" style="display:none;');
 // ③ 데이터 태그 → placeholder
 html = replaceScript(html, 'ds-main', '__DS_MAIN__');
 html = replaceScript(html, 'ds-products', '__DS_PRODUCTS__');
@@ -50,5 +62,5 @@ fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, html);
 console.log(`✅ 템플릿 생성: ${OUT}`);
 console.log(`   크기 ${(before / 1048576).toFixed(2)}MB → ${(html.length / 1048576).toFixed(2)}MB (데이터 제거)`);
-console.log(`   placeholder: ${['__DS_MAIN__', '__DS_PRODUCTS__', '__DS_PROMO__', '__DS_TRAFFIC__', '__DS_TARGET__'].filter((p) => html.includes(p)).length}/5`);
-console.log(`   btnDeploy 남음? ${html.includes('btnDeploy')} · Report Text 탭 남음? ${html.includes('data-tab="t7"')} · TARGET_CONFIG 하드코딩 남음? ${html.includes('"2026-06":')}`);
+console.log(`   placeholder: ${['__DS_MAIN__', '__DS_PRODUCTS__', '__DS_PROMO__', '__DS_TRAFFIC__', '__DS_TARGET__', '__DS_EXT__'].filter((p) => html.includes(p)).length}/6`);
+console.log(`   하드코딩 남음 — TARGET_CONFIG: ${html.includes('"2026-06":')} · EXT_CHANNELS: ${html.includes("name:'쿠팡'")} · 5월리뷰 숨김: ${html.includes('id="mayPromoReviewSection" style="display:none;')}`);

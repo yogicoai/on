@@ -32,6 +32,7 @@ const promoPeriods = require('./lib/promoPeriods');
 const compare = require('./lib/compare');
 const dailySummary = require('./lib/dailySummary');
 const dailyReport = require('./lib/dailyReport');
+const promoTargets = require('./lib/promoTargets');
 const benefit = require('./lib/benefit');
 const smartstore = require('./lib/smartstore');
 const smartstoreIngest = require('./lib/smartstoreIngest');
@@ -106,7 +107,7 @@ async function handle(req, res) {
 
   // 읽기 전용 배포(Vercel)에서는 수집·동기화·설정 변경을 비활성화
   if (process.env.READ_ONLY === '1') {
-    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/cafe24/sync-coupons-from-orders', '/api/cafe24/coupon-by-no', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/target/mall/set', '/api/promo-periods/set', '/api/promo-periods/delete', '/api/promotions/set', '/api/promotions/delete']);
+    const WRITE = new Set(['/api/refresh-week', '/api/refresh-today', '/api/sync-today', '/api/daily-sync', '/api/sync-month', '/api/sync-coupon-names', '/api/cafe24/sync-coupons-from-orders', '/api/cafe24/coupon-by-no', '/api/ingest', '/api/smartstore/sync-month', '/api/smartstore/sync-week', '/api/target/set', '/api/target/mall/set', '/api/promo-periods/set', '/api/promo-periods/delete', '/api/promotions/set', '/api/promotions/delete', '/api/promo-targets/set', '/api/promo-targets/delete', '/api/promo-targets/seed']);
     if (req.method === 'POST' || WRITE.has(u.pathname)) {
       return sendJson(res, 403, { ok: false, error: '읽기 전용 배포입니다. 수집·동기화·설정 변경은 로컬에서 실행하세요.' });
     }
@@ -283,7 +284,8 @@ async function handle(req, res) {
         .replace('__DS_PRODUCTS__', () => JSON.stringify(data.products))
         .replace('__DS_PROMO__', () => JSON.stringify(data.promo))
         .replace('__DS_TRAFFIC__', () => JSON.stringify(data.traffic))
-        .replace('__DS_TARGET__', () => JSON.stringify(data.targetConfig));
+        .replace('__DS_TARGET__', () => JSON.stringify(data.targetConfig))
+        .replace('__DS_EXT__', () => JSON.stringify(data.extChannels));
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(tpl);
     } catch (e) {
@@ -428,6 +430,23 @@ async function handle(req, res) {
   }
   if (u.pathname === '/api/promotions/delete' && req.method === 'POST') {
     try { const b = await readBody(req); await mallPromos.deletePromotion(b.id); return sendJson(res, 200, { ok: true }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  // 전사 프로모션 목표 (채널별 목표매출 + 트래픽 목표) — 리포트 목표 페이스용
+  if (u.pathname === '/api/promo-targets/list') {
+    try { return sendJson(res, 200, { ok: true, items: await promoTargets.listTargets() }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-targets/set' && req.method === 'POST') {
+    try { const b = await readBody(req); return sendJson(res, 200, { ok: true, saved: await promoTargets.setTarget(b) }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-targets/delete' && req.method === 'POST') {
+    try { const b = await readBody(req); await promoTargets.deleteTarget(b.id); return sendJson(res, 200, { ok: true }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-targets/seed' && req.method === 'POST') {
+    try { return sendJson(res, 200, { ok: true, ...(await promoTargets.seedFromPromotions()) }); }
     catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
   // 프로모션 성과 — 등록 프로모션 상품이 기간 내 실제 얼마나 팔렸는지(몰별 매칭)

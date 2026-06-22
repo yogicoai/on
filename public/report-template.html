@@ -146,7 +146,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="brand-sub">요기보코퍼레이션 · 내부 일일 매출 보고용</div>
     </div>
   </div>
-  <div class="controls">
+  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a>
     <label>기준일</label>
     <select id="selDate"></select>
     <label style="margin-left:8px">채널</label>
@@ -2072,7 +2072,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <div class="tab-panel" id="t5" style="display: none;">
 
   <!-- ============ 5월 프로모션 성과 리뷰 (신규 섹션) ============ -->
-  <div id="mayPromoReviewSection" style="border:1.5px solid #D7E8E5;border-radius:16px;padding:20px;margin-bottom:24px;background:linear-gradient(180deg,#F8FBFA,#FFFFFF)" data-month-label="6월">
+  <div id="mayPromoReviewSection" style="display:none;border:1.5px solid #D7E8E5;border-radius:16px;padding:20px;margin-bottom:24px;background:linear-gradient(180deg,#F8FBFA,#FFFFFF)" data-month-label="6월">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px">📊 <span id="mayPromoReviewTitle">6월 프로모션 성과 리뷰</span> <span style="font-size:11px;font-weight:500;color:var(--mute);background:#E6F2F0;padding:3px 9px;border-radius:99px">자동 생성</span></h2>
@@ -3607,18 +3607,7 @@ const CAT_COLORS = {
 };
 
 // External-channel site-level data (5월_매출 sheet R88-R101, 5월 누적 기준)
-const EXT_CHANNELS = [
-  {name:'쿠팡',          target:25000000, cum:2763500, mom:-0.7804, yoy:-0.7802},
-  {name:'롯데홈쇼핑',    target: 5000000, cum: 396000, mom:-0.5705, yoy:-0.7765},
-  {name:'오늘의집',      target: 8000000, cum:1179000, mom:-0.6108, yoy:-0.7280},
-  {name:'29CM',          target: 5000000, cum: 154000, mom:-0.9274, yoy:null},
-  {name:'신세계센텀',    target: 2000000, cum: 453800, mom:-0.7639, yoy: 0.8033},
-  {name:'삼성카드 쇼핑', target: 2000000, cum: 363900, mom:-0.8523, yoy:-0.9276},
-  {name:'현대이지웰',    target: 3000000, cum:  57000, mom:-0.9341, yoy:-0.9740},
-  {name:'롯데동탄',      target: 1000000, cum:  52800, mom:-0.9471, yoy:-0.7913},
-  {name:'신세계몰',      target: 2000000, cum:  62800, mom:-0.9664, yoy:-0.9554},
-  {name:'현대M포인트몰', target: 2000000, cum: 256000, mom:null,    yoy:-0.6175}
-];
+const EXT_CHANNELS = __DS_EXT__;
 
 // Promotions sourced from "전사" column in raw data (자사몰/스마트스토어 only)
 // Group by month (e.g. "2026-05") so individual discount rates are merged per month

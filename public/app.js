@@ -2938,19 +2938,38 @@ function buildPromoTargetUi() {
   el('ptNew').addEventListener('click', () => renderPtForm(null));
   el('ptSeed').addEventListener('click', ptSeed);
 }
+let _ptMonth = null; // 프로모션 목표 목록 필터 월 (그 달 '시작' 프로모션만)
 function openPromoTargetUi() {
   buildPromoTargetUi();
   el('promoTgtModal').style.display = 'flex'; document.body.style.overflow = 'hidden';
+  _ptMonth = (((el('end') && el('end').value) || rangeFor('today')[0]) || '').slice(0, 7); // 현재(선택) 월부터
+  loadPtList();
+}
+function ptShiftMonth(delta) {
+  const [y, m] = (_ptMonth || rangeFor('today')[0].slice(0, 7)).split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  _ptMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   loadPtList();
 }
 async function loadPtList() {
   const box = el('ptList'); if (!box) return;
+  if (!_ptMonth) _ptMonth = (((el('end') && el('end').value) || rangeFor('today')[0]) || '').slice(0, 7);
   try {
     const j = await (await fetch('/api/promo-targets/list')).json();
-    const items = (j.ok && j.items) || [];
-    if (!items.length) { box.innerHTML = '<div class="empty">등록된 프로모션 목표가 없습니다 — “⤓ 기존 프로모션 불러오기” 또는 “+ 새 프로모션 목표”</div>'; return; }
-    box.innerHTML = `<table style="width:100%;font-size:13px"><thead><tr><th>프로모션</th><th>기간</th><th class="num">자사몰</th><th class="num">스마트스토어</th><th class="num">외부채널</th><th></th></tr></thead><tbody>${
-      items.map((p) => `<tr><td><b>${ae(p.name)}</b></td><td class="muted">${p.start} ~ ${p.end}</td><td class="num">${won(p.channels.자사몰 || 0)}</td><td class="num">${won(p.channels.스마트스토어 || 0)}</td><td class="num">${won(p.channels.외부채널 || 0)}</td><td style="white-space:nowrap"><button class="linklike" type="button" data-pt-edit="${enc(JSON.stringify(p))}">수정</button> · <button class="linklike neg" type="button" data-pt-del="${p.id}">삭제</button></td></tr>`).join('')}</tbody></table>`;
+    const all = (j.ok && j.items) || [];
+    const items = all.filter((p) => (p.start || '').slice(0, 7) === _ptMonth); // 그 달 '시작' 프로모션
+    const nav = `<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap">
+      <button class="btn ghost mini" type="button" id="ptPrev">◀ 이전달</button>
+      <b style="font-size:14px;min-width:76px;text-align:center">${_ptMonth}</b>
+      <button class="btn ghost mini" type="button" id="ptNext">다음달 ▶</button>
+      <span class="muted" style="font-size:12px">이 달 시작 프로모션 ${items.length}개${all.length ? ` · 전체 ${all.length}` : ''}</span>
+    </div>`;
+    box.innerHTML = nav + (items.length
+      ? `<table style="width:100%;font-size:13px"><thead><tr><th>프로모션</th><th>기간</th><th class="num">자사몰</th><th class="num">스마트스토어</th><th class="num">외부채널</th><th></th></tr></thead><tbody>${
+        items.map((p) => `<tr><td><b>${ae(p.name)}</b></td><td class="muted">${p.start} ~ ${p.end}</td><td class="num">${won(p.channels.자사몰 || 0)}</td><td class="num">${won(p.channels.스마트스토어 || 0)}</td><td class="num">${won(p.channels.외부채널 || 0)}</td><td style="white-space:nowrap"><button class="linklike" type="button" data-pt-edit="${enc(JSON.stringify(p))}">수정</button> · <button class="linklike neg" type="button" data-pt-del="${p.id}">삭제</button></td></tr>`).join('')}</tbody></table>`
+      : '<div class="empty">이 달에 시작한 프로모션 목표가 없습니다 — “+ 새 프로모션 목표” 또는 “⤓ 기존 프로모션 불러오기”</div>');
+    el('ptPrev').addEventListener('click', () => ptShiftMonth(-1));
+    el('ptNext').addEventListener('click', () => ptShiftMonth(1));
     box.querySelectorAll('[data-pt-edit]').forEach((b) => b.addEventListener('click', () => renderPtForm(JSON.parse(decodeURIComponent(b.dataset.ptEdit)))));
     box.querySelectorAll('[data-pt-del]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('이 프로모션 목표를 삭제할까요?')) return; await fetch('/api/promo-targets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.dataset.ptDel }) }); loadPtList(); }));
   } catch (e) { box.innerHTML = `<div class="empty">오류: ${e.message}</div>`; }
@@ -3019,4 +3038,5 @@ async function ptSeed() {
   buildAiUi(); // AI 분석 모달
   buildPromoCalendar(); // 프로모션 달력 모달(헤더 버튼)
   { const ptBtn = el('btnPromoTgt'); if (ptBtn) ptBtn.addEventListener('click', openPromoTargetUi); } // 전사 프로모션 목표
+  if (/[?&]openpt=1/.test(location.search)) { try { openPromoTargetUi(); } catch (_) {} } // 리포트 '🎯 목표 설정'에서 진입
 })();

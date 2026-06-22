@@ -41,7 +41,9 @@ html = removeBetween(html, '<button class="tab" data-tab="t7">', '</button>');
   html = html.slice(0, s) + 'const TARGET_CONFIG = __DS_TARGET__;' + html.slice(e + 3);
 })();
 // ②-3 헤더에 '← 판매 분석'(대시보드 복귀) 버튼 추가 — 첫 번째 .controls(헤더)
-html = html.replace('<div class="controls">', '<div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a>');
+html = html.replace('<div class="controls">', '<div class="controls">' +
+  '<a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a>' +
+  '<a href="/?openpt=1" class="btn" title="프로모션 목표 추가·수정 (대시보드에서 열림)" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a>');
 // ②-4 하드코딩 EXT_CHANNELS(외부채널 사이트별 목표) → placeholder (byMall 목표 주입)
 (function () {
   const s = html.indexOf('const EXT_CHANNELS = [');

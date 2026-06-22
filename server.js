@@ -282,7 +282,8 @@ async function handle(req, res) {
       tpl = tpl.replace('__DS_MAIN__', () => JSON.stringify(data.main))
         .replace('__DS_PRODUCTS__', () => JSON.stringify(data.products))
         .replace('__DS_PROMO__', () => JSON.stringify(data.promo))
-        .replace('__DS_TRAFFIC__', () => JSON.stringify(data.traffic));
+        .replace('__DS_TRAFFIC__', () => JSON.stringify(data.traffic))
+        .replace('__DS_TARGET__', () => JSON.stringify(data.targetConfig));
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(tpl);
     } catch (e) {

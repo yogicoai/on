@@ -2571,6 +2571,14 @@ function createPromoCalendar(host, opts) {
           <label class="grow">프로모션명 <input type="text" class="pcv-name" value="${promo ? ae(promo.name) : ''}" placeholder="예: 6월 여름 프로모션"></label>
           <label>시작 <input type="date" class="pcv-start" value="${start}"></label>
           <label>종료 <input type="date" class="pcv-end" value="${end}"></label>
+          <label>목표 매출(원) <input type="number" class="pcv-target" min="0" step="100000" value="${promo && promo.target ? promo.target : ''}" placeholder="예: 90000000" style="width:140px"></label>
+        </div>
+        <div class="pc-edsub" style="margin-top:10px">트래픽 KPI 목표 <span class="muted" style="font-weight:400">(자사몰 기준 · 일평균)</span></div>
+        <div class="pc-edform">
+          <label>방문수/일 <input type="number" class="pcv-tg-visits" min="0" value="${promo && promo.trafficTargets ? (promo.trafficTargets.visits || '') : ''}" placeholder="예: 950" style="width:90px"></label>
+          <label>가입수/일 <input type="number" class="pcv-tg-signups" min="0" step="0.1" value="${promo && promo.trafficTargets ? (promo.trafficTargets.signups || '') : ''}" placeholder="예: 34" style="width:90px"></label>
+          <label>구매율(%) <input type="number" class="pcv-tg-prate" min="0" step="0.01" value="${promo && promo.trafficTargets && promo.trafficTargets.purchaseRate ? (promo.trafficTargets.purchaseRate * 100) : ''}" placeholder="예: 1.85" style="width:90px"></label>
+          <label>가입률(%) <input type="number" class="pcv-tg-srate" min="0" step="0.01" value="${promo && promo.trafficTargets && promo.trafficTargets.signupRate ? (promo.trafficTargets.signupRate * 100) : ''}" placeholder="예: 3.57" style="width:90px"></label>
         </div>
         <label class="pc-memo">상세 프로모션 계획 <textarea class="pcv-memo" rows="3" placeholder="혜택 구성 · 배너/노출 위치 · 타깃 · 목표 KPI 등 상세 계획을 메모하세요">${promo ? ae(promo.memo || '') : ''}</textarea></label>
       </div>
@@ -2780,11 +2788,18 @@ function createPromoCalendar(host, opts) {
   }
   async function save() {
     const mall = scopeMall || $('.pcv-mall').value, name = $('.pcv-name').value.trim(), start = $('.pcv-start').value, end = $('.pcv-end').value, memo = $('.pcv-memo').value.trim();
+    const target = Math.round(+$('.pcv-target').value || 0);
+    const trafficTargets = {
+      visits: Math.round(+$('.pcv-tg-visits').value || 0),
+      signups: Math.round((+$('.pcv-tg-signups').value || 0) * 10) / 10,
+      purchaseRate: (+$('.pcv-tg-prate').value || 0) / 100,
+      signupRate: (+$('.pcv-tg-srate').value || 0) / 100,
+    };
     if (!name || !start || !end) { $('.pcv-msg').textContent = '이름·시작·종료를 입력하세요'; return; }
     if (end < start) { $('.pcv-msg').textContent = '종료일이 시작일보다 빠릅니다'; return; }
     $('.pcv-msg').textContent = '저장 중…';
     try {
-      const body = { mall, name, start, end, memo, products: selected, coupons: selectedCoupons };
+      const body = { mall, name, start, end, memo, target, trafficTargets, products: selected, coupons: selectedCoupons };
       if (editId) body.id = editId;
       const j = await (await fetch('/api/promotions/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
       if (!j.ok) throw new Error(j.error);

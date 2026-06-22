@@ -30,6 +30,8 @@ const segments = require('./lib/segments');
 const target = require('./lib/target');
 const promoPeriods = require('./lib/promoPeriods');
 const compare = require('./lib/compare');
+const dailySummary = require('./lib/dailySummary');
+const dailyReport = require('./lib/dailyReport');
 const benefit = require('./lib/benefit');
 const smartstore = require('./lib/smartstore');
 const smartstoreIngest = require('./lib/smartstoreIngest');
@@ -263,6 +265,38 @@ async function handle(req, res) {
   // 일일 점검: 선택일의 '같은 요일 평균' 대비 방문수·일일매출 (평균 미달 시 경고용)
   if (u.pathname === '/api/cafe24/daily-health') {
     try { return sendJson(res, 200, { ok: true, ...(await analytics.dailyHealth(u.searchParams.get('date'), u.searchParams.get('weeks'))) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 자사몰 일일요약+일일점검: 일일매출(전일비)·누적매출(전년/전월/전주)·주문수/객단가·방문수/가입수/구매율
+  if (u.pathname === '/api/cafe24/daily-summary') {
+    const date = u.searchParams.get('date') || report.yesterdayStr();
+    try { return sendJson(res, 200, { ok: true, ...(await dailySummary.dailySummary(date)) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 통합분석 리포트 — 일일매출보고 템플릿 + 라이브 데이터(이카운트 4개 채널) 주입한 단일 HTML
+  if (u.pathname === '/api/report') {
+    const date = u.searchParams.get('date') || report.yesterdayStr();
+    try {
+      const data = await dailyReport.buildReport(date);
+      let tpl = fs.readFileSync(path.join(process.cwd(), 'public', 'report-template.html'), 'utf8');
+      tpl = tpl.replace('__DS_MAIN__', () => JSON.stringify(data.main))
+        .replace('__DS_PRODUCTS__', () => JSON.stringify(data.products))
+        .replace('__DS_PROMO__', () => JSON.stringify(data.promo))
+        .replace('__DS_TRAFFIC__', () => JSON.stringify(data.traffic));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(tpl);
+    } catch (e) {
+      console.error('report 실패:', e);
+      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end('<h3>리포트 생성 실패: ' + String(e.message) + '</h3>');
+    }
+  }
+  // 스토어별 '이달 누적' 동기간 비교 (이카운트 출고 기준) — 스마트스토어 등 채널 카드용
+  if (u.pathname === '/api/ecount/period-compare') {
+    const storeName = u.searchParams.get('store') || '';
+    const date = u.searchParams.get('date') || report.yesterdayStr();
+    if (!storeName) return sendJson(res, 400, { ok: false, error: 'store 필요' });
+    try { return sendJson(res, 200, { ok: true, ...(await dailySummary.storeMtdSummary(storeName, date)) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   // 트래픽 월별 (2025-01~현재) — 방문/가입 전년 동월 비교(YoY)

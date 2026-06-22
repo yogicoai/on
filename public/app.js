@@ -4,6 +4,7 @@
 const won = (n) => '₩' + Math.round(+n || 0).toLocaleString('ko-KR');
 const num = (n) => (+n || 0).toLocaleString('ko-KR');
 const pct = (n) => ((+n || 0) * 100).toFixed(1) + '%';
+const manwon = (n) => Math.round((+n || 0) / 10000).toLocaleString('ko-KR') + '만'; // 동기간 비교 축약 표기
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const el = (id) => document.getElementById(id);
@@ -144,7 +145,7 @@ async function load(force, funnel) {
     if (!j.ok) throw new Error(j.error || '실패');
     lastData = j;
     render(j);
-    loadDailyHealth(); // 같은 요일 평균 대비 방문·일일매출 경고(비차단)
+    loadDailySummary(); // 상단 일일요약 KPI 값 + 하단 일일점검(방문/가입/구매율) 채움(비차단)
     const cache = j._cache && j._cache.hit ? `캐시 (${new Date(j._cache.computedAt).toLocaleString('ko-KR')} 집계)` : `라이브 집계 ${j.elapsedMs}ms`;
     setStatus(`${start} ~ ${end} · 주문 ${num(j.ordersCount)}건 · ${cache}`, 'ok');
   } catch (e) {
@@ -157,47 +158,75 @@ async function load(force, funnel) {
 }
 function setStatus(msg, cls) { el('status').innerHTML = `<span class="${cls}">${msg}</span>`; }
 
-// 같은 요일 평균 대비 방문수·일일매출 경고 (Cafe24). 선택한 날짜(=종료일) 기준으로 점검.
-//   오늘을 고르면 오늘을 점검(진행중·미완료라 평균 대비 낮게 나오는 게 정상 → '진행중' 표기).
-async function loadDailyHealth() {
-  const box = el('dailyHealth'); if (!box) return;
+// ■ 일일요약 + 일일점검 — 자사몰 선택일(=종료일) 기준. /api/cafe24/daily-summary 한 번으로 둘 다 채움.
+//   일일요약: 상단 KPI 카드(일일매출·누적매출·주문수/객단가) · 일일점검: 방문수·가입수·구매율(목표 대비)
+async function loadDailySummary() {
   const today = rangeFor('today')[0];
-  const end = el('end').value || today;
-  const hd = (end > today) ? today : end; // 선택한 종료일 그대로(미래면 오늘로 클램프)
-  const partial = (hd >= today); // 오늘이면 진행중(미완료일)
+  const end = (el('end') && el('end').value) || today;
+  const date = (end > today) ? today : end; // 미래면 오늘로 클램프
   try {
-    const j = await (await fetch(`/api/cafe24/daily-health?date=${hd}&weeks=8`)).json();
-    if (!j.ok) { box.innerHTML = ''; return; }
-    // 방문수 day값을 상단 KPI(방문수)와 '같은 출처'로 맞춘다.
-    //   overview(=lastData.inflow)는 캐시 스냅샷, daily-health 는 라이브라, 진행중인 오늘은
-    //   값이 어긋난다(예: KPI 345 vs 라이브 359). 화면 일관성을 위해 inflow.daily 의 hd 방문수로 덮어씀.
-    try {
-      const row = lastData && lastData.inflow && lastData.inflow.daily && lastData.inflow.daily.find((r) => r.date === hd);
-      if (row && typeof row.visits === 'number') {
-        j.visits.day = row.visits;
-        j.visits.diff = row.visits - j.visits.avg;
-        j.visits.below = row.visits < j.visits.avg;
-      }
-    } catch (_) {}
-    const md = `${+hd.slice(5, 7)}/${+hd.slice(8, 10)}`;
-    const chip = (label, m, fmt) => {
-      const has = m.avg > 0;
-      const p = has ? Math.round(m.diff / m.avg * 100) : 0;
-      const arrow = m.diff >= 0 ? '▲' : '▼';
-      const cls = !has ? 'dh-na' : (m.below ? 'dh-bad' : 'dh-good');
-      const gap = !has ? '평균 데이터 없음' : (m.below ? `평균보다 ${fmt(Math.abs(m.diff))} 모자람` : `평균보다 ${fmt(Math.abs(m.diff))} 많음`);
-      return `<div class="dh-chip ${cls}">
-        <div class="dh-lbl">${label} <span class="muted">(${md} ${j.label})</span></div>
-        <div class="dh-big">${has ? `${arrow} ${Math.abs(p)}%` : '-'}</div>
-        <div class="dh-day">${fmt(m.day)}</div>
-        <div class="dh-sub">${j.label}요일 평균 ${fmt(m.avg)} · <b>${gap}</b></div>
-      </div>`;
-    };
-    box.innerHTML = `<div class="dh-card">
-      <div class="dh-title">일일 점검 <span class="muted">· ${md}(${j.label})${partial ? ' <span class="pos">진행중(미완료일)</span>' : ''} · 최근 ${j.samples}개 ${j.label}요일 평균 대비</span></div>
-      <div class="dh-chips">${chip('일일 매출', j.sales, won)}${chip('방문수', j.visits, num)}</div>
-    </div>`;
-  } catch (_) { box.innerHTML = ''; }
+    const j = await (await fetch(`/api/cafe24/daily-summary?date=${enc(date)}`)).json();
+    if (!j.ok) throw new Error(j.error || '실패');
+    fillSummaryKpis(j);
+    renderDailyCheck(j);
+  } catch (_) {
+    const box = el('dailyHealth'); if (box) box.innerHTML = '';
+  }
+}
+
+// 상단 일일요약 KPI 카드 값 채우기 (일일매출·누적매출·주문수/객단가)
+function fillSummaryKpis(j) {
+  const arr = (r) => (r == null ? '' : (r >= 0 ? '▲' : '▼'));
+  const cl = (r) => (r == null ? 'muted' : (r >= 0 ? 'pos' : 'neg'));
+  const pv = (r) => (r == null ? '-' : Math.abs(r * 100).toFixed(1) + '%');
+  const set = (id, html) => { const x = el(id); if (x) { x.innerHTML = html; x.classList.remove('muted'); } };
+  // 1) 일일매출 + 전일비
+  set('dsRevenue', won(j.daily.revenue));
+  set('dsRevSub', `전일비 <b class="${cl(j.daily.rate)}">${arr(j.daily.rate)} ${pv(j.daily.rate)}</b> · 전일 ${won(j.daily.prevRevenue)}`);
+  // 2) 누적매출 + 전년/전월/전주 동기간
+  const m = j.mtd;
+  set('dsMtd', won(m.revenue));
+  const cmp = (p, label) => `${label} <b class="${cl(p.rate)}">${arr(p.rate)}${pv(p.rate)}</b> ${manwon(p.revenue)}`;
+  set('dsMtdSub', `${cmp(m.yoy, '전년')}<br>${cmp(m.mom, '전월')}<br>${cmp(m.wow, '전주')}`);
+  // 3) 주문수 · 객단가 (이달 누적)
+  set('dsOrders', `${num(m.orders)}<span style="font-size:14px;font-weight:600">건</span> <span style="font-size:15px;color:var(--muted);font-weight:600">· ${won(m.aov)}</span>`);
+  const oc = (p, label) => `${label} <b class="${cl(p.ordersRate)}">${arr(p.ordersRate)}${pv(p.ordersRate)}</b>`;
+  set('dsOrdSub', `주문 ${oc(m.yoy, '전년')}·${oc(m.mom, '전월')}·${oc(m.wow, '전주')}<br>객단가 전년 ${manwon(m.yoy.aov)}·전월 ${manwon(m.mom.aov)}·전주 ${manwon(m.wow.aov)}`);
+}
+
+// 하단 일일점검 — 방문수·가입수·구매율 (목표=같은요일 평균 / 구매율 목표 1.5%)
+function renderDailyCheck(j) {
+  const box = el('dailyHealth'); if (!box) return;
+  const md = `${+j.date.slice(5, 7)}/${+j.date.slice(8, 10)}`, wl = j.weekdayLabel;
+  const v = j.check.visits, g = j.check.signups, p = j.check.purchaseRate;
+  const card = (label, big, line1, line2, sub, bad) => `<div class="dh-chip ${bad ? 'dh-bad' : 'dh-good'}">
+      <div class="dh-lbl">${label}</div>
+      <div class="dh-big"><span class="pre">오늘 </span>${big}</div>
+      ${line1 ? `<div class="dh-line">${line1}</div>` : ''}
+      ${line2 ? `<div class="dh-line">${line2}</div>` : ''}
+      <div class="dh-sub">${sub}</div></div>`;
+  // 방문수
+  const vRate = v.achieveRate, vBad = (v.gap < 0);
+  const vTrend = vRate != null ? (vRate < 1 ? `▼${Math.round((1 - vRate) * 100)}%` : `▲${Math.round((vRate - 1) * 100)}%`) : '-';
+  const visitCard = card('방문수', `${num(v.today)}명`,
+    `목표 ${num(v.target)}명 대비 <b class="${vBad ? 'neg' : 'pos'}">${v.gap >= 0 ? '+' : ''}${num(v.gap)}명 ${vBad ? '부족' : '초과'}</b>`,
+    `달성률 <b>${vRate != null ? (vRate * 100).toFixed(1) + '%' : '-'}</b>`,
+    `${wl}요일 평균 ${num(v.target)}명 · 최근 ${j.samples}주 ${wl}요일 대비 ${vTrend}`, vBad);
+  // 가입수
+  const gBad = (g.gap < 0), gGap = Math.round(g.gap * 10) / 10;
+  const signupCard = card('가입수', `${num(g.today)}명`,
+    `목표 ${g.target}명 대비 <b class="${gBad ? 'neg' : 'pos'}">${gGap >= 0 ? '+' : ''}${gGap}명 ${gBad ? '부족' : '초과'}</b>`,
+    `가입전환율 <b>${(g.conversionRate * 100).toFixed(2)}%</b>`,
+    `방문수 대비 가입전환율 기준`, gBad);
+  // 구매율
+  const pGap = (p.today - p.target) * 100, pBad = (pGap < 0);
+  const buyCard = card('구매율', `${(p.today * 100).toFixed(2)}%`,
+    `목표 ${(p.target * 100).toFixed(1)}% 대비 <b class="${pBad ? 'neg' : 'pos'}">${pGap >= 0 ? '+' : ''}${pGap.toFixed(1)}%p ${pBad ? '부족' : '초과'}</b>`,
+    '',
+    `결제완료 주문수 ÷ 방문수 기준 (주문 ${num(p.orders)} ÷ 방문 ${num(p.visits)})`, pBad);
+  box.innerHTML = `<div class="dh-card">
+    <div class="dh-title">일일 점검 <span class="muted">· ${md}(${wl}) · 최근 ${j.samples}주 ${wl}요일 평균 대비</span></div>
+    <div class="dh-chips cols3">${visitCard}${signupCard}${buyCard}</div></div>`;
 }
 
 // ── 렌더 ──
@@ -208,35 +237,28 @@ function render(d) {
   renderPromo(d.productPromo, d.funnel);
 }
 
-function renderKpis(d) {
-  const t = d.inflow.totals, m = d.members.total, f = d.funnel.totals;
-  const dp = d.directPromo || { sales: 0, orders: 0, directDiscount: 0 };
-  const funnelPending = d.funnel && d.funnel.pending; // 아직 워밍 안 된 구간 → 쿠폰 집계 준비중
+// 상단 ■ 일일요약 — 일일매출(전일비) / 누적매출(전년·전월·전주) / 주문수·객단가 / 프로모션성과.
+//   값은 loadDailySummary() 가 /api/cafe24/daily-summary 로 비동기 채움(프로모션은 loadKpiPromoPerf).
+function renderKpis() {
   const cards = [
-    { label: '방문수', val: num(t.visits), sub: `신규 ${pct(t.newRatio)} · 일평균 ${num(t.avgDaily)}`, cls: 'accent', act: 'tab:inflow' },
-    { label: '총 매출 <span class="hint" style="font-weight:500">주문일·API</span>', val: won(m.revenue), sub: `결제 ${num(m.paidOrders)}건 · 객단가 ${won(m.aov)} · 클릭=카테고리×등급<br><span id="kpiEcRev" class="muted" style="font-size:11px">🧾 이카운트 판매 집계중…</span>`, cls: 'green', act: 'sales' },
-    { label: '회원 매출비중', val: pct(m.memberRevenueShare), sub: `회원주문 ${pct(m.memberOrderShare)}`, act: 'tab:members' },
-    { label: '프로모션 성과', val: '<span id="kpiPromoPerf" class="muted" style="font-size:18px">집계 중…</span>', sub: '<span id="kpiPromoSub">그달 진행 프로모션 · 자사몰 쿠폰 기준 · 클릭 시 ③ 프로모션 매출</span>', cls: 'pink', act: 'tab:buyers' },
-    { label: '쿠폰 사용(프로모션)',
-      val: funnelPending ? '집계 전' : num(f.used),
-      sub: funnelPending
-        ? '쿠폰 집계는 매일 0시 자동 (오늘분은 익일 반영) · <button id="funnelNow" class="linklike" data-stop="1">지금 집계 ▸</button>'
-        : `발급 ${num(f.issued)} · 사용률 ${pct(f.useRate)} · 매출 ${won(f.revenue)}`,
-      cls: 'pink', act: funnelPending ? '' : 'tab:buyers' },
+    { id: 'dsRevenue', label: '일일 매출 <span class="hint" style="font-weight:500">자사몰·전일비</span>',
+      val: '집계 중…', sub: '<span id="dsRevSub">전일비 집계 중…</span>', cls: 'green', act: 'sales' },
+    { id: 'dsMtd', label: '누적 매출 <span class="hint" style="font-weight:500">이달·이카운트(출고)</span>',
+      val: '집계 중…', sub: '<span id="dsMtdSub">전년/전월/전주 집계 중…</span>', cls: 'accent' },
+    { id: 'dsOrders', label: '주문수 · 객단가 <span class="hint" style="font-weight:500">이달·이카운트</span>',
+      val: '집계 중…', sub: '<span id="dsOrdSub">집계 중…</span>' },
+    { label: '프로모션 성과', val: '<span id="kpiPromoPerf" class="muted" style="font-size:18px">집계 중…</span>',
+      sub: '<span id="kpiPromoSub">그달 진행 프로모션 · 자사몰 쿠폰 기준 · 클릭 시 ③ 프로모션 매출</span>', cls: 'pink', act: 'tab:buyers' },
   ];
   el('kpis').innerHTML = cards.map((c) =>
-    `<div class="kpi clickable ${c.cls || ''}" data-act="${c.act}"><div class="label">${c.label}</div><div class="val num">${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
+    `<div class="kpi ${c.act ? 'clickable' : ''} ${c.cls || ''}"${c.act ? ` data-act="${c.act}"` : ''}><div class="label">${c.label}</div><div class="val num"${c.id ? ` id="${c.id}"` : ''}>${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
   el('kpis').querySelectorAll('.kpi[data-act]').forEach((k) =>
     k.addEventListener('click', () => {
       const a = k.dataset.act;
       if (a === 'sales') toggleSalesBreakdown();
-      else if (a.startsWith('tab:')) document.querySelector(`.tab[data-tab="${a.slice(4)}"]`).click();
+      else if (a.startsWith('tab:')) { const t = document.querySelector(`.tab[data-tab="${a.slice(4)}"]`); if (t) t.click(); }
     }));
-  // '지금 집계' — 무거운 쿠폰 funnel 을 이 구간에 대해 즉시 스캔(1~2분). 카드 클릭 이벤트와 분리.
-  const fn = el('funnelNow');
-  if (fn) fn.addEventListener('click', (ev) => { ev.stopPropagation(); load(true, true); });
   loadKpiPromoPerf(); // '프로모션 성과' 카드 값(이번 달 진행 프로모션 쿠폰 매출) 비동기 채움
-  loadKpiEcountRevenue('홈페이지'); // 총매출 카드에 이카운트 판매금액(출고 기준) 병기
 }
 // 이카운트 판매 금액(출고 기준)을 KPI에 병기 — MD 보고/회계 기준과 일치. API(주문일)와 성격이 다름을 명시.
 async function loadKpiEcountRevenue(storeName, spanId, startId, endId) {
@@ -453,8 +475,7 @@ function applyRangeToActiveView(s, e, force) {
     if (s) el('ssStart').value = s; if (e) el('ssEnd').value = e;
     loadSmartstore();
   } else if (curCh === 'compare') {
-    if (s) el('cmpStart').value = s; if (e) el('cmpEnd').value = e;
-    loadCompare();
+    loadReportIframe(); // 통합분석 = 리포트(이카운트) — 상단 종료일로 재로드
   } else if (curCh === 'group') {
     loadGroupView(curGroup); // 그룹 전용 뷰는 상단 start/end 를 직접 읽음
   } else {
@@ -973,8 +994,13 @@ el('channelTabs').addEventListener('click', (ev) => {
   const b = ev.target.closest('.chtab');
   if (b) switchChannel(b);
 });
-// 통합 분석은 채널이 아니라 헤더 버튼(별도 디자인)으로 분리 — 클릭 시 동일한 뷰 전환 로직 사용
-const _btnCmp = el('btnCompare'); if (_btnCmp) _btnCmp.addEventListener('click', () => switchChannel(_btnCmp));
+// 통합 분석 = 일일매출보고 리포트(이카운트 4채널). 하단 탭이 아니라 별도 URL(새 탭)로 연다.
+const _btnCmp = el('btnCompare'); if (_btnCmp) _btnCmp.addEventListener('click', () => {
+  const today = rangeFor('today')[0];
+  const end = (el('end') && el('end').value) || rangeFor('yesterday')[1];
+  const date = (end > today) ? today : end;
+  window.open(`/api/report?date=${enc(date)}`, '_blank');
+});
 function switchChannel(b) {
   document.querySelectorAll('.chtab').forEach((x) => x.classList.remove('active'));
   b.classList.add('active');
@@ -1058,6 +1084,7 @@ function initSmartstore() {
       </div>
       <div class="muted" style="font-size:12px;margin-top:8px">smartstore_orders 기준 · 결제완료(대기/취소 제외) · 정산액·수수료·유입경로는 네이버 제공값</div>
     </div>
+    <div id="ssDailyCompare" style="margin:0 0 6px"></div>
     <section class="kpis" id="ssKpis"></section>
     <div id="ssKpiDetail" style="padding:0 0 4px"></div>
     <nav class="tabs" id="ssTabs">
@@ -1106,7 +1133,36 @@ async function loadSmartstore() {
     const j = await (await fetch(`/api/smartstore/analysis?start=${s}&end=${e}`)).json();
     if (!j.ok) throw new Error(j.error);
     ssData = j; renderSSKpis(); renderSSPanel();
+    loadSSCompare(); // 이카운트(출고) 누적매출 전년/전월/전주 동기간 카드(비차단)
   } catch (err) { el('ssPanel').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
+}
+// 스마트스토어 누적매출 동기간(전년/전월/전주) — 이카운트(출고) 기준. 자사몰 누적매출 카드와 동일 형식.
+async function loadSSCompare() {
+  const box = el('ssDailyCompare'); if (!box) return;
+  const today = rangeFor('today')[0];
+  const end = (el('ssEnd') && el('ssEnd').value) || today;
+  const date = (end > today) ? today : end;
+  try {
+    const j = await (await fetch(`/api/ecount/period-compare?store=${enc('스마트스토어')}&date=${enc(date)}`)).json();
+    if (!j.ok) throw new Error(j.error || '실패');
+    box.innerHTML = mtdCompareCards('스마트스토어', j.mtd);
+  } catch (_) { box.innerHTML = ''; }
+}
+// 누적매출 + 주문수/객단가 두 카드(이카운트 출고·동기간) — store 무관 재사용.
+function mtdCompareCards(title, m) {
+  const arr = (r) => (r == null ? '' : (r >= 0 ? '▲' : '▼'));
+  const cl = (r) => (r == null ? 'muted' : (r >= 0 ? 'pos' : 'neg'));
+  const pv = (r) => (r == null ? '-' : Math.abs(r * 100).toFixed(1) + '%');
+  const cmp = (p, l) => `${l} <b class="${cl(p.rate)}">${arr(p.rate)}${pv(p.rate)}</b> ${manwon(p.revenue)}`;
+  const oc = (p, l) => `${l} <b class="${cl(p.ordersRate)}">${arr(p.ordersRate)}${pv(p.ordersRate)}</b>`;
+  return `<section class="kpis">
+    <div class="kpi accent"><div class="label">${title} 누적매출 <span class="hint" style="font-weight:500">이달·이카운트(출고)</span></div>
+      <div class="val num">${won(m.revenue)}</div>
+      <div class="sub">${cmp(m.yoy, '전년')}<br>${cmp(m.mom, '전월')}<br>${cmp(m.wow, '전주')}</div></div>
+    <div class="kpi"><div class="label">주문수 · 객단가 <span class="hint" style="font-weight:500">이달·이카운트</span></div>
+      <div class="val num">${num(m.orders)}<span style="font-size:14px;font-weight:600">건</span> <span style="font-size:15px;color:var(--muted);font-weight:600">· ${won(m.aov)}</span></div>
+      <div class="sub">주문 ${oc(m.yoy, '전년')}·${oc(m.mom, '전월')}·${oc(m.wow, '전주')}<br>객단가 전년 ${manwon(m.yoy.aov)}·전월 ${manwon(m.mom.aov)}·전주 ${manwon(m.wow.aov)}</div></div>
+  </section>`;
 }
 function ssKc(l, v, sub, cls, act) { return `<div class="kpi clickable ${cls||''}" data-act="${act||''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`; }
 function renderSSKpis() {
@@ -1571,7 +1627,16 @@ function wireCmpCh() {
 const chPick = (r, key) => (cmpCh === 'cafe24' ? r.cafe24[key] : cmpCh === 'smartstore' ? r.smartstore[key] : r.total[key]);
 const chLabel = () => (cmpCh === 'cafe24' ? '자사몰' : cmpCh === 'smartstore' ? '스마트스토어' : isGroupCh() ? cmpCh : '전체');
 
+// 통합분석 = 일일매출보고 리포트(이카운트 4채널). 상단 선택 종료일로 /api/report 를 iframe 로드.
+function loadReportIframe() {
+  const m = el('cmpMain'); if (!m) return;
+  const today = rangeFor('today')[0];
+  const end = (el('end') && el('end').value) || rangeFor('yesterday')[1];
+  const date = (end > today) ? today : end;
+  m.innerHTML = `<iframe id="reportFrame" src="/api/report?date=${enc(date)}" style="width:100%;height:calc(100vh - 56px);border:0;display:block;background:#F7F6F2"></iframe>`;
+}
 function initCompare() {
+  loadReportIframe(); return; // 통합분석 → 리포트로 교체 (이하 구버전 UI 미사용)
   if (cmpInit) return; cmpInit = true;
   el('cmpMain').innerHTML = `
     <input type="hidden" id="cmpStart"><input type="hidden" id="cmpEnd">

@@ -226,6 +226,9 @@ async function runHttp() {
         } else if (!sid && isInitializeRequest(body)) {
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
+            // cloudtype 등 리버스 프록시가 장수명 SSE 스트림을 끊는 환경 대응:
+            // 응답을 SSE 대신 순수 JSON 으로 보낸다(요청/응답 1:1). 서버 푸시 알림은 미사용이라 무해.
+            enableJsonResponse: true,
             onsessioninitialized: (id) => { transports[id] = transport; },
           });
           transport.onclose = () => { if (transport.sessionId) delete transports[transport.sessionId]; };
@@ -235,7 +238,12 @@ async function runHttp() {
           return;
         }
         await transport.handleRequest(req, res, body);
-      } else if (req.method === 'GET' || req.method === 'DELETE') {
+      } else if (req.method === 'GET') {
+        // 독립(서버→클라) GET SSE 스트림은 제공하지 않음. cloudtype 프록시가 장수명 SSE를 끊으면
+        // 클라이언트가 같은 세션ID로 재연결 → 400 → 재시도 초과 → 커넥터 종료(=툴 사라짐)되는 죽음루프가 생긴다.
+        // 스펙대로 405를 반환해 "푸시 스트림 없음"을 알리면 클라가 요청/응답 모드로만 안정 동작한다.
+        res.writeHead(405, { 'Allow': 'POST, DELETE' }).end('Method Not Allowed: no standalone SSE stream');
+      } else if (req.method === 'DELETE') {
         if (!sid || !transports[sid]) { res.writeHead(400).end('세션 없음'); return; }
         await transports[sid].handleRequest(req, res);
       } else {

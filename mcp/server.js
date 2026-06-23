@@ -94,10 +94,10 @@ function build() {
 
   server.registerTool('other_channel_detail', {
     title: '기타채널 상세 — 상품별·카테고리·색상 [확정집계]',
-    description: '특정 기타채널(group: 쿠팡·롯데홈쇼핑·현대·신세계몰·오늘의집 등)의 ' +
+    description: '특정 기타채널(group: 쿠팡·롯데홈쇼핑·현대 이지웰·현대 M포인트몰·신세계몰·오늘의집 등)의 ' +
       '상품별 매출·수량·주문 + 카테고리·충전재(등급)·색상·입점몰별 상세 (이카운트 productName 기준). ' +
       '"상품별 데이터 미제공"이 아니라 이 도구로 품목 단위까지 분석.',
-    inputSchema: { group: z.string().describe('채널 그룹명 (예: 쿠팡, 롯데홈쇼핑, 현대, 신세계몰, 오늘의집, 29CM)'), start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD') },
+    inputSchema: { group: z.string().describe('채널 그룹명 (예: 쿠팡, 롯데홈쇼핑, 현대 이지웰, 현대 M포인트몰, 신세계몰, 오늘의집, 29CM)'), start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD') },
   }, wrap(async ({ group, start, end }) => {
     const d = await otherChannels.groupDetail(group, start || '', end || '');
     return {

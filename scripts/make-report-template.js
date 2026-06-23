@@ -54,6 +54,18 @@ html = html.replace('<div class="controls">', '<div class="controls">' +
 })();
 // ②-5 5월 프로모션 리뷰 섹션 제거(숨김) — 데이터 하드코딩 + 월 고정이라 제외
 html = html.replace('<div id="mayPromoReviewSection" style="', '<div id="mayPromoReviewSection" style="display:none;');
+// ②-6 상단 안내 배너 — 이카운트 데이터 업로드 시점/기준 (당일분 미완성 안내)
+html = html.replace('<div class="container">', '<div class="container">' +
+  '<div style="background:#FEF3CB;border:1px solid #F0D98A;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#7A5B00;line-height:1.6">' +
+  '📦 매출 데이터는 매일 <b>오전 10:10 이카운트 DB 업로드</b> 기준입니다 (<b>출고일 기준</b>) · 당일분은 출고가 진행중이라 미완성이며, <b>어제까지가 완성 데이터</b>예요.' +
+  '</div>');
+// ②-7 트래픽 탭(t8) 상단: 트래픽 지표가 자사몰(Cafe24) 기준임을 명시
+(function () {
+  const m = html.match(/<div[^>]*id="t8"[^>]*>/);
+  if (!m) { console.warn('  ⚠ t8 패널 못 찾음'); return; }
+  const note = '<div style="background:#EAF4F2;border:1px solid #BFE0DB;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#1E6E63;line-height:1.6">👤 이 탭의 트래픽 지표(<b>방문수·페이지뷰·구매·가입수·가입률</b>)는 <b>자사몰(Cafe24) 기준</b>입니다 · 스마트스토어·외부채널 트래픽은 포함되지 않아요. 가입수는 Cafe24 회원가입 API(<code>customersprivacy</code>)에서 집계합니다.</div>';
+  html = html.replace(m[0], m[0] + note);
+})();
 // ③ 데이터 태그 → placeholder
 html = replaceScript(html, 'ds-main', '__DS_MAIN__');
 html = replaceScript(html, 'ds-products', '__DS_PRODUCTS__');

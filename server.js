@@ -672,6 +672,7 @@ async function handle(req, res) {
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   if (u.pathname === '/api/smartstore/sync-month') {
+    if (smartstore.onVercel()) return sendJson(res, 200, { ok: false, skipped: true, reason: 'Vercel은 고정 IP가 없어 네이버 커머스 API 호출 불가 — 스마트스토어는 cloudtype 자동 동기화로 적재됩니다(매일). 라이브 재취합은 로컬/cloudtype에서 실행하세요.' });
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });
     const ym = u.searchParams.get('ym') || undefined;
     console.log(`[${new Date().toISOString()}] /api/smartstore/sync-month ${ym || '(이번 달)'}`);
@@ -680,6 +681,7 @@ async function handle(req, res) {
   }
   // 최근 N일(기본 7일) 동기화 — 월 동기화보다 API 호출 적음
   if (u.pathname === '/api/smartstore/sync-week') {
+    if (smartstore.onVercel()) return sendJson(res, 200, { ok: false, skipped: true, reason: 'Vercel은 고정 IP가 없어 네이버 커머스 API 호출 불가 — 스마트스토어는 cloudtype 자동 동기화로 적재됩니다(매일). 라이브 재취합은 로컬/cloudtype에서 실행하세요.' });
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });
     const days = Math.max(1, Math.min(31, Number(u.searchParams.get('days') || 7)));
     const endD = new Date();

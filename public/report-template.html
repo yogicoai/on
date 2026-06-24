@@ -2721,6 +2721,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   </div>
 
   <!-- ============ 기존 프로모션 분석 (당일 KPI + 기간별 비교 + 전/중/후) ============ -->
+  <div style="background:#EAF4F2;border:1px solid #BFE0DB;border-radius:10px;padding:10px 16px;margin:8px 0 14px;font-size:13px;color:#1E6E63;line-height:1.6">
+    🏷️ <b>프로모션 성과 산정 방식</b> — 2026년 6월부터는 <b>프로모션 기간으로 채택된 기간 중 "할인율이 발생한(정상가보다 낮게 판매된)" 매출</b>을 자동 집계해 프로모션 성과로 잡습니다. 자사몰·스마트스토어는 정상가 대비 할인율(5~30%)별로 분류하며, 정가 판매·외부몰(롯데홈쇼핑 등)은 제외합니다. <span style="color:var(--mute)">(과거 1~5월은 MD 어드민 수기 분류 정본)</span>
+  </div>
   <div class="grid grid-4" id="promoKpiRow"></div>
 
   <div class="section-title">프로모션 기간별 매출 비교</div>
@@ -3616,11 +3619,15 @@ const EXT_CHANNELS = __DS_EXT__;
 // Group by month (e.g. "2026-05") so individual discount rates are merged per month
 function groupPromosByMonth(promos) {
   const groups = {};
+  // 프로모션 단위로 묶는다(월+프로모션명). MD 과거='N월 전사프로모션'(월별), 우리 운영분='요기보 감사제'·'월드컵 프로모션'(각각).
+  const baseName = (n) => String(n||'').replace(/\s*-\s*\d+(?:\.\d+)?%\s*$/, '').trim();
   promos.forEach(p => {
-    const k = p.Start.slice(0,7);
+    const ym = p.Start.slice(0,7);
+    const base = baseName(p.Name) || (parseInt(ym.slice(0,4))+'년 '+parseInt(ym.slice(5,7))+'월 전사프로모션');
+    const k = base + '|' + ym;
     if (!groups[k]) groups[k] = {
-      Name: parseInt(k.slice(0,4))+'년 '+parseInt(k.slice(5,7))+'월 전사프로모션',
-      MonthKey: k,
+      Name: base,
+      MonthKey: ym,
       Start: p.Start, End: p.End,
       Amount: 0, Qty: 0, Orders: 0,
       JaAmount: 0, SsAmount: 0,
@@ -5807,25 +5814,13 @@ function aggregatePromotionPeriod(p) {
 }
 
 function getPromoDay(date, channel) {
-  // 일별 전사프로모션 매출/건수 (PROD에서 자사몰/스마트스토어 + promoName "전사" 포함)
-  const dIdx = PROD.d.indexOf(date);
-  if (dIdx < 0) return {amount: 0, count: 0};
-  let chIdx = -1;
-  if (channel) chIdx = PROD.ch.indexOf(channel);
-  let amt = 0, count = 0;
-  PROD.r.forEach(row => {
-    const di = row[1], ci = row[2], pi = row[5], a = row[6], o = row[8];
-    if (di !== dIdx) return;
-    if (channel && ci !== chIdx) return;
-    if (!channel) {
-      const chName = PROD.ch[ci];
-      if (chName !== '자사몰' && chName !== '스마트스토어') return;
-    }
-    const promoName = PROD.p[pi];
-    if (!promoName || promoName.indexOf('전사') < 0) return;
-    amt += a; count += o;
-  });
-  return {amount: amt, count: count};
+  // 그날 "할인 발생 매출"(정상가보다 낮게 판매된 자사몰/스마트스토어 매출). DATA.promoDaily(ds-main) 기준.
+  //   옛 방식(promoName "전사" 태그)은 프로모션 기간 정의가 끝나면 0이 되어, 할인율 기반으로 대체.
+  const pd = (DATA.promoDaily || {})[date];
+  if (!pd) return { amount: 0, count: 0 };
+  if (channel === '자사몰') return { amount: pd.자사몰 || 0, count: pd.jaOrders || 0 };
+  if (channel === '스마트스토어') return { amount: pd.스마트스토어 || 0, count: pd.ssOrders || 0 };
+  return { amount: (pd.자사몰 || 0) + (pd.스마트스토어 || 0), count: (pd.jaOrders || 0) + (pd.ssOrders || 0) };
 }
 
 // 당일 모든 프로모션 매출/건수 (전사 + 추가프로모션 합산) — promoName이 비어있지 않은 모든 주문

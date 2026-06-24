@@ -1,2 +1,2 @@
 비즈 유입 데이터 받기 메크로
-httpsbizadvisor.naver.com
+bizadvisor.naver.com

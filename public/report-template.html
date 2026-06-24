@@ -8587,6 +8587,19 @@ function renderPromotionTargetTable(P){
   });
   const rowsHTML = [];
   Object.values(groups).forEach(g => {
+    // 목표 미입력(전 채널 0) — 채널별 0원 행 대신 입력 유도 안내 한 줄
+    if (!g.target) {
+      rowsHTML.push(`
+        <tr style="background:#FFF8E6">
+          <td>${g.promoName}</td>
+          <td>전체 채널</td>
+          <td>${g.promoStart} ~ ${g.promoEnd} <span style="color:var(--mute);font-size:11px">[${g.statusLabel}]</span></td>
+          <td class="num">${g.promoDays}일</td>
+          <td class="num">${g.elapsedDays}일</td>
+          <td colspan="8" style="color:#B7791F;font-weight:700">🎯 목표치를 입력해주세요 <span style="color:var(--mute);font-weight:400;font-size:11px">— 판매분석 → 프로모션 목표에서 채널별 목표매출 입력</span></td>
+        </tr>`);
+      return;
+    }
     g.paceTarget = g.target * g.pace;
     g.actualPct = g.target ? g.cum/g.target : null;
     g.paceVsTarget = g.paceTarget ? g.cum/g.paceTarget : null;
@@ -8678,7 +8691,12 @@ function renderTargetForecastInsights(M, P){
     out.push(`<div class="insight">${M.ym} 월 목표값이 TARGET_CONFIG.monthly 에 등록되지 않았습니다. 관리자 설정 후 다시 확인해 주세요.</div>`);
   }
   // 프로모션별
+  const seenZeroTarget = new Set();
   P.forEach(r => {
+    if (!r.target) { // 목표 미입력 — 프로모션당 1회만 입력 유도
+      if (!seenZeroTarget.has(r.promoId)) { seenZeroTarget.add(r.promoId); out.push(`<div class="insight"><strong>${r.promoName}</strong>: 🎯 목표치가 입력되지 않았습니다 — <b>프로모션 목표</b>에서 채널별 목표매출을 입력해 주세요. (현재 누적 실적 ${fmt만원(r.cum)})</div>`); }
+      return;
+    }
     if (r.statusLabel === '시작 전') {
       out.push(`<div class="insight"><strong>${r.promoName} (${r.ch})</strong>: 프로모션 시작 전 (${r.promoStart} 시작).</div>`);
     } else {

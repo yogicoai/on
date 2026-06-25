@@ -230,12 +230,9 @@ async function runStdio() {
 //   인증: MCP_TOKEN 설정 시 Authorization: Bearer <MCP_TOKEN> 필요. 엔드포인트 /mcp
 async function runHttp() {
   const http = require('http');
-  const crypto = require('crypto');
   const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
-  const { isInitializeRequest } = require('@modelcontextprotocol/sdk/types.js');
   const PORT = Number(process.env.PORT || process.env.MCP_PORT || 8787);
   const TOKEN = process.env.MCP_TOKEN || '';
-  const transports = {};
 
   const readBody = (req) => new Promise((resolve) => {
     let data = '';
@@ -251,36 +248,19 @@ async function runHttp() {
     if (TOKEN && req.headers['authorization'] !== `Bearer ${TOKEN}`) {
       res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' })); return;
     }
-    const sid = req.headers['mcp-session-id'];
     try {
       if (req.method === 'POST') {
+        // 무상태(stateless): 요청마다 새 transport+server 를 만들어 처리한다. 세션을 메모리에 들지 않으므로
+        // cloudtype 재시작/재배포로 세션 맵이 비워져 "세션 없음" 400 이 나던 문제를 원천 차단.
+        // enableJsonResponse: SSE 대신 순수 JSON 응답(프록시 호환). sessionIdGenerator 미지정 = 무상태 모드.
         const body = await readBody(req);
-        let transport;
-        if (sid && transports[sid]) {
-          transport = transports[sid];
-        } else if (!sid && isInitializeRequest(body)) {
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(),
-            // cloudtype 등 리버스 프록시가 장수명 SSE 스트림을 끊는 환경 대응:
-            // 응답을 SSE 대신 순수 JSON 으로 보낸다(요청/응답 1:1). 서버 푸시 알림은 미사용이라 무해.
-            enableJsonResponse: true,
-            onsessioninitialized: (id) => { transports[id] = transport; },
-          });
-          transport.onclose = () => { if (transport.sessionId) delete transports[transport.sessionId]; };
-          await build().connect(transport);
-        } else {
-          res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: '세션 없음 또는 잘못된 초기화 요청' }, id: null }));
-          return;
-        }
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+        res.on('close', () => { try { transport.close(); } catch (_) {} });
+        await build().connect(transport);
         await transport.handleRequest(req, res, body);
-      } else if (req.method === 'GET') {
-        // 독립(서버→클라) GET SSE 스트림은 제공하지 않음. cloudtype 프록시가 장수명 SSE를 끊으면
-        // 클라이언트가 같은 세션ID로 재연결 → 400 → 재시도 초과 → 커넥터 종료(=툴 사라짐)되는 죽음루프가 생긴다.
-        // 스펙대로 405를 반환해 "푸시 스트림 없음"을 알리면 클라가 요청/응답 모드로만 안정 동작한다.
-        res.writeHead(405, { 'Allow': 'POST, DELETE' }).end('Method Not Allowed: no standalone SSE stream');
-      } else if (req.method === 'DELETE') {
-        if (!sid || !transports[sid]) { res.writeHead(400).end('세션 없음'); return; }
-        await transports[sid].handleRequest(req, res);
+      } else if (req.method === 'GET' || req.method === 'DELETE') {
+        // 무상태 모드 — 독립 SSE 스트림/세션 종료 불필요. 스펙대로 405(요청/응답은 POST로만).
+        res.writeHead(405, { Allow: 'POST' }).end('Method Not Allowed (stateless)');
       } else {
         res.writeHead(405).end('method not allowed');
       }

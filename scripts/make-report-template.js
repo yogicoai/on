@@ -30,8 +30,9 @@ function replaceScript(h, id, placeholder) {
 
 // ① 배포용 HTML 생성 버튼 제거
 html = removeBetween(html, '<button id="btnDeploy"', '</button>');
-// ② Report Text 탭 버튼 제거 (패널 t7 은 버튼 없으면 활성 안 되므로 그대로 둬도 무해)
-html = removeBetween(html, '<button class="tab" data-tab="t7">', '</button>');
+// ② Report Text 탭 → '일별 매출 리뷰' 탭으로 노출 (충전재별 판매량 옆, MD 원본과 동일 위치).
+//   t7 패널엔 일별 매출 리뷰·보고텍스트·프로모션 성과 리뷰·매출 현황 요약 4개 카드가 모두 자동 생성으로 들어있다.
+html = html.replace('<button class="tab" data-tab="t7">Report Text</button>', '<button class="tab" data-tab="t7">📝 일별 매출 리뷰</button>');
 // ②-2 하드코딩 TARGET_CONFIG → placeholder (목표를 전부 DB에서 주입)
 (function () {
   const s = html.indexOf('const TARGET_CONFIG = {');

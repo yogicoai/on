@@ -24,6 +24,8 @@ const target = require('../lib/target');
 const mallPromos = require('../lib/mallPromotions');
 const productPrices = require('../lib/productPrices');
 const forecast = require('../lib/forecast');
+const adEfficiency = require('../lib/adEfficiency'); // 광고효율 (adboard, 별도 클러스터 MONGODB_URI)
+const dailyReport = require('../lib/dailyReport');    // 온라인 매출(이카운트) — ad_vs_sales 교차용
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -179,6 +181,39 @@ function build() {
       target.mallTargetStatus(month, '스마트스토어').catch(() => null),
     ]);
     return { month, 자사몰: ca, 스마트스토어: ss };
+  }));
+
+  // ── 광고효율 (adboard.daily_stats — 매체 API 적재본) ──
+  server.registerTool('ad_efficiency', {
+    title: '광고효율 — 매체별 ROAS·CTR·CPC·CPA [adboard]',
+    description: '기간별 광고 매체 효율. 벤더(네이버·메타·크리테오·카카오)별 + 상세매체별 광고비·전환·전환매출·ROAS·CTR·CPC·CVR·CPA + 전체 합계. ' +
+      '데이터 출처: ad-dashboard(mkboard)가 각 매체 API에서 적재한 일별 광고 데이터. 매출(이카운트)과는 다른 집계라 직접 합산하지 말 것.',
+    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
+  }, wrap(async ({ start, end }) => adEfficiency.efficiency(start, end)));
+
+  server.registerTool('ad_vs_sales', {
+    title: '광고비 vs 온라인 매출 — 마케팅 비용률·통합 ROAS [교차]',
+    description: '기간 총 광고비(adboard)와 실제 온라인 매출(이카운트 자사몰+스마트스토어+외부채널)을 한 번에 비교. ' +
+      '마케팅비용률(광고비÷실매출)·벤더별 광고비·광고기여 전환매출(convValue)·광고 ROAS 제공. ' +
+      '⚠️ 전환매출(convValue)은 매체가 "광고 기여"로 잡은 값(중복·과대 가능)이고, 실매출은 이카운트 확정 출고 기준이라 둘은 다른 수치임.',
+    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
+  }, wrap(async ({ start, end }) => {
+    const [ad, series] = await Promise.all([
+      adEfficiency.efficiency(start, end),
+      dailyReport.dailyChannelSeries('2025-01-01').catch(() => []),
+    ]);
+    const inRange = series.filter((d) => d.Date >= start && d.Date <= end);
+    const sales = inRange.reduce((a, d) => a + (d.자사몰 || 0) + (d.스마트스토어 || 0) + (d.외부채널 || 0), 0);
+    const spend = ad.total.spend || 0;
+    return {
+      start, end,
+      온라인매출_이카운트: Math.round(sales),         // 자사몰+스토어+외부 (출고 기준, 공동구매 제외)
+      총광고비: spend,
+      마케팅비용률: sales ? +((spend / sales) * 100).toFixed(2) : null, // 광고비 ÷ 실매출 %
+      광고기여_전환매출: ad.total.convValue,           // 매체가 광고 기여로 집계(참고용, 실매출과 다름)
+      광고ROAS: ad.total.roas,
+      벤더별: ad.vendors.map((v) => ({ 매체: v.platform, 광고비: v.spend, 전환매출: v.convValue, ROAS: v.roas })),
+    };
   }));
 
   return server;

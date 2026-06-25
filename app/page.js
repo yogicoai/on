@@ -25,6 +25,7 @@ const SHELL = `
       <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="자사몰 + 스마트스토어 + 기타 채널을 한 화면에서 통합 비교 분석">통합 분석</button>
       <button id="btnPromoCal" class="btn cal" type="button" title="전 몰 프로모션을 월간 달력으로 보고 상세 계획을 편집">프로모션 달력</button>
       <button id="btnPromoTgt" class="btn" type="button" title="전사 프로모션별 채널 목표매출·트래픽 목표 입력 (리포트 목표 페이스 반영)">🎯 프로모션 목표</button>
+      <a id="btnAdBoard" href="https://mkt-sage.vercel.app/" target="_blank" rel="noopener" class="btn" title="광고 효율(ROAS·매체별) 대시보드 새 탭으로 열기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 광고 대시보드</a>
       <button id="btnAi" class="btn ai" type="button" hidden title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
     </div>
   </header>

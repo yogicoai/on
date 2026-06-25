@@ -241,9 +241,34 @@ async function runHttp() {
     req.on('error', () => resolve(undefined));
   });
 
+  const syncJobs = require('../lib/syncJobs');
+  const authed = (req) => !TOKEN || req.headers['authorization'] === `Bearer ${TOKEN}`;
+  const sendJson = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'application/json' }).end(JSON.stringify(obj));
+
   const httpServer = http.createServer(async (req, res) => {
     const u = new URL(req.url, `http://${req.headers.host}`);
-    if (u.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true, server: 'yogibo-sales-mcp' })); return; }
+    if (u.pathname === '/health') { return sendJson(res, 200, { ok: true, server: 'yogibo-sales-mcp' }); }
+
+    // ── 무거운 동기화 트리거(Vercel 버튼 → cloudtype 1회 실행) ──────────────
+    //   Vercel 은 고정IP 없음·60초 제한이라 직접 못 하는 적재를 여기서 백그라운드로 실행한다.
+    if (u.pathname === '/sync/run') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'POST only' });
+      const body = (await readBody(req)) || {};
+      const task = body.task || u.searchParams.get('task') || 'today';
+      const params = {
+        days: body.days || u.searchParams.get('days'),
+        start: body.start || u.searchParams.get('start'),
+        end: body.end || u.searchParams.get('end'),
+      };
+      const r = syncJobs.start(task, params);
+      return sendJson(res, 200, { ok: r.started || !!r.already, ...r });
+    }
+    if (u.pathname === '/sync/status') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      return sendJson(res, 200, { ok: true, ...syncJobs.status() });
+    }
+
     if (u.pathname !== '/mcp') { res.writeHead(404).end('not found'); return; }
     if (TOKEN && req.headers['authorization'] !== `Bearer ${TOKEN}`) {
       res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' })); return;

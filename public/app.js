@@ -514,6 +514,24 @@ wireDateMirror('start', 'end');
 
 // 오늘 재취합: 오늘 주문(Cafe24+스마트스토어) 적재 후 현재 구간만 빠르게 갱신(쿠폰 funnel 은 캐시 유지).
 //  최근 1주일 전체 동기화는 매일 00시 자동 스케줄러가 담당.
+// cloudtype 동기화 작업이 끝날 때까지 폴링(/api/sync-status). 완료/에러 job 객체를 반환(시간초과 시 null).
+//  Vercel 은 고정IP·60초 제한이라 무거운 적재를 cloudtype 가 백그라운드로 대신 수행 → 여기서 진행상태를 따라간다.
+async function pollSync({ everyMs = 4000, maxMs = 240000 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise((r) => setTimeout(r, everyMs));
+    let st;
+    try { st = await (await fetch('/api/sync-status')).json(); } catch (_) { continue; }
+    const job = st && st.job;
+    if (job) {
+      const last = job.log && job.log.length ? job.log[job.log.length - 1] : '';
+      setStatus(`cloudtype 동기화 중… ${job.status === 'running' ? (last || '진행 중') : job.status}`, '');
+      if (!st.running && job.status !== 'running') return job; // done / error
+    }
+  }
+  return null;
+}
+
 el('refreshWeek').addEventListener('click', async () => {
   const btn = el('refreshWeek');
   btn.disabled = true;
@@ -523,14 +541,22 @@ el('refreshWeek').addEventListener('click', async () => {
     const r = await fetch('/api/sync-today');
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || '실패');
-    // 오늘 데이터를 받았으니 "오늘" 구간으로 이동해 방금 받은 데이터를 보여준다 (현재 보고 있는 채널 기준)
+
+    // Vercel → cloudtype 위임(delegated)이면 백그라운드 실행이므로 완료까지 폴링한다.
+    if (j.delegated) {
+      setStatus(j.already ? 'cloudtype에서 이미 동기화가 진행 중입니다 — 완료까지 대기…' : 'cloudtype에서 동기화 시작… (오늘 주문 적재)', '');
+      const fin = await pollSync();
+      if (fin && fin.status === 'error') throw new Error('cloudtype 동기화 오류: ' + (fin.error || ''));
+    }
+
+    // "오늘" 구간으로 이동해 방금 적재된 데이터를 보여준다 (현재 보고 있는 채널 기준)
     const [s, e] = rangeFor('today');
     el('start').value = s; el('end').value = e;
     document.querySelectorAll('.chip').forEach((x) => x.classList.remove('active'));
     const todayChip = document.querySelector('.chip[data-range="today"]'); if (todayChip) todayChip.classList.add('active');
     loadedRange[curCh] = ''; // 강제 재조회
     applyRangeToActiveView(s, e, true);
-    setStatus(`오늘 재취합 완료 (${j.day}) · ${j.elapsedMs}ms — 오늘 구간으로 이동`, 'ok');
+    setStatus(j.delegated ? '동기화 완료 (cloudtype) — 오늘 구간으로 이동' : `오늘 재취합 완료 (${j.day}) · ${j.elapsedMs}ms — 오늘 구간으로 이동`, 'ok');
   } catch (e) {
     setStatus('재취합 오류: ' + e.message, 'err');
   } finally {
@@ -1120,10 +1146,33 @@ async function syncSmartstore() {
   try {
     const j = await (await fetch('/api/smartstore/sync-week?days=7')).json();
     if (!j.ok) throw new Error(j.error);
-    el('ssStatus').textContent = `수집 완료: ${j.from}~${j.to} · 변경 ${num(j.changed)} → 저장 ${num(j.stored)}건`;
+    if (j.delegated) { // Vercel → cloudtype 위임(고정IP 필요) → 완료까지 폴링
+      el('ssStatus').textContent = j.already ? 'cloudtype에서 이미 동기화 진행 중 — 완료까지 대기…' : 'cloudtype에서 스마트스토어 동기화 시작…';
+      const fin = await pollSync2((m) => { el('ssStatus').textContent = 'cloudtype 동기화 중… ' + m; });
+      if (fin && fin.status === 'error') throw new Error('cloudtype 동기화 오류: ' + (fin.error || ''));
+      el('ssStatus').textContent = '동기화 완료 (cloudtype)';
+    } else {
+      el('ssStatus').textContent = `수집 완료: ${j.from}~${j.to} · 변경 ${num(j.changed)} → 저장 ${num(j.stored)}건`;
+    }
     loadSmartstore();
   } catch (e) { el('ssStatus').textContent = '오류: ' + e.message; }
   finally { b.disabled = false; }
+}
+// pollSync 의 콜백형 버전(상태표시 영역이 setStatus 가 아닌 다른 엘리먼트일 때).
+async function pollSync2(onMsg, { everyMs = 4000, maxMs = 240000 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise((r) => setTimeout(r, everyMs));
+    let st;
+    try { st = await (await fetch('/api/sync-status')).json(); } catch (_) { continue; }
+    const job = st && st.job;
+    if (job) {
+      const last = job.log && job.log.length ? job.log[job.log.length - 1] : '';
+      if (onMsg) onMsg(job.status === 'running' ? (last || '진행 중') : job.status);
+      if (!st.running && job.status !== 'running') return job;
+    }
+  }
+  return null;
 }
 async function loadSmartstore() {
   const s = el('ssStart').value, e = el('ssEnd').value;
@@ -2840,7 +2889,14 @@ function createPromoCalendar(host, opts) {
     try {
       const r = await (await fetch(`/api/cafe24/sync-coupons-from-orders?start=${enc(s)}&end=${enc(e)}`)).json();
       if (!r.ok) throw new Error(r.error || '실패');
-      $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문, 삭제 쿠폰 포함) — 다시 불러옵니다`;
+      if (r.delegated) { // Vercel → cloudtype 위임(60초 제한 회피) → 완료까지 폴링
+        $('.pcv-couponmsg').textContent = r.already ? 'cloudtype에서 이미 적재 진행 중 — 완료까지 대기…' : 'cloudtype에서 쿠폰 적재 시작…';
+        const fin = await pollSync2((m) => { $('.pcv-couponmsg').textContent = 'cloudtype 적재 중… ' + m; });
+        if (fin && fin.status === 'error') throw new Error('cloudtype 적재 오류: ' + (fin.error || ''));
+        $('.pcv-couponmsg').textContent = '적재 완료 (cloudtype) — 다시 불러옵니다';
+      } else {
+        $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문, 삭제 쿠폰 포함) — 다시 불러옵니다`;
+      }
       await loadCouponsForEditor();
     } catch (err) { $('.pcv-couponmsg').textContent = '갱신 오류: ' + err.message; }
   }

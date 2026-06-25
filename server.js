@@ -85,6 +85,41 @@ function readBody(req) {
   });
 }
 
+// ── cloudtype 위임(B 방식) ──────────────────────────────────────────────────
+//   Vercel 은 고정 IP 가 없고(네이버 커머스 API 차단) 서버리스 60초 제한이 있어
+//   스마트스토어 적재·쿠폰 적재 같은 무거운 동기화를 직접 못 한다.
+//   → 버튼을 누르면 항상 켜진 cloudtype(MCP HTTP 서버)의 /sync/run 을 호출해 거기서 1회 실행하고,
+//     /api/sync-status 로 진행상태를 폴링한다. (모든 사용자 공유 · 중복 클릭은 cloudtype 가 dedup)
+const ON_VERCEL = !!process.env.VERCEL;
+const SYNC_BASE = (process.env.CLOUDTYPE_SYNC_URL || process.env.SYNC_BASE || '').replace(/\/+$/, '');
+const SYNC_TOKEN = process.env.MCP_TOKEN || '';
+
+function cloudtypeSync(pathname, { method = 'GET', body = null, timeout = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!SYNC_BASE) return reject(new Error('CLOUDTYPE_SYNC_URL(또는 SYNC_BASE) 환경변수가 Vercel 에 설정되지 않았습니다'));
+    let url; try { url = new URL(SYNC_BASE + pathname); } catch (_) { return reject(new Error('CLOUDTYPE_SYNC_URL 형식 오류: ' + SYNC_BASE)); }
+    const lib = url.protocol === 'http:' ? http : require('https');
+    const data = body ? JSON.stringify(body) : null;
+    const r = lib.request(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(SYNC_TOKEN ? { Authorization: `Bearer ${SYNC_TOKEN}` } : {}),
+        ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}),
+      },
+      timeout,
+    }, (r2) => {
+      let buf = '';
+      r2.on('data', (c) => { buf += c; });
+      r2.on('end', () => { try { resolve(JSON.parse(buf)); } catch (_) { resolve({ ok: false, error: 'cloudtype 응답 파싱 실패(HTTP ' + r2.statusCode + ')', raw: String(buf).slice(0, 200) }); } });
+    });
+    r.on('timeout', () => r.destroy(new Error('cloudtype 응답 시간초과')));
+    r.on('error', reject);
+    if (data) r.write(data);
+    r.end();
+  });
+}
+
 function serveStatic(res, pathname) {
   let rel = pathname === '/' ? '/index.html' : pathname;
   const file = path.join(PUBLIC, path.normalize(rel).replace(/^([/\\])+/, ''));
@@ -145,6 +180,12 @@ async function handle(req, res) {
 
   // 오늘만 재취합 — 오늘 주문 적재(Cafe24+SmartStore) + 오늘 포함 구간 빠른 갱신(쿠폰 funnel 은 캐시 유지)
   if (u.pathname === '/api/sync-today' || u.pathname === '/api/refresh-today') {
+    if (ON_VERCEL) {
+      try {
+        const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'today' } });
+        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+      } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
+    }
     const t0 = Date.now();
     console.log(`[${new Date().toISOString()}] /api/sync-today`);
     try {
@@ -156,6 +197,12 @@ async function handle(req, res) {
       console.error('sync-today 실패:', e);
       return sendJson(res, 500, { ok: false, error: String(e.message) });
     }
+  }
+
+  // cloudtype 동기화 작업 진행상태 폴링(Vercel 버튼이 트리거한 작업의 완료 여부 확인)
+  if (u.pathname === '/api/sync-status') {
+    try { return sendJson(res, 200, { ok: true, ...(await cloudtypeSync('/sync/status', { method: 'GET' })) }); }
+    catch (e) { return sendJson(res, 502, { ok: false, error: 'cloudtype 상태 조회 실패: ' + e.message }); }
   }
 
   // 수동 일일 동기화(최근 N일 적재 + 워밍) — 스케줄러와 동일 루틴을 즉시 1회 실행
@@ -473,6 +520,12 @@ async function handle(req, res) {
   if (u.pathname === '/api/cafe24/sync-coupons-from-orders') {
     const start = u.searchParams.get('start') || (report.todayStr().slice(0, 8) + '01');
     const end = u.searchParams.get('end') || Y();
+    if (ON_VERCEL) { // 60초 제한 회피 → cloudtype 위임
+      try {
+        const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'coupons', start, end } });
+        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+      } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
+    }
     console.log(`[${new Date().toISOString()}] /api/cafe24/sync-coupons-from-orders ${start}~${end}`);
     try {
       const r = await couponsLib.syncCouponNamesFromOrders(start, end, { onProgress: (p) => { if (p.done % 40 === 0) console.log(`  주문쿠폰 적재 ${p.done}/${p.total} · 매핑 ${p.mapped}`); } });
@@ -672,7 +725,12 @@ async function handle(req, res) {
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   if (u.pathname === '/api/smartstore/sync-month') {
-    if (smartstore.onVercel()) return sendJson(res, 200, { ok: false, skipped: true, reason: 'Vercel은 고정 IP가 없어 네이버 커머스 API 호출 불가 — 스마트스토어는 cloudtype 자동 동기화로 적재됩니다(매일). 라이브 재취합은 로컬/cloudtype에서 실행하세요.' });
+    if (smartstore.onVercel()) { // 고정IP 필요 → cloudtype 위임(최근 31일 Cafe24+스마트스토어 적재)
+      try {
+        const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days: 31 } });
+        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+      } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
+    }
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });
     const ym = u.searchParams.get('ym') || undefined;
     console.log(`[${new Date().toISOString()}] /api/smartstore/sync-month ${ym || '(이번 달)'}`);
@@ -681,7 +739,12 @@ async function handle(req, res) {
   }
   // 최근 N일(기본 7일) 동기화 — 월 동기화보다 API 호출 적음
   if (u.pathname === '/api/smartstore/sync-week') {
-    if (smartstore.onVercel()) return sendJson(res, 200, { ok: false, skipped: true, reason: 'Vercel은 고정 IP가 없어 네이버 커머스 API 호출 불가 — 스마트스토어는 cloudtype 자동 동기화로 적재됩니다(매일). 라이브 재취합은 로컬/cloudtype에서 실행하세요.' });
+    if (smartstore.onVercel()) { // 고정IP 필요 → cloudtype 위임(최근 N일 Cafe24+스마트스토어 적재 + 워밍)
+      try {
+        const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days: Math.max(1, Math.min(31, Number(u.searchParams.get('days') || 7))) } });
+        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+      } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
+    }
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });
     const days = Math.max(1, Math.min(31, Number(u.searchParams.get('days') || 7)));
     const endD = new Date();

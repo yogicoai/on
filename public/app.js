@@ -2922,7 +2922,7 @@ function buildPromoTargetUi() {
   const m = document.createElement('div');
   m.id = 'promoTgtModal'; m.className = 'modal'; m.style.display = 'none';
   m.innerHTML = `<div class="modal-box">
-    <div class="modal-head"><div><strong>전사 프로모션 목표</strong><div class="modal-sub" style="font-size:12px;color:var(--muted)">프로모션별 채널 목표매출 + 트래픽 목표(자사몰) — 통합분석 리포트 '목표 페이스'에 반영 · (월별 목표는 각 채널에서 설정)</div></div>
+    <div class="modal-head"><div><strong>전사 프로모션 목표</strong><div class="modal-sub" style="font-size:12px;color:var(--muted)">프로모션 기간 + 채널별 목표매출만 입력 → 리포트 '목표 페이스'에 반영 · (월별 목표는 각 채널에서 설정)</div></div>
       <button id="ptClose" class="btn ghost mini" type="button">닫기 ✕</button></div>
     <div class="modal-body">
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -2939,6 +2939,7 @@ function buildPromoTargetUi() {
   el('ptSeed').addEventListener('click', ptSeed);
 }
 let _ptMonth = null; // 프로모션 목표 목록 필터 월 (그 달 '시작' 프로모션만)
+let _ptTraffic = {}; // 편집 중 프로모션의 기존 트래픽 목표 — 입력란은 숨겼지만 저장 시 보존(목표매출만 단순 관리)
 function openPromoTargetUi() {
   buildPromoTargetUi();
   el('promoTgtModal').style.display = 'flex'; document.body.style.overflow = 'hidden';
@@ -2975,7 +2976,8 @@ async function loadPtList() {
   } catch (e) { box.innerHTML = `<div class="empty">오류: ${e.message}</div>`; }
 }
 function renderPtForm(p) {
-  const ch = (p && p.channels) || {}, tt = (p && p.trafficTargets) || {};
+  const ch = (p && p.channels) || {};
+  _ptTraffic = (p && p.trafficTargets) || {}; // 기존 트래픽 목표 보존(입력란은 제거, 저장 시 그대로 유지)
   const box = el('ptForm'); if (!box) return;
   box.innerHTML = `<div class="card" style="margin-top:12px">
     <h3>${p ? '프로모션 목표 수정' : '새 프로모션 목표'}</h3>
@@ -2990,13 +2992,7 @@ function renderPtForm(p) {
       <label>스마트스토어 <input type="number" id="ptSs" min="0" step="100000" value="${ch.스마트스토어 || ''}" placeholder="예: 42000000"></label>
       <label>외부채널 <input type="number" id="ptEx" min="0" step="100000" value="${ch.외부채널 || ''}" placeholder="예: 0"></label>
     </div>
-    <div style="font-weight:700;font-size:12.5px;color:var(--sub);margin:10px 0 4px">트래픽 목표 <span class="muted" style="font-weight:400">(자사몰 기준 · 일평균)</span></div>
-    <div class="setform">
-      <label>방문수/일 <input type="number" id="ptVisits" min="0" value="${tt.visits || ''}" placeholder="예: 950"></label>
-      <label>가입수/일 <input type="number" id="ptSignups" min="0" step="0.1" value="${tt.signups || ''}" placeholder="예: 34"></label>
-      <label>구매율(%) <input type="number" id="ptPrate" min="0" step="0.01" value="${tt.purchaseRate ? (tt.purchaseRate * 100) : ''}" placeholder="예: 1.85"></label>
-      <label>가입률(%) <input type="number" id="ptSrate" min="0" step="0.01" value="${tt.signupRate ? (tt.signupRate * 100) : ''}" placeholder="예: 3.57"></label>
-    </div>
+    <div class="muted" style="font-size:11.5px;margin:8px 0 2px">달성률은 리포트 ‘목표 페이스’에서 자동 계산돼요 · 할인율은 정가(Cafe24 자사몰 기준) 대비 자동 산정</div>
     <div class="setform" style="margin-top:10px">
       <button id="ptSave" class="btn" type="button">저장</button>
       <button id="ptCancel" class="btn ghost" type="button">취소</button>
@@ -3012,7 +3008,7 @@ async function ptSave(id) {
     id: id || undefined,
     name: el('ptName').value.trim(), start: el('ptStart').value, end: el('ptEnd').value,
     channels: { 자사몰: +el('ptCa').value || 0, 스마트스토어: +el('ptSs').value || 0, 외부채널: +el('ptEx').value || 0 },
-    trafficTargets: { visits: +el('ptVisits').value || 0, signups: +el('ptSignups').value || 0, purchaseRate: (+el('ptPrate').value || 0) / 100, signupRate: (+el('ptSrate').value || 0) / 100 },
+    trafficTargets: _ptTraffic, // 입력란 제거 — 기존 값 그대로 보존(목표매출만 단순 관리)
   };
   try {
     const j = await (await fetch('/api/promo-targets/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();

@@ -57,7 +57,7 @@ html = html.replace('<div id="mayPromoReviewSection" style="', '<div id="mayProm
 // ②-6 상단 안내 배너 — 이카운트 데이터 업로드 시점/기준 (당일분 미완성 안내)
 html = html.replace('<div class="container">', '<div class="container">' +
   '<div style="background:#FEF3CB;border:1px solid #F0D98A;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#7A5B00;line-height:1.6">' +
-  '📦 매출 데이터는 매일 <b>오전 10:10 이카운트 DB 업로드</b> 기준입니다 (<b>출고일 기준</b>) · 당일분은 출고가 진행중이라 미완성이며, <b>어제까지가 완성 데이터</b>예요.' +
+  '📦 매출 데이터는 매일 <b>오전 10:10 이카운트 DB 업로드</b> 기준입니다' +
   '</div>');
 // ②-7 트래픽 탭(t8) 상단: 트래픽 지표가 자사몰(Cafe24) 기준임을 명시
 (function () {

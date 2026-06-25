@@ -1104,8 +1104,7 @@ function initSmartstore() {
     <div class="card" style="margin:14px 0">
       <div class="panelctl">
         <input type="hidden" id="ssStart"><input type="hidden" id="ssEnd">
-        <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b>으로 조회합니다 (자사몰·통합비교 공통)</span>
-        <button id="ssSync" class="btn warn" title="최근 7일 주문만 네이버 커머스 API로 재수집(월 단위보다 호출 적음)">⟲ 최근 7일 동기화(API)</button>
+        <span class="muted" style="font-size:12px">기간은 <b>상단 날짜 선택</b>으로 조회합니다 (자사몰·통합비교 공통) · 재수집은 상단 <b>⟳ 최근 7일 재동기화</b> 버튼(전 채널 공통)</span>
         <span id="ssStatus" class="muted" style="font-size:12px"></span>
       </div>
       <div class="muted" style="font-size:12px;margin-top:8px">smartstore_orders 기준 · 결제완료(대기/취소 제외) · 정산액·수수료·유입경로는 네이버 제공값</div>
@@ -1124,7 +1123,6 @@ function initSmartstore() {
     </nav>
     <div id="ssPanel"></div>`;
   el('ssStart').value = el('start').value || monthStart(); el('ssEnd').value = el('end').value || rangeFor('yesterday')[1]; // 상단 구간 사용
-  el('ssSync').addEventListener('click', syncSmartstore);
   el('ssTabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
     el('ssTabs').querySelectorAll('.tab').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     ssTab = b.dataset.sstab; renderSSPanel();
@@ -1140,24 +1138,31 @@ function initSmartstore() {
   loadTarget();
   // 최초 로드는 채널 전환 핸들러(applyRangeToActiveView)가 상단 구간으로 수행
 }
-async function syncSmartstore() {
-  const b = el('ssSync'); b.disabled = true;
-  el('ssStatus').textContent = '네이버 커머스 API에서 최근 7일 수집 중… (변경주문→상세)';
+// 상단 공통 "최근 7일 재동기화" — 전 채널(Cafe24 + 스마트스토어 + 트래픽) 전체 재적재 + 캐시 워밍.
+//  Vercel 에선 cloudtype 위임(폴링), 로컬에선 즉시 실행. 과거 스마트스토어 탭 안에 있던 버튼을 상단 공통으로 이전.
+el('refresh7d').addEventListener('click', async () => {
+  const btn = el('refresh7d');
+  btn.disabled = true;
+  setStatus('최근 7일 전체 재동기화 중… (Cafe24·스마트스토어·트래픽)', '');
+  document.body.classList.add('loading');
   try {
-    const j = await (await fetch('/api/smartstore/sync-week?days=7')).json();
-    if (!j.ok) throw new Error(j.error);
-    if (j.delegated) { // Vercel → cloudtype 위임(고정IP 필요) → 완료까지 폴링
-      el('ssStatus').textContent = j.already ? 'cloudtype에서 이미 동기화 진행 중 — 완료까지 대기…' : 'cloudtype에서 스마트스토어 동기화 시작…';
-      const fin = await pollSync2((m) => { el('ssStatus').textContent = 'cloudtype 동기화 중… ' + m; });
+    const j = await (await fetch('/api/daily-sync?days=7')).json();
+    if (!j.ok) throw new Error(j.error || '실패');
+    if (j.delegated) { // Vercel → cloudtype 위임 → 완료까지 폴링(setStatus 로 진행 표시)
+      setStatus(j.already ? 'cloudtype에서 이미 동기화 진행 중 — 완료까지 대기…' : 'cloudtype에서 7일 재동기화 시작…', '');
+      const fin = await pollSync();
       if (fin && fin.status === 'error') throw new Error('cloudtype 동기화 오류: ' + (fin.error || ''));
-      el('ssStatus').textContent = '동기화 완료 (cloudtype)';
-    } else {
-      el('ssStatus').textContent = `수집 완료: ${j.from}~${j.to} · 변경 ${num(j.changed)} → 저장 ${num(j.stored)}건`;
     }
-    loadSmartstore();
-  } catch (e) { el('ssStatus').textContent = '오류: ' + e.message; }
-  finally { b.disabled = false; }
-}
+    loadedRange[curCh] = ''; // 현재 채널 강제 재조회
+    applyRangeToActiveView(el('start').value, el('end').value, true);
+    setStatus(j.delegated ? '최근 7일 재동기화 완료 (cloudtype) — 현재 구간 갱신' : '최근 7일 재동기화 완료 — 현재 구간 갱신', 'ok');
+  } catch (e) {
+    setStatus('재동기화 오류: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    document.body.classList.remove('loading');
+  }
+});
 // pollSync 의 콜백형 버전(상태표시 영역이 setStatus 가 아닌 다른 엘리먼트일 때).
 async function pollSync2(onMsg, { everyMs = 4000, maxMs = 240000 } = {}) {
   const t0 = Date.now();

@@ -209,6 +209,12 @@ async function handle(req, res) {
   // 수동 일일 동기화(최근 N일 적재 + 워밍) — 스케줄러와 동일 루틴을 즉시 1회 실행
   if (u.pathname === '/api/daily-sync') {
     const days = Math.min(Number(u.searchParams.get('days') || 7), 31);
+    if (ON_VERCEL) { // 전체(Cafe24+스마트스토어+traffic+워밍) 무거운 작업 → cloudtype 위임
+      try {
+        const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days } });
+        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+      } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
+    }
     const t0 = Date.now();
     console.log(`[${new Date().toISOString()}] /api/daily-sync days=${days}`);
     try {

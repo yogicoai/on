@@ -268,6 +268,16 @@ async function runHttp() {
       if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
       return sendJson(res, 200, { ok: true, ...syncJobs.status() });
     }
+    // 진단: 이 서버(cloudtype)의 아웃바운드(egress) IP — 네이버 커머스 IP 허용목록에 등록해야 SmartStore 동기화가 됨.
+    //   (egress IP 는 비밀이 아니라 진단용 → 브라우저로 바로 확인하도록 인증 없이 공개)
+    if (u.pathname === '/sync/egress-ip') {
+      try {
+        const ip = await new Promise((resolve, reject) => {
+          require('https').get('https://checkip.amazonaws.com', (r2) => { let b = ''; r2.on('data', (c) => { b += c; }); r2.on('end', () => resolve(b.trim())); }).on('error', reject);
+        });
+        return sendJson(res, 200, { ok: true, egressIp: ip, hint: '이 IP를 네이버 커머스 API 허용목록(최대 3개)에 등록하세요. cloudtype egress 는 회전할 수 있으니 여러 번 호출해 확인.' });
+      } catch (e) { return sendJson(res, 502, { ok: false, error: 'IP 조회 실패: ' + e.message }); }
+    }
 
     if (u.pathname !== '/mcp') { res.writeHead(404).end('not found'); return; }
     if (TOKEN && req.headers['authorization'] !== `Bearer ${TOKEN}`) {

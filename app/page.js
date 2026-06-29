@@ -139,7 +139,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260625d" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260625e" strategy="afterInteractive" />
     </>
   );
 }

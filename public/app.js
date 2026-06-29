@@ -1143,24 +1143,32 @@ function initSmartstore() {
 el('refresh7d').addEventListener('click', async () => {
   const btn = el('refresh7d');
   btn.disabled = true;
-  setStatus('최근 7일 전체 재동기화 중… (Cafe24·스마트스토어·트래픽)', '');
-  document.body.classList.add('loading');
+  setStatus('최근 7일 재동기화 요청 중…', '');
   try {
     const j = await (await fetch('/api/daily-sync?days=7')).json();
     if (!j.ok) throw new Error(j.error || '실패');
-    if (j.delegated) { // Vercel → cloudtype 위임 → 완료까지 폴링(setStatus 로 진행 표시)
-      setStatus(j.already ? 'cloudtype에서 이미 동기화 진행 중 — 완료까지 대기…' : 'cloudtype에서 7일 재동기화 시작…', '');
-      const fin = await pollSync();
-      if (fin && fin.status === 'error') throw new Error('cloudtype 동기화 오류: ' + (fin.error || ''));
+    if (j.delegated) {
+      // 무거울 수 있으니 화면을 막지 않고 백그라운드로 진행 — 버튼은 바로 풀고, 완료되면 자동 갱신.
+      setStatus(j.already
+        ? 'cloudtype에서 이미 7일 재동기화 진행 중 — 백그라운드 진행(완료 시 자동 반영)'
+        : 'cloudtype에서 7일 재동기화 시작 — 백그라운드 진행(완료 시 자동 반영). 다른 작업 계속하셔도 됩니다.', 'ok');
+      btn.disabled = false;
+      pollSync({ maxMs: 600000 }).then((fin) => {
+        if (fin && fin.status === 'error') { setStatus('7일 재동기화 오류: ' + (fin.error || ''), 'err'); return; }
+        loadedRange[curCh] = '';
+        applyRangeToActiveView(el('start').value, el('end').value, true);
+        setStatus(fin ? '최근 7일 재동기화 완료 (cloudtype) — 갱신됨' : '재동기화 진행 중 — 잠시 후 새로고침하면 반영됩니다', fin ? 'ok' : '');
+      });
+      return; // 백그라운드 진행 — 여기서 종료
     }
-    loadedRange[curCh] = ''; // 현재 채널 강제 재조회
+    // 로컬(비위임) 즉시 실행 완료
+    loadedRange[curCh] = '';
     applyRangeToActiveView(el('start').value, el('end').value, true);
-    setStatus(j.delegated ? '최근 7일 재동기화 완료 (cloudtype) — 현재 구간 갱신' : '최근 7일 재동기화 완료 — 현재 구간 갱신', 'ok');
+    setStatus('최근 7일 재동기화 완료 — 현재 구간 갱신', 'ok');
+    btn.disabled = false;
   } catch (e) {
     setStatus('재동기화 오류: ' + e.message, 'err');
-  } finally {
     btn.disabled = false;
-    document.body.classList.remove('loading');
   }
 });
 // pollSync 의 콜백형 버전(상태표시 영역이 setStatus 가 아닌 다른 엘리먼트일 때).

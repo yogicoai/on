@@ -26,6 +26,7 @@ const productPrices = require('../lib/productPrices');
 const forecast = require('../lib/forecast');
 const adEfficiency = require('../lib/adEfficiency'); // 광고효율 (adboard, 별도 클러스터 MONGODB_URI)
 const dailyReport = require('../lib/dailyReport');    // 온라인 매출(이카운트) — ad_vs_sales 교차용
+const marketing = require('../lib/marketing');        // 통합 마케팅 개요(매출+광고+트래픽 교차)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -215,6 +216,15 @@ function build() {
       벤더별: ad.vendors.map((v) => ({ 매체: v.platform, 광고비: v.spend, 전환매출: v.convValue, ROAS: v.roas })),
     };
   }));
+
+  server.registerTool('marketing_overview', {
+    title: '통합 마케팅 개요 — 매출+광고+트래픽 교차 (실질 비용률·CAC) [교차]',
+    description: '기간 하나로 매출(이카운트 채널별)·광고(매체별 광고비·ROAS·전환)·트래픽(방문·신규가입·구매)을 한 번에 조합. ' +
+      '실질 마케팅비용률(광고비÷실매출)·신규가입당 광고비(CAC)·방문대비 구매전환율·매체별 추정대상몰까지 제공. ' +
+      '광고효율과 실매출을 엮은 종합 질문("이 기간 광고 대비 실매출·CAC·비용률")에 이 도구 하나로 답할 것. ' +
+      '⚠️ 주문 단위 귀속 없음 → 일별·집계 수준 대조. convValue(광고기여)와 실매출(이카운트 확정)은 다른 수치라 합산 금지.',
+    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
+  }, wrap(async ({ start, end }) => marketing.overview(start, end)));
 
   return server;
 }

@@ -249,6 +249,24 @@ function build() {
     inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
   }, wrap(async ({ start, end }) => marketing.overview(start, end)));
 
+  server.registerTool('marketing_sales_series', {
+    title: '일별 마케팅↔매출 시계열 (광고×매출×회원/비회원×트래픽) [교차·관계분석]',
+    description: '기간을 "하루=한 줄"로 정렬한 통합 표. 각 날짜: 매체별 광고비(네이버·메타·크리테오·카카오)·채널별 매출(자사몰·스토어·외부)·자사몰 회원/비회원 매출·방문·신규가입·구매. ' +
+      '광고와 매출의 관계·상관·추세·시차("광고 늘린 날 다음날 매출 반응") 분석엔 이 도구를 사용 — 여러 도구를 따로 부르지 말 것(날짜 정렬은 서버가 끝냄). ' +
+      '⚠️ 주문 단위 광고 귀속 없음 → 상관관계(인과 아님).',
+    inputSchema: D,
+  }, wrap(({ start, end }) => marketing.series(start, end)));
+
+  server.registerTool('marketing_period_compare', {
+    title: '두 구간 마케팅↔매출 비교 (프로모션 전/중/후·광고 늘린 주 등) [교차]',
+    description: '두 기간(A·B)의 광고비·매출(채널별)·회원/비회원·트래픽을 "일평균 기준"으로 비교(기간 길이 달라도 됨) + 증감률 + 증분ROAS(매출증분÷광고비증분). ' +
+      '"광고 늘린 주 vs 안 늘린 주", "프로모션 기간 vs 평소" 같은 비교 질문에 이 도구를 사용.',
+    inputSchema: {
+      aStart: z.string().describe('A구간 시작 YYYY-MM-DD'), aEnd: z.string().describe('A구간 종료 YYYY-MM-DD'),
+      bStart: z.string().describe('B구간 시작 YYYY-MM-DD'), bEnd: z.string().describe('B구간 종료 YYYY-MM-DD'),
+    },
+  }, wrap(({ aStart, aEnd, bStart, bEnd }) => marketing.periodCompare(aStart, aEnd, bStart, bEnd)));
+
   return server;
 }
 

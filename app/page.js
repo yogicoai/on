@@ -21,8 +21,8 @@ const SHELL = `
       <label>종료 <input type="date" id="end" /></label>
       <button id="apply" class="btn">조회</button>
       <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
-      <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 00시 자동 실행)">⟳ 오늘 재취합(API)</button>
-      <button id="refresh7d" class="btn warn" title="최근 7일 전체(Cafe24 + 스마트스토어 + 트래픽)를 cloudtype에서 재동기화합니다. 모든 채널 공통 (자동: 매일 00시)">⟳ 최근 7일 재동기화</button>
+      <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 오전 9시 자동 실행)">⟳ 오늘 재취합(API)</button>
+      <button id="refresh7d" class="btn warn" title="최근 7일 전체(Cafe24 + 스마트스토어 + 트래픽)를 cloudtype에서 재동기화합니다. 모든 채널 공통 (자동: 매일 오전 9시)">⟳ 최근 7일 재동기화</button>
       <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="Yogibo 일일 매출 대시보드 — 자사몰·스마트스토어·외부채널 통합 일일 매출 리포트">📊 Yogibo 일일 매출 대시보드</button>
       <button id="btnPromoCal" class="btn cal" type="button" title="전 몰 프로모션을 월간 달력으로 보고 상세 계획을 편집">프로모션 달력</button>
       <button id="btnPromoTgt" class="btn" type="button" title="프로모션 기간 + 채널별 목표매출 입력 → 리포트 목표 페이스에서 달성률 자동">🎯 프로모션 목표</button>
@@ -32,7 +32,7 @@ const SHELL = `
   </header>
 
   <div class="syncinfo">
-    <span>매일 <b>00:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합(API)</b> 버튼을 눌러 최신 API를 취합하세요.</span>
+    <span>매일 <b>09:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합(API)</b> 버튼을 눌러 최신 API를 취합하세요.</span>
   </div>
 
   <div class="layout">
@@ -139,7 +139,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260625e" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260625f" strategy="afterInteractive" />
     </>
   );
 }

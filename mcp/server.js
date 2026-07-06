@@ -27,6 +27,9 @@ const forecast = require('../lib/forecast');
 const adEfficiency = require('../lib/adEfficiency'); // 광고효율 (adboard, 별도 클러스터 MONGODB_URI)
 const dailyReport = require('../lib/dailyReport');    // 온라인 매출(이카운트) — ad_vs_sales 교차용
 const marketing = require('../lib/marketing');        // 통합 마케팅 개요(매출+광고+트래픽 교차)
+const orders = require('../lib/orders');               // 자사몰 회원/비회원 결제 분석
+const tagPromotions = require('../lib/tagPromotions'); // 자사몰 상품태그별 매출
+const benefit = require('../lib/benefit');             // 자사몰 적립금·쿠폰 사용 분석
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -70,6 +73,26 @@ function build() {
     if (!names.length) return { start, end, byCoupon: [], note: '이 기간 연결 쿠폰 없음' };
     return cafe24Coupons.couponPerfFor([...new Set(names)], start, end);
   }));
+
+  server.registerTool('cafe24_member_sales', {
+    title: '자사몰 회원 vs 비회원 매출 [확정집계]',
+    description: '기간 자사몰(Cafe24) 회원/비회원별 매출·주문·객단가·쿠폰할인·적립금사용·신규주문 + 회원 매출비중 + **일별 회원/비회원 매출 시계열**. ' +
+      '"광고가 신규(비회원)를 데려오나", "회원 재구매 vs 신규 획득" 같은 마케팅↔고객군 분석에 사용. 개인정보 없이 집계만.',
+    inputSchema: D,
+  }, wrap(async ({ start, end }) => orders.memberReport(await orders.fetchOrdersSmart(start, end), start, end)));
+
+  server.registerTool('cafe24_tag_sales', {
+    title: '자사몰 상품태그별 매출 ([클리어런스]·[공동구매] 등) [확정집계]',
+    description: '기간 자사몰 상품태그(프로모션 태그)별 매출·주문·수량. 태그로 묶인 기획전/클리어런스 성과, 어떤 상품군이 도는지 분석에 사용.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => tagPromotions.tagPromotionSales(start, end)));
+
+  server.registerTool('cafe24_benefit_usage', {
+    title: '자사몰 적립금·쿠폰 사용 분석 [확정집계]',
+    description: '기간 자사몰 주문의 혜택 사용 분류(쿠폰+적립금/쿠폰만/적립금만/미사용)별 매출·주문 + 적립금 사용액·쿠폰 할인액·사용 비율. ' +
+      '프로모션/할인 의존도, 혜택이 매출에 미치는 영향 분석에 사용. (공동구매 제외)',
+    inputSchema: D,
+  }, wrap(({ start, end }) => benefit.benefitUsage(start, end)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

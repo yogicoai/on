@@ -30,6 +30,9 @@ const marketing = require('../lib/marketing');        // 통합 마케팅 개요
 const orders = require('../lib/orders');               // 자사몰 회원/비회원 결제 분석
 const tagPromotions = require('../lib/tagPromotions'); // 자사몰 상품태그별 매출
 const benefit = require('../lib/benefit');             // 자사몰 적립금·쿠폰 사용 분석
+const analytics = require('../lib/analytics');         // 자사몰 유입경로 상세(광고소스·검색어·도메인)
+const returns = require('../lib/returns');             // 반품/취소·순매출(자사몰+스토어)
+const retention = require('../lib/retention');         // 고객 재구매/LTV/리텐션(자사몰)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -93,6 +96,29 @@ function build() {
       '프로모션/할인 의존도, 혜택이 매출에 미치는 영향 분석에 사용. (공동구매 제외)',
     inputSchema: D,
   }, wrap(({ start, end }) => benefit.benefitUsage(start, end)));
+
+  server.registerTool('cafe24_inflow_detail', {
+    title: '자사몰 유입경로 상세 — 광고소스별 주문·매출·가입 + 검색어 + 도메인 [Cafe24 통계]',
+    description: '기간 자사몰(Cafe24) 통계: ' +
+      '① adsales=광고 소스별(SA=검색광고·Brandchannel·채널없음 등) **주문수·주문금액·가입수**(Cafe24 자체 측정 광고→주문 귀속) ' +
+      '② keywords=유입 검색어별 방문 TOP ③ domains=유입 도메인(네이버·구글·직접 등) TOP. ' +
+      '"자사몰에서 어떤 광고/검색어가 실제 주문·유입을 만들었나" 분석에 사용. 스마트스토어 유입은 marketing_inflow.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => analytics.inflowPaths(start, end)));
+
+  server.registerTool('returns_analysis', {
+    title: '반품/취소 분석 — 순매출·취소율·반품률 (자사몰+스토어) [확정집계]',
+    description: '기간 자사몰(Cafe24)·스마트스토어의 정상/취소/반품 분류 → 순매출(반품·취소 제외)·취소율·반품률·반품금액. ' +
+      '"진짜 매출(반품 뺀)", "반품률 높은 채널/기간" 분석에 사용. 자사몰은 라이브 주문 분류(다소 느릴 수 있음), 스토어는 DB status 기준.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => returns.returnsReport(start, end)));
+
+  server.registerTool('customer_retention', {
+    title: '고객 재구매·LTV·리텐션 (자사몰) [확정집계]',
+    description: '최근 N개월(기본 6) 자사몰 회원 기준: 구매회원수·재구매회원수·**재구매율**·회원 평균 주문수·평균 구매액(윈도우 LTV)·**평균 재구매 주기(일)** + 신규 vs 재구매 주문·매출 비중 + 비회원 비중. ' +
+      '"단골 비중", "재구매 주기", "신규 의존도", "회원 LTV" 분석에 사용. 개인정보 없이 집계만.',
+    inputSchema: { months: z.number().int().optional().describe('조회 개월수(기본 6, 최대 24)') },
+  }, wrap(({ months }) => retention.retention(months)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

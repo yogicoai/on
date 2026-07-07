@@ -36,6 +36,9 @@ const retention = require('../lib/retention');         // 고객 재구매/LTV/�
 const offline = require('../lib/offline');             // 오프라인 매장 판매(off.orders) + 온·오프 비교
 const jwasuLeague = require('../lib/jwasuLeague');     // Y리그(좌수왕·캐스트·스토어)
 const workSchedule = require('../lib/workSchedule');   // 매니저 근무 스케줄(오프라인 매장)
+const briefing = require('../lib/briefing');           // 일일 브리핑(온+오프+광고+목표 요약)
+const delivery = require('../lib/delivery');           // 매장 택배 배송 조회(PII 마스킹)
+const stockTrend = require('../lib/stockTrend');       // 재고 일별 스냅샷 추이
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -126,10 +129,24 @@ function build() {
   server.registerTool('offline_analysis', {
     title: '오프라인 매장 판매 분석 — 매장·카테고리·충전재·상품·사원별 [확정집계]',
     description: '기간 오프라인 매장(신세계센텀시티몰·스타필드하남/고양·롯데동탄/안산/김포공항/대구·현대미아/무역센터·신세계본점/대전 등 백화점/몰 매장) 판매: ' +
-      '합계(매출·수량·주문수·객단가) + 매장별 + 카테고리·충전재별 + 상품TOP + 판매사원TOP. ' +
-      '오프라인/매장 매출 질문엔 이 도구 사용 — other_channels(온라인 입점몰)와 다른 원장(매장 주문서 시스템). 고객 개인정보 없음.',
+      '합계(매출·수량·주문수·객단가) + 매장별(**월 목표매출·달성률 포함**) + 카테고리·충전재별 + 상품TOP + 판매사원TOP. ' +
+      '오프라인/매장 매출·목표 달성률 질문엔 이 도구 사용 — 주차별 목표는 offline_weekly_target. 고객 개인정보 없음.',
     inputSchema: D,
   }, wrap(({ start, end }) => offline.analyze(start, end)));
+
+  server.registerTool('offline_weekly_target', {
+    title: '오프라인 매장 주차별 목표 대비 실적 (N주차 달성률) [확정집계]',
+    description: '해당 월(YYYY-MM)의 오프라인 매장 주차별(1~6주차) 목표매출 vs 실적 vs 달성률 — 전체 주차 합계 + 매장별 주차 상세. ' +
+      '"7월 1주차 목표 달성률", "이번 주차 매장별 실적" 같은 주간 목표 질문에 이 도구 사용. 월 전체 목표는 offline_analysis.',
+    inputSchema: { month: z.string().describe('YYYY-MM (예: 2026-07)') },
+  }, wrap(({ month }) => offline.weeklyStatus(month)));
+
+  server.registerTool('offline_set_cover', {
+    title: '오프라인 세트구매·커버 동시구매 분석 [확정집계]',
+    description: '기간 오프라인 매장의 세트구매율·커버 동시구매율(주문 단위, 매장 분석화면과 동일 정의) — 전체 + 매장별 + 세트/커버 인기상품 TOP. ' +
+      '"커버 동시구매율", "세트 구매 비율", "어느 매장이 커버 연계판매를 잘하나" 질문에 이 도구 사용.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => offline.setCoverAnalysis(start, end)));
 
   server.registerTool('online_offline_compare', {
     title: '온라인 vs 오프라인 매출 비교 — 합계·비중·일별 [교차]',
@@ -157,6 +174,33 @@ function build() {
       store: z.string().optional().describe('매장명 필터(부분일치)'), manager: z.string().optional().describe('매니저명 필터(부분일치)'),
     },
   }, wrap(({ start, end, store: st, manager }) => workSchedule.schedule(start, end, { storeName: st, manager })));
+
+  server.registerTool('daily_briefing', {
+    title: '일일 브리핑 — 온+오프 매출·목표 페이스·광고·트래픽 한 방 요약 [직원용]',
+    description: '기준일(미지정 시 어제) 하루 요약: 전체/온라인(자사몰·스토어·외부)/오프라인 매출 + 전일·전주 동요일 대비 + 월 누적·목표 달성률(온라인/오프라인) + 당일·월누적 광고비·ROAS + 자사몰 트래픽(방문·가입·구매). ' +
+      '"어제 어땠어", "오늘 브리핑", "어제 매출 요약" 같은 일일 요약 질문엔 여러 도구 대신 이 도구 하나만 호출.',
+    inputSchema: { date: z.string().optional().describe('기준일 YYYY-MM-DD (생략=어제)') },
+  }, wrap(({ date }) => briefing.briefing(date)));
+
+  server.registerTool('delivery_status', {
+    title: '매장 택배 배송 조회 (오프라인 주문서) [조회전용·개인정보 마스킹]',
+    description: '오프라인 매장 택배 발송 현황: 주문번호(부분일치)·매장명·발송일 기간·상태(SHIPPED 등)로 조회 → 상태·택배사·송장번호·발송일·상품. ' +
+      '"○○매장 어제 발송 건", "주문번호 X 배송 어디까지" 질문에 사용. 고객명 마스킹·연락처/주소 미제공.',
+    inputSchema: {
+      orderNo: z.string().optional().describe('주문번호(부분일치)'),
+      store: z.string().optional().describe('매장명(부분일치)'),
+      start: z.string().optional().describe('발송일 시작 YYYY-MM-DD'),
+      end: z.string().optional().describe('발송일 종료 YYYY-MM-DD'),
+      status: z.string().optional().describe('배송상태 필터(예: SHIPPED)'),
+    },
+  }, wrap(({ orderNo, store: st, start, end, status }) => delivery.shipments({ orderNo, storeName: st, start, end, status })));
+
+  server.registerTool('stock_trend', {
+    title: '재고 소진 추이 — 일별 스냅샷 기반 [확정집계]',
+    description: '품목 검색어(필수)로 최근 N일(기본 14) 일별 재고 추이 + 일평균 소진 속도 + 소진 예상일. ' +
+      '"이 품목 재고 얼마나 빨리 빠져?", "언제 소진돼?" 질문에 사용. 현재 수량만 필요하면 stock_list, 발주 판단은 reorder_plan.',
+    inputSchema: { search: z.string().describe('품목명/색상 (예: 맥스 커버)'), days: z.number().int().optional().describe('조회 일수(기본 14, 최대 31)') },
+  }, wrap(({ search, days }) => stockTrend.trend(search, { days })));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',
@@ -248,15 +292,17 @@ function build() {
     description: '현재 실시간 재고(품목코드·품목명·색상·수량 qty). search로 품목명 필터 권장. search 없으면 재고 적은 순 상위 40 + 총개수.',
     inputSchema: { search: z.string().optional().describe('품목명/색상 필터(예: 맥스 커버)') },
   }, wrap(async ({ search }) => {
-    const rows = await forecast.stockList();
+    const [rows, updatedAt] = await Promise.all([forecast.stockList(), forecast.stockUpdatedAt().catch(() => null)]);
     const items = Array.isArray(rows) ? rows : [];
     const total = items.length;
+    // 재고는 ~10분 주기 동기화 — 기준 시각을 함께 반환해 "언제 기준 재고"인지 답변에 명시되게 함
+    const base = { total, 재고기준시각: updatedAt, 주의: '재고는 약 10분 주기로 동기화됨 — 재고기준시각 기준 수량(실시간 판매분은 다음 동기화에 반영).' };
     if (search) {
       const f = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
-      return { total, count: f.length, items: f.slice(0, 80) };
+      return { ...base, count: f.length, items: f.slice(0, 80) };
     }
     const low = [...items].sort((a, b) => (a.qty || 0) - (b.qty || 0)).slice(0, 40);
-    return { total, 안내: '품목명으로 search하면 정확히 조회됩니다. 아래는 재고 적은 순 상위 40.', 재고적은순: low };
+    return { ...base, 안내: '품목명으로 search하면 정확히 조회됩니다. 아래는 재고 적은 순 상위 40.', 재고적은순: low };
   }));
 
   server.registerTool('target_status', {

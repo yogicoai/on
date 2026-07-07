@@ -33,6 +33,7 @@ const benefit = require('../lib/benefit');             // 자사몰 적립금·�
 const analytics = require('../lib/analytics');         // 자사몰 유입경로 상세(광고소스·검색어·도메인)
 const returns = require('../lib/returns');             // 반품/취소·순매출(자사몰+스토어)
 const retention = require('../lib/retention');         // 고객 재구매/LTV/리텐션(자사몰)
+const offline = require('../lib/offline');             // 오프라인 매장 판매(off.orders) + 온·오프 비교
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -119,6 +120,21 @@ function build() {
       '"단골 비중", "재구매 주기", "신규 의존도", "회원 LTV" 분석에 사용. 개인정보 없이 집계만.',
     inputSchema: { months: z.number().int().optional().describe('조회 개월수(기본 6, 최대 24)') },
   }, wrap(({ months }) => retention.retention(months)));
+
+  server.registerTool('offline_analysis', {
+    title: '오프라인 매장 판매 분석 — 매장·카테고리·충전재·상품·사원별 [확정집계]',
+    description: '기간 오프라인 매장(신세계센텀시티몰·스타필드하남/고양·롯데동탄/안산/김포공항/대구·현대미아/무역센터·신세계본점/대전 등 백화점/몰 매장) 판매: ' +
+      '합계(매출·수량·주문수·객단가) + 매장별 + 카테고리·충전재별 + 상품TOP + 판매사원TOP. ' +
+      '오프라인/매장 매출 질문엔 이 도구 사용 — other_channels(온라인 입점몰)와 다른 원장(매장 주문서 시스템). 고객 개인정보 없음.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => offline.analyze(start, end)));
+
+  server.registerTool('online_offline_compare', {
+    title: '온라인 vs 오프라인 매출 비교 — 합계·비중·일별 [교차]',
+    description: '기간 온라인(이카운트: 자사몰+스마트스토어+외부채널)과 오프라인(매장 주문서)의 매출 합계·비중(%)·일별 시계열을 한 번에 비교. ' +
+      '"온·오프 비중", "오프라인이 온라인 대비 얼마나", "전사 매출(온+오프)" 질문에 사용. 서로 다른 원장이라 합산은 근사치.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => offline.onOffCompare(start, end)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

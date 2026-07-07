@@ -43,6 +43,7 @@ const segments = require('../lib/segments');           // 비즈 충전 유도 �
 const voc = require('../lib/voc');                     // 자사몰 게시판 VOC(리뷰·Q&A·A/S)
 const cafe24api = require('../lib/cafe24');            // 진행중 혜택 등 Admin API 직접 조회용
 const ssExtra = require('../lib/smartstoreExtra');     // 스마트스토어 상품/재고·정산(네이버 커머스 API)
+const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·쿠폰별 구매 주문 리스트
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -91,6 +92,18 @@ function build() {
     if (!names.length) return { start, end, byCoupon: [], note: '이 기간 연결 쿠폰 없음' };
     return cafe24Coupons.couponPerfFor([...new Set(names)], start, end);
   }));
+
+  server.registerTool('cafe24_coupon_usage', {
+    title: '자사몰 쿠폰 사용 현황 — 기간별 쿠폰 확인 + 쿠폰별 구매 주문 리스트 [확정집계]',
+    description: '기간 자사몰에서 **실제 사용된 쿠폰별** 주문수·매출·할인액·첫구매 집계(다운로드 쿠폰 프로모션 운영용). ' +
+      'coupon(쿠폰명 부분일치) 지정 시 → **그 쿠폰으로 구매한 주문 리스트**(주문번호·일자·금액·할인·상품·회원/첫구매). ' +
+      '"이번 프로모션 기간에 어떤 쿠폰이 얼마나 쓰였어", "○○쿠폰으로 산 주문 정리해줘" 질문에 사용. ' +
+      '쿠폰명 매핑 커버리지(%)를 함께 반환 — 낮으면 대시보드 쿠폰 적재 후 재조회 안내. 개인정보 미포함.',
+    inputSchema: {
+      start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD'),
+      coupon: z.string().optional().describe('쿠폰명 부분일치(지정 시 그 쿠폰 구매 주문 리스트 반환)'),
+    },
+  }, wrap(({ start, end, coupon }) => couponUsage.usage(start, end, { coupon })));
 
   server.registerTool('cafe24_member_sales', {
     title: '자사몰 회원 vs 비회원 매출 [확정집계]',

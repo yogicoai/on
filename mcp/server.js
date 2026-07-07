@@ -34,6 +34,7 @@ const analytics = require('../lib/analytics');         // 자사몰 유입경로
 const returns = require('../lib/returns');             // 반품/취소·순매출(자사몰+스토어)
 const retention = require('../lib/retention');         // 고객 재구매/LTV/리텐션(자사몰)
 const offline = require('../lib/offline');             // 오프라인 매장 판매(off.orders) + 온·오프 비교
+const jwasuLeague = require('../lib/jwasuLeague');     // Y리그(좌수왕·캐스트·스토어)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -135,6 +136,15 @@ function build() {
       '"온·오프 비중", "오프라인이 온라인 대비 얼마나", "전사 매출(온+오프)" 질문에 사용. 서로 다른 원장이라 합산은 근사치.',
     inputSchema: D,
   }, wrap(({ start, end }) => offline.onOffCompare(start, end)));
+
+  server.registerTool('y_league', {
+    title: 'Y리그 — 좌수왕·캐스트·스토어 랭킹 (오프라인 매장 리그) [확정집계]',
+    description: '기간 오프라인 매장 Y리그 3종목: ' +
+      '① 좌수왕=목표 인원(좌수) 대비 판매 인원 달성률 순위(매니저별) ② 캐스트=직영(매니저/부매니저/시니어/일급제) 개인 매출 순위 ③ 스토어=매장 목표매출 대비 달성률 순위. ' +
+      '"Y리그", "좌수", "좌수왕", "캐스트 순위", "매장 리그/베스트 스토어" 질문에 사용. ' +
+      '※ 공식 화면은 일부 노출 보정(인원 화이트리스트 등)이 있어 소폭 다를 수 있음(여기는 원천 집계).',
+    inputSchema: D,
+  }, wrap(({ start, end }) => jwasuLeague.league(start, end)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

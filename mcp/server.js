@@ -35,6 +35,7 @@ const returns = require('../lib/returns');             // 반품/취소·순매�
 const retention = require('../lib/retention');         // 고객 재구매/LTV/리텐션(자사몰)
 const offline = require('../lib/offline');             // 오프라인 매장 판매(off.orders) + 온·오프 비교
 const jwasuLeague = require('../lib/jwasuLeague');     // Y리그(좌수왕·캐스트·스토어)
+const workSchedule = require('../lib/workSchedule');   // 매니저 근무 스케줄(오프라인 매장)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -145,6 +146,17 @@ function build() {
       '※ 공식 화면은 일부 노출 보정(인원 화이트리스트 등)이 있어 소폭 다를 수 있음(여기는 원천 집계).',
     inputSchema: D,
   }, wrap(({ start, end }) => jwasuLeague.league(start, end)));
+
+  server.registerTool('staff_schedule', {
+    title: '매니저 근무 스케줄 조회 (오프라인 매장) [조회전용]',
+    description: '기간 오프라인 매장 매니저 스케줄: 일별(출근~퇴근·근무시간·구분: 근무/주휴/연차/반차/대체휴무) + 매니저별 요약(근무일·총근무시간·휴무일수) + 매장×일자 근무 인원 명단. ' +
+      'store(매장명)·manager(이름) 부분일치 필터 지원. 미래 날짜=사전 편성 스케줄. ' +
+      '"오늘 ○○매장 누가 출근?", "이번 달 ○○ 근무시간", "다음 주 스케줄" 질문에 사용. 조회 전용 — 편성/수정은 스케줄 앱에서.',
+    inputSchema: {
+      start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD'),
+      store: z.string().optional().describe('매장명 필터(부분일치)'), manager: z.string().optional().describe('매니저명 필터(부분일치)'),
+    },
+  }, wrap(({ start, end, store: st, manager }) => workSchedule.schedule(start, end, { storeName: st, manager })));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

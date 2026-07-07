@@ -118,6 +118,14 @@ function build() {
     inputSchema: D,
   }, wrap(({ start, end }) => analytics.inflowPaths(start, end)));
 
+  server.registerTool('cafe24_behavior', {
+    title: '자사몰 행동 통계 — 페이지별 뷰·상품 조회→장바구니 퍼널·시간대별 구매·순방문자 [Cafe24 통계]',
+    description: '기간 자사몰(Cafe24) 행동 데이터: ① 페이지별 조회수 TOP(이벤트/프로모션 페이지 성과 확인) ② 상품별 조회수+장바구니담기+담기율(조회→구매 퍼널) ' +
+      '③ 시간대별(0~23시) 구매자·주문·매출 ④ 일별 순방문자(UV). ' +
+      '"이벤트 페이지 뷰 얼마나 나왔어", "어떤 상품이 많이 보는데 안 담기나", "몇 시에 제일 많이 사?" 질문에 사용.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => analytics.behaviorStats(start, end)));
+
   server.registerTool('returns_analysis', {
     title: '반품/취소 분석 — 순매출·취소율·반품률 (자사몰+스토어) [확정집계]',
     description: '기간 자사몰(Cafe24)·스마트스토어의 정상/취소/반품 분류 → 순매출(반품·취소 제외)·취소율·반품률·반품금액. ' +

@@ -130,9 +130,13 @@ function build() {
     title: '오프라인 매장 판매 분석 — 매장·카테고리·충전재·상품·사원별 [확정집계]',
     description: '기간 오프라인 매장(신세계센텀시티몰·스타필드하남/고양·롯데동탄/안산/김포공항/대구·현대미아/무역센터·신세계본점/대전 등 백화점/몰 매장) 판매: ' +
       '합계(매출·수량·주문수·객단가) + 매장별(**월 목표매출·달성률 포함**) + 카테고리·충전재별 + 상품TOP + 판매사원TOP. ' +
+      'store(매장명 부분일치) 지정 시 **그 매장만** 분석 — "○○매장 카테고리 구성/상품TOP" 질문에 사용. ' +
       '오프라인/매장 매출·목표 달성률 질문엔 이 도구 사용 — 주차별 목표는 offline_weekly_target. 고객 개인정보 없음.',
-    inputSchema: D,
-  }, wrap(({ start, end }) => offline.analyze(start, end)));
+    inputSchema: {
+      start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD'),
+      store: z.string().optional().describe('매장명 필터(부분일치, 예: 센텀)'),
+    },
+  }, wrap(({ start, end, store: st }) => offline.analyze(start, end, { storeName: st })));
 
   server.registerTool('offline_weekly_target', {
     title: '오프라인 매장 주차별 목표 대비 실적 (N주차 달성률) [확정집계]',
@@ -159,7 +163,7 @@ function build() {
     title: 'Y리그 — 좌수왕·캐스트·스토어 랭킹 (오프라인 매장 리그) [확정집계]',
     description: '기간 오프라인 매장 Y리그 3종목: ' +
       '① 좌수왕=목표 인원(좌수) 대비 판매 인원 달성률 순위(매니저별) ② 캐스트=직영(매니저/부매니저/시니어/일급제) 개인 매출 순위 ③ 스토어=매장 목표매출 대비 달성률 순위. ' +
-      '"Y리그", "좌수", "좌수왕", "캐스트 순위", "매장 리그/베스트 스토어" 질문에 사용. ' +
+      '"Y리그", "좌수", "좌수왕", "캐스트 순위", "스토어 리그", "매장 리그/베스트 스토어" 질문에 사용. 스토어 리그 1위 매장의 상세(카테고리 등)는 이 도구로 1위 확인 후 offline_analysis(store 필터)로 조회. ' +
       '※ 공식 화면은 일부 노출 보정(인원 화이트리스트 등)이 있어 소폭 다를 수 있음(여기는 원천 집계).',
     inputSchema: D,
   }, wrap(({ start, end }) => jwasuLeague.league(start, end)));

@@ -143,9 +143,10 @@ function build() {
   }, wrap(({ start, end }) => analytics.behaviorStats(start, end)));
 
   server.registerTool('cafe24_page_views', {
-    title: '특정 페이지(URL) 일별 뷰 추이 [Cafe24 통계]',
-    description: 'URL 조각(부분일치, 예: "7_promotion", "/event/")으로 그 페이지의 **일별 조회수·방문 추이**를 반환(최대 31일) + 매칭 URL 목록. ' +
-      '"이 이벤트 페이지 뷰 기간별로", "○○ 페이지 하루하루 얼마나 봤어" 질문에 사용. 전체 페이지 TOP은 cafe24_behavior.',
+    title: '특정 페이지(URL) 일별 뷰 추이 — 월별 프로모션 페이지 포함 [Cafe24 통계]',
+    description: 'URL 조각(부분일치)·전체 URL·"N월 프로모션" 표현 모두 지원 — 그 페이지의 **일별 조회수·방문 추이**(최대 31일) + 매칭 URL. ' +
+      '📌 월별 프로모션 페이지 URL 규칙: /event/yogibo/{연도}/{월}_promotion.html (예: 2026년 7월 = 7_promotion). ' +
+      '"7월 프로모션 페이지 뷰", "이 URL 페이지뷰 기간별로" 질문에 사용 — url에 "7월 프로모션"처럼 한글로 넣어도 자동 변환됨. 매칭 실패 시 후보URL 반환 → 그중 골라 재조회. 전체 페이지 TOP은 cafe24_behavior.',
     inputSchema: {
       url: z.string().describe('URL 부분일치 문자열 (예: 7_promotion)'),
       start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD'),

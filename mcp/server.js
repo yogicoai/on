@@ -46,7 +46,12 @@ const wrap = (fn) => async (args) => { try { return ok(await fn(args)); } catch 
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 
 function build() {
-  const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' });
+  const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' }, {
+    // 클라이언트(Claude)에게 전달되는 전역 지침 — 통화·표기 규칙
+    instructions: '이 서버의 모든 금액 수치는 대한민국 원(KRW)이다. 절대 달러($)로 표기하거나 환산하지 말 것. ' +
+      '답변에서 금액은 "1,234,567원" 형식(천단위 콤마 + 원)으로 표기한다. 큰 금액은 "1.2억원", "3,450만원" 같은 한국식 축약도 허용. ' +
+      '날짜/시간은 한국 시간(KST) 기준. 데이터는 매일 오전 9시(매출)·9시 30분(광고) 자동 갱신된다.',
+  });
   const D = { start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD') };
 
   server.registerTool('cafe24_analysis', {
@@ -220,7 +225,7 @@ function build() {
     '👥 고객': ['재구매율·재구매주기·회원 LTV는?', '신규 의존도 얼마나 돼?'],
     '📦 재고·물류': ['맥스 커버 재고 얼마나 남았어?', '이 품목 재고 소진 속도는?', '발주 필요한 품목 알려줘', '○○매장 어제 택배 발송 현황'],
     '📈 비교·추이': ['전년/전월/전주 대비 채널 비교', '월별 매출 추이', '제품별 판매 예측'],
-    팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 명시하는 것이 좋습니다. 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다.',
+    팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 명시하는 것이 좋습니다. 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
   })));
 
   server.registerTool('marketing_inflow', {

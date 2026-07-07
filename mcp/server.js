@@ -39,6 +39,7 @@ const workSchedule = require('../lib/workSchedule');   // 매니저 근무 스�
 const briefing = require('../lib/briefing');           // 일일 브리핑(온+오프+광고+목표 요약)
 const delivery = require('../lib/delivery');           // 매장 택배 배송 조회(PII 마스킹)
 const stockTrend = require('../lib/stockTrend');       // 재고 일별 스냅샷 추이
+const segments = require('../lib/segments');           // 비즈 충전 유도 대상(본품 N개월 경과·비즈 미구매)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -210,6 +211,39 @@ function build() {
       '"이 품목 재고 얼마나 빨리 빠져?", "언제 소진돼?" 질문에 사용. 현재 수량만 필요하면 stock_list, 발주 판단은 reorder_plan.',
     inputSchema: { search: z.string().describe('품목명/색상 (예: 맥스 커버)'), days: z.number().int().optional().describe('조회 일수(기본 14, 최대 31)') },
   }, wrap(({ search, days }) => stockTrend.trend(search, { days })));
+
+  server.registerTool('bead_refill_targets', {
+    title: '비즈 충전 유도 대상 — 본품 구매 N개월 경과·비즈 미구매 회원 [프로모션 타겟]',
+    description: '자사몰 회원 중 본품(소파·바디필로우·메이트) 구매 후 N개월(기본 6) 이상 경과했는데 리필/비즈를 아직 안 산 회원 집계: ' +
+      '대상자 수·마케팅 수신동의 인원·경과개월 분포·구매 본품 TOP. "비즈 충전 프로모션 대상", "비즈 리필 타겟 고객" 질문에 사용. ' +
+      '⚠️ 개인정보 보호: 이름·연락처는 MCP로 제공하지 않음 — 실제 발송용 명단(CSV)은 판매분석 대시보드 ⑧ 비즈 유도 고객 탭에서 다운로드하라고 안내할 것. 첫 조회는 수십 초 걸릴 수 있음(이후 캐시).',
+    inputSchema: { months: z.number().int().optional().describe('본품 구매 후 경과 개월 기준(기본 6)') },
+  }, wrap(async ({ months }) => {
+    const mo = Number.isFinite(+months) && +months > 0 ? +months : 6;
+    const r = await segments.bizPromote(mo, { withPII: true, limit: 5000 });
+    const rows = r.rows || [];
+    // 집계만 반환(PII 폐기) — 수신동의·경과개월 분포·본품 TOP
+    const consent = rows.filter((x) => x.smsAgree || x.mailAgree).length;
+    const sms = rows.filter((x) => x.smsAgree).length;
+    const buckets = {};
+    for (const x of rows) {
+      const m = x.monthsSince || 0;
+      const k = m >= 24 ? '24개월+' : m >= 18 ? '18~23개월' : m >= 12 ? '12~17개월' : `${mo}~11개월`;
+      buckets[k] = (buckets[k] || 0) + 1;
+    }
+    const prodCount = {};
+    for (const x of rows) for (const p of (x.products || [])) prodCount[p] = (prodCount[p] || 0) + 1;
+    const 본품TOP = Object.entries(prodCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([p, n]) => ({ 본품: p, 보유고객: n }));
+    return {
+      기준: `본품(소파·바디필로우·메이트) 구매 후 ${mo}개월+ 경과 · 리필/비즈 미구매 · 자사몰 회원`,
+      대상자수: r.count,
+      마케팅수신동의: { 인원: consent, SMS동의: sms, 동의율_pct: r.count ? +((consent / r.count) * 100).toFixed(1) : 0 },
+      경과개월분포: buckets,
+      본품TOP: 본품TOP,
+      데이터기준: { cached: !!r.cached, builtAt: r.builtAt, stale: !!r.stale },
+      발송명단안내: '이름·연락처가 포함된 실제 발송용 명단은 판매분석 대시보드 → ⑧ 비즈 유도 고객 탭에서 CSV 다운로드 (개인정보 보호로 MCP 미제공).',
+    };
+  }));
 
   server.registerTool('usage_guide', {
     title: '사용 가이드 — 무엇을 물어볼 수 있나요? [도움말]',

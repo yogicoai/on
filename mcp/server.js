@@ -40,6 +40,9 @@ const briefing = require('../lib/briefing');           // 일일 브리핑(온+�
 const delivery = require('../lib/delivery');           // 매장 택배 배송 조회(PII 마스킹)
 const stockTrend = require('../lib/stockTrend');       // 재고 일별 스냅샷 추이
 const segments = require('../lib/segments');           // 비즈 충전 유도 대상(본품 N개월 경과·비즈 미구매)
+const voc = require('../lib/voc');                     // 자사몰 게시판 VOC(리뷰·Q&A·A/S)
+const cafe24api = require('../lib/cafe24');            // 진행중 혜택 등 Admin API 직접 조회용
+const ssExtra = require('../lib/smartstoreExtra');     // 스마트스토어 상품/재고·정산(네이버 커머스 API)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -125,6 +128,44 @@ function build() {
       '"이벤트 페이지 뷰 얼마나 나왔어", "어떤 상품이 많이 보는데 안 담기나", "몇 시에 제일 많이 사?" 질문에 사용.',
     inputSchema: D,
   }, wrap(({ start, end }) => analytics.behaviorStats(start, end)));
+
+  server.registerTool('cafe24_page_views', {
+    title: '특정 페이지(URL) 일별 뷰 추이 [Cafe24 통계]',
+    description: 'URL 조각(부분일치, 예: "7_promotion", "/event/")으로 그 페이지의 **일별 조회수·방문 추이**를 반환(최대 31일) + 매칭 URL 목록. ' +
+      '"이 이벤트 페이지 뷰 기간별로", "○○ 페이지 하루하루 얼마나 봤어" 질문에 사용. 전체 페이지 TOP은 cafe24_behavior.',
+    inputSchema: {
+      url: z.string().describe('URL 부분일치 문자열 (예: 7_promotion)'),
+      start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD'),
+    },
+  }, wrap(({ url, start, end }) => analytics.pageViewsByUrl(url, start, end)));
+
+  server.registerTool('cafe24_voc', {
+    title: '자사몰 VOC — 상품후기·Q&A·A/S문의 최근 글 [조회전용·마스킹]',
+    description: '자사몰 게시판 최근 글: board=review(상품후기, 평점분포·평균평점 포함)|qna(Q&A)|as(A/S문의), 최근 N일(기본 14). ' +
+      '"최근 리뷰 뭐 올라왔어", "요즘 고객 문의 뭐가 많아", "A/S 문의 내용" 질문에 사용. 작성자 마스킹·본문 200자 요약.',
+    inputSchema: {
+      board: z.string().optional().describe('review | qna | as (기본 review)'),
+      days: z.number().int().optional().describe('최근 N일 (기본 14, 최대 90)'),
+    },
+  }, wrap(({ board, days }) => voc.articles(board, { days })));
+
+  server.registerTool('cafe24_active_benefits', {
+    title: '자사몰 진행중 혜택/할인 설정 목록 [Cafe24 설정]',
+    description: '자사몰(Cafe24)에 등록된 혜택(할인) 설정 목록 — 혜택명·유형·사용여부·적용기간·적용범위. ' +
+      '"지금 자사몰에 무슨 할인 걸려있어?", "진행 중인 혜택 뭐야?" 질문에 사용. (쿠폰 성과는 cafe24_coupon_performance)',
+    inputSchema: {},
+  }, wrap(async () => {
+    const j = await cafe24api.adminGet('/benefits', { shop_no: 1, limit: 100 });
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = (j.benefits || []).map((b) => ({
+      혜택명: b.benefit_name, 사용중: b.use_benefit === 'T',
+      구분: b.benefit_division || '', 유형: b.benefit_type || '',
+      기간: b.use_benefit_period === 'T' ? `${String(b.benefit_start_date || '').slice(0, 10)} ~ ${String(b.benefit_end_date || '').slice(0, 10)}` : '상시',
+      플랫폼: b.platform_types || null,
+      진행중: b.use_benefit === 'T' && (b.use_benefit_period !== 'T' || (String(b.benefit_start_date || '').slice(0, 10) <= today && today <= String(b.benefit_end_date || '9999').slice(0, 10))),
+    }));
+    return { 기준일: today, 전체: rows.length, 진행중: rows.filter((r) => r.진행중).length, 목록: rows.sort((a, b) => (b.진행중 - a.진행중)) };
+  }));
 
   server.registerTool('returns_analysis', {
     title: '반품/취소 분석 — 순매출·취소율·반품률 (자사몰+스토어) [확정집계]',
@@ -269,6 +310,25 @@ function build() {
     '📈 비교·추이': ['전년/전월/전주 대비 채널 비교', '월별 매출 추이', '제품별 판매 예측'],
     팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 명시하는 것이 좋습니다. 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
   })));
+
+  server.registerTool('smartstore_products', {
+    title: '스마트스토어 상품/재고 현황 — 판매상태·재고·가격 [실시간 API]',
+    description: '스마트스토어 등록 상품 목록(실시간): 상품명·판매상태(판매중/품절/판매중지 등)·스토어 재고·판매가·할인가 + 상태 분포. ' +
+      'search(상품명)·status(상태)·lowStock(재고 N 이하) 필터. "스토어 품절 상품 뭐야", "스토어 재고 10개 이하", "○○ 스토어에서 팔고 있어?" 질문에 사용. ' +
+      '실물 창고 재고는 stock_list(다른 데이터).',
+    inputSchema: {
+      search: z.string().optional().describe('상품명 부분일치'),
+      status: z.string().optional().describe('상태 필터(판매중/품절/판매중지 등)'),
+      lowStock: z.number().int().optional().describe('판매중 & 재고 N개 이하만'),
+    },
+  }, wrap(({ search, status, lowStock }) => ssExtra.products({ search, status, lowStock })));
+
+  server.registerTool('smartstore_settlement', {
+    title: '스마트스토어 정산 내역 — 일별 정산액·수수료 [실시간 API]',
+    description: '기간 스마트스토어 정산: 일별 정산액(실입금 예정)·결제정산·수수료·혜택정산 + 합계·실효수수료율. ' +
+      '"이번 달 스토어 정산 얼마 들어와?", "네이버 수수료 얼마나 떼?" 질문에 사용. 정산기준일=구매확정일 기준.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => ssExtra.settlements(start, end)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

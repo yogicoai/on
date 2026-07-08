@@ -365,7 +365,7 @@ function build() {
   }, wrap(async ({ start, end, group }) => {
     if (!group) return otherChannels.overview(start, end);
     const d = await otherChannels.groupDetail(group, start || '', end || '');
-    return { group, totals: d.totals, 상품TOP: (d.products || []).slice(0, 40), 카테고리: d.byCategory, 충전재등급: d.byBead, 색상: (d.byColor || []).slice(0, 20), 입점몰별: d.subs };
+    return { group, totals: d.totals, 상품TOP: (d.products || []).slice(0, 15), 카테고리: d.byCategory, 충전재등급: d.byBead, 색상: (d.byColor || []).slice(0, 20), 입점몰별: d.subs };
   }));
 
   // ── 통합: 매출 비교·추이·할인율 ──
@@ -400,7 +400,7 @@ function build() {
       const r = await forecast.salesForecast({ months: m });
       let items = r.items || [];
       if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
-      return { mode: 'forecast', months: m, total: r.count, count: items.length, items: items.slice(0, 60).map((x) => ({ 품목: x.name, 색상: x.color, 월평균: x.monthlyAvg, 누적: x.total })) };
+      return { mode: 'forecast', months: m, total: r.count, count: items.length, items: items.slice(0, 30).map((x) => ({ 품목: x.name, 색상: x.color, 월평균: x.monthlyAvg, 누적: x.total })) };
     }
     if (mode === 'reorder') {
       const m = num(months, 3), tg = num(target, 1);
@@ -410,14 +410,14 @@ function build() {
       if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
       else if (!all) items = items.filter((x) => x.needOrder);
       items = [...items].sort((a, b) => (a.monthsLeft == null ? 999 : a.monthsLeft) - (b.monthsLeft == null ? 999 : b.monthsLeft));
-      return { mode: 'reorder', months: m, targetMonths: tg, 발주필요_품목수: allItems.filter((x) => x.needOrder).length, count: items.length, items: items.slice(0, 80) };
+      return { mode: 'reorder', months: m, targetMonths: tg, 발주필요_품목수: allItems.filter((x) => x.needOrder).length, count: items.length, items: items.slice(0, 40) };
     }
     // current (기본)
     const [rows, updatedAt] = await Promise.all([forecast.stockList(), forecast.stockUpdatedAt().catch(() => null)]);
     const items = Array.isArray(rows) ? rows : [];
     const base = { mode: 'current', total: items.length, 재고기준시각: updatedAt, 주의: '재고는 약 10분 주기 동기화 — 재고기준시각 기준 수량.' };
-    if (search) { const f = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search)); return { ...base, count: f.length, items: f.slice(0, 80) }; }
-    const low = [...items].sort((a, b) => (a.qty || 0) - (b.qty || 0)).slice(0, 40);
+    if (search) { const f = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search)); return { ...base, count: f.length, items: f.slice(0, 40) }; }
+    const low = [...items].sort((a, b) => (a.qty || 0) - (b.qty || 0)).slice(0, 25);
     return { ...base, 안내: '품목명으로 search하면 정확히 조회됩니다. 아래는 재고 적은 순 상위 40.', 재고적은순: low };
   }));
 

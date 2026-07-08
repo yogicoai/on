@@ -53,8 +53,10 @@ const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 function build() {
   const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' }, {
     // 클라이언트(Claude)에게 전달되는 전역 지침 — 통화·표기 규칙
-    instructions: '이 서버의 모든 금액 수치는 대한민국 원(KRW)이다. 절대 달러($)로 표기하거나 환산하지 말 것. ' +
-      '답변에서 금액은 "1,234,567원" 형식(천단위 콤마 + 원)으로 표기한다. 큰 금액은 "1.2억원", "3,450만원" 같은 한국식 축약도 허용. ' +
+    instructions: '이 서버의 모든 금액 수치는 대한민국 원(KRW)이다. 금액 표기 규칙(반드시 준수): ' +
+      '① "$", "₩" 등 통화 기호를 절대 쓰지 말 것 ② "9.3M", "1.2K" 같은 영문 축약 금지 ③ 환율 환산 금지. ' +
+      '금액은 반드시 "1,234,567원"(천단위 콤마+원) 또는 한국식 축약 "930만원", "1.2억원"으로만 표기한다. ' +
+      '예: ₩9.3M(X) → 930만원(O), $1,234(X) → 1,234원(O). ' +
       '날짜/시간은 한국 시간(KST) 기준. 데이터는 매일 오전 9시(매출)·9시 30분(광고) 자동 갱신된다.',
   });
   const D = { start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD') };
@@ -343,6 +345,14 @@ function build() {
       '"이번 달 스토어 정산 얼마 들어와?", "네이버 수수료 얼마나 떼?" 질문에 사용. 정산기준일=구매확정일 기준.',
     inputSchema: D,
   }, wrap(({ start, end }) => ssExtra.settlements(start, end)));
+
+  server.registerTool('smartstore_inquiries', {
+    title: '스마트스토어 고객문의 — 미답변 체크·답변 소요시간 [실시간 API·마스킹]',
+    description: '기간 스마트스토어 고객문의(문의게시판): 총건수·**미답변 목록**·평균 답변 소요시간·카테고리 분포·문의/답변 요약. ' +
+      '"스토어 문의 답변 안 남긴 거 있어?", "고객 문의 뭐가 들어왔어", "답변 얼마나 빨리 달고 있어?" 질문에 사용. ' +
+      '상품 Q&A·톡톡 상담은 권한 밖(별도). 고객명 마스킹.',
+    inputSchema: D,
+  }, wrap(({ start, end }) => ssExtra.inquiries(start, end)));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

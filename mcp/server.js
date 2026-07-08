@@ -44,6 +44,7 @@ const voc = require('../lib/voc');                     // 자사몰 게시판 VO
 const cafe24api = require('../lib/cafe24');            // 진행중 혜택 등 Admin API 직접 조회용
 const ssExtra = require('../lib/smartstoreExtra');     // 스마트스토어 상품/재고·정산(네이버 커머스 API)
 const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·쿠폰별 구매 주문 리스트
+const csTools = require('../lib/csTools');             // CS: 주문 통합조회·게시판 미답변 체크
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -345,6 +346,20 @@ function build() {
       '"이번 달 스토어 정산 얼마 들어와?", "네이버 수수료 얼마나 떼?" 질문에 사용. 정산기준일=구매확정일 기준.',
     inputSchema: D,
   }, wrap(({ start, end }) => ssExtra.settlements(start, end)));
+
+  server.registerTool('cs_order_lookup', {
+    title: 'CS 주문 조회 — 주문번호로 자사몰+스마트스토어 통합 상태 확인 [조회전용]',
+    description: '주문번호(부분일치)로 자사몰(Cafe24)·스마트스토어 주문을 한 번에 조회: 채널·주문일·상태(결제/취소·배송중/배송완료/구매확정 등)·금액·쿠폰/적립금·상품·자사몰 송장번호. ' +
+      '"주문번호 ○○○ 어떻게 됐어?", "이 주문 배송 나갔어?" 같은 CS 응대 질문에 사용. 구매자 개인정보 미제공.',
+    inputSchema: { orderNo: z.string().describe('주문번호(부분일치, 자사몰 YYYYMMDD-0000000 / 스토어 주문·상품주문번호)') },
+  }, wrap(({ orderNo }) => csTools.orderLookup(orderNo)));
+
+  server.registerTool('cafe24_unanswered', {
+    title: '자사몰 게시판 미답변 체크 — Q&A·A/S·1:1상담·교환/반품 [CS 모니터링]',
+    description: '최근 N일(기본 7) 자사몰 게시판(Q&A·A/S문의·1:1맞춤상담·교환/반품)에서 **관리자 답변이 안 달린 원글** 목록·건수. ' +
+      '"자사몰에 답변 안 남긴 문의 있어?", "미답변 CS 체크해줘" 질문에 사용. 스마트스토어 미답변은 smartstore_inquiries.',
+    inputSchema: { days: z.number().int().optional().describe('최근 N일 (기본 7, 최대 60)') },
+  }, wrap(({ days }) => csTools.unanswered(days)));
 
   server.registerTool('smartstore_inquiries', {
     title: '스마트스토어 고객문의 — 미답변 체크·답변 소요시간 [실시간 API·마스킹]',

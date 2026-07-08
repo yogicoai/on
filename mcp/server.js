@@ -45,6 +45,7 @@ const cafe24api = require('../lib/cafe24');            // 진행중 혜택 등 A
 const ssExtra = require('../lib/smartstoreExtra');     // 스마트스토어 상품/재고·정산(네이버 커머스 API)
 const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·쿠폰별 구매 주문 리스트
 const csTools = require('../lib/csTools');             // CS: 주문 통합조회·게시판 미답변 체크
+const csKnowledge = require('../lib/csKnowledge');     // CS: 정책/FAQ 지식·과거 답변 사례(응답 초안용)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -360,6 +361,24 @@ function build() {
       '"자사몰에 답변 안 남긴 문의 있어?", "미답변 CS 체크해줘" 질문에 사용. 스마트스토어 미답변은 smartstore_inquiries.',
     inputSchema: { days: z.number().int().optional().describe('최근 N일 (기본 7, 최대 60)') },
   }, wrap(({ days }) => csTools.unanswered(days)));
+
+  server.registerTool('cs_knowledge', {
+    title: 'CS 지식 검색 — 공식 정책/FAQ (배송·교환/환불·세탁방법·제품정보) [답변 근거]',
+    description: '자사몰 공식 정책 게시판(FAQ·자주하는질문·배송안내·교환/환불·제품정보·세탁방법)에서 키워드 검색 → 정책 원문. ' +
+      '고객 문의에 **답변 초안을 쓰기 전 반드시 이 도구로 공식 정책을 확인**하고 그 근거로 작성할 것(정책을 추측으로 답하지 말 것). ' +
+      '"반품하면 쿠폰 어떻게 돼?", "세탁 방법", "배송 기간" 등 정책 질문에도 사용.',
+    inputSchema: { query: z.string().describe('검색 키워드 (공백 구분 AND, 예: "반품 쿠폰")') },
+  }, wrap(({ query }) => csKnowledge.knowledge(query)));
+
+  server.registerTool('cs_answer_examples', {
+    title: 'CS 과거 답변 사례 — 문의→답변 페어 검색 (톤·포맷 참고) [답변 초안용]',
+    description: '과거 실제 CS 답변 사례(자사몰 Q&A/A/S 답글 + 스마트스토어 문의 답변)를 키워드로 검색 → 문의/답변 페어. ' +
+      '고객 문의 **답변 초안 작성 시 톤·인사말·구성을 이 사례와 일치**시키기 위해 사용. "배송 지연 답변 어떻게 했었어?" 같은 질문에도 사용. 작성자 마스킹.',
+    inputSchema: {
+      query: z.string().optional().describe('검색 키워드(생략=최근 전체)'),
+      days: z.number().int().optional().describe('최근 N일 (기본 60, 최대 180)'),
+    },
+  }, wrap(({ query, days }) => csKnowledge.answerExamples(query, { days })));
 
   server.registerTool('smartstore_inquiries', {
     title: '스마트스토어 고객문의 — 미답변 체크·답변 소요시간 [실시간 API·마스킹]',

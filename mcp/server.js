@@ -501,6 +501,35 @@ async function runHttp() {
     const u = new URL(req.url, `http://${req.headers.host}`);
     if (u.pathname === '/health') { return sendJson(res, 200, { ok: true, server: 'yogibo-sales-mcp' }); }
 
+    // ── CS 미답변 문의 체크 (REST) — cs-self-guide 어드민 배지/모달용 ─────────
+    //   MCP 툴 cs_unanswered 와 동일 로직을 REST(JSON)로 노출. Bearer MCP_TOKEN 인증.
+    //   channel=both|cafe24|smartstore (기본 both), days=1~60 (기본 7).
+    if (u.pathname === '/api/cs/unanswered') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      try {
+        const channel = u.searchParams.get('channel') || 'both';
+        const days = Math.min(60, Math.max(1, parseInt(u.searchParams.get('days') || '7', 10) || 7));
+        const out = { ok: true, channel, days };
+        if (channel !== 'smartstore') {
+          out.자사몰 = await csTools.unanswered(days).catch((e) => ({ error: e.message }));
+        }
+        if (channel !== 'cafe24') {
+          const pad = (n) => String(n).padStart(2, '0');
+          const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          const e = new Date();
+          const s = new Date();
+          s.setDate(s.getDate() - days);
+          out.스마트스토어 = await ssExtra.inquiries(fmt(s), fmt(e)).catch((er) => ({ error: er.message }));
+        }
+        out.총미답변 =
+          ((out.자사몰 && out.자사몰.총미답변) || 0) +
+          ((out.스마트스토어 && out.스마트스토어.미답변 && out.스마트스토어.미답변.건수) || 0);
+        return sendJson(res, 200, out);
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: String((e && e.message) || e) });
+      }
+    }
+
     // ── 무거운 동기화 트리거(Vercel 버튼 → cloudtype 1회 실행) ──────────────
     //   Vercel 은 고정IP 없음·60초 제한이라 직접 못 하는 적재를 여기서 백그라운드로 실행한다.
     if (u.pathname === '/sync/run') {

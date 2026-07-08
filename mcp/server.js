@@ -476,8 +476,10 @@ function build() {
   }));
 
   server.registerTool('stock_list', {
-    title: '실시간 재고 조회',
-    description: '현재 실시간 재고(품목코드·품목명·색상·수량 qty). search로 품목명 필터 권장. search 없으면 재고 적은 순 상위 40 + 총개수.',
+    title: '실시간 재고 조회 (재고·수량·품절·남은개수)',
+    description: '지금 현재 재고 수량 조회. "○○ 재고 얼마나 남았어", "재고 몇 개야", "품절 임박", "남은 수량" 같은 재고 질문엔 반드시 이 도구를 사용. ' +
+      '품목코드·품목명·색상·수량(qty)·재고기준시각 반환. search로 품목명 필터(예: "맥스 커버"). search 없으면 재고 적은 순 상위 40. ' +
+      '(재고 추이는 stock_trend, 발주 판단은 reorder_plan)',
     inputSchema: { search: z.string().optional().describe('품목명/색상 필터(예: 맥스 커버)') },
   }, wrap(async ({ search }) => {
     const [rows, updatedAt] = await Promise.all([forecast.stockList(), forecast.stockUpdatedAt().catch(() => null)]);

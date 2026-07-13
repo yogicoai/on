@@ -47,6 +47,7 @@ const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·
 const csTools = require('../lib/csTools');             // CS: 주문 통합조회·게시판 미답변 체크
 const csKnowledge = require('../lib/csKnowledge');     // CS: 정책/FAQ 지식·과거 답변 사례(응답 초안용)
 const alerts = require('../lib/alerts');               // 경보 스캔 — "오늘 챙길 것"(이상신호 자동 감지)
+const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 진열 재고/품절
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -268,6 +269,14 @@ function build() {
       발송명단안내: '이름·연락처가 포함된 실제 발송용 명단은 판매분석 대시보드 → ⑧ 비즈 유도 고객 탭에서 CSV 다운로드 (개인정보 보호로 MCP 미제공).',
     };
   }));
+
+  server.registerTool('cafe24_product_stock', {
+    title: '자사몰 옵션별 진열 재고/품절 [실시간 API]',
+    description: '자사몰(Cafe24) 쇼핑몰에 표시되는 상품 옵션(색상)별 재고·품절표시·판매여부 — 상품명 검색(상위 4개 상품). ' +
+      '"자사몰에서 ○○ 품절 옵션 뭐야", "자사몰 재고 얼마로 떠 있어" 질문에 사용. ' +
+      '⚠️ 재고 3종 구분: 창고 실물=inventory / 스토어 등록=smartstore_ops / 자사몰 진열=이 도구.',
+    inputSchema: { search: z.string().describe('상품명 부분일치 (예: 맥스)') },
+  }, wrap(({ search }) => cafe24Stock.productStock(search)));
 
   server.registerTool('alerts', {
     title: '경보 스캔 — "오늘 챙길 것" 이상신호 한 방 점검 [직원용]',

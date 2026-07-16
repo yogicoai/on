@@ -166,7 +166,11 @@ async function handle(req, res) {
     if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });
     try {
       const dataset = u.searchParams.get('dataset') || '';
-      const data = await dataExport.fetchDataset(dataset, u.searchParams.get('start'), u.searchParams.get('end'));
+      const data = await dataExport.fetchDataset(dataset, {
+        start: u.searchParams.get('start'),
+        end: u.searchParams.get('end'),
+        period: u.searchParams.get('period'), // 자연어 기간 — 있으면 start/end보다 우선
+      });
       if ((u.searchParams.get('format') || 'json').toLowerCase() === 'csv') {
         const rows = data.rows || data.items || [];
         res.writeHead(200, {

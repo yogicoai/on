@@ -46,6 +46,7 @@ const promoPerformance = require('./lib/promoPerformance');
 const cafe24Coupons = require('./lib/cafe24Coupons');
 const bizadvisor = require('./lib/bizadvisor');
 const ai = require('./lib/ai');
+const dataExport = require('./lib/dataExport'); // 외부 제공용 export(매출·광고·재고, 개인정보 없음)
 const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -147,6 +148,29 @@ async function handle(req, res) {
     if (req.method === 'POST' || WRITE.has(u.pathname)) {
       return sendJson(res, 403, { ok: false, error: '읽기 전용 배포입니다. 수집·동기화·설정 변경은 로컬에서 실행하세요.' });
     }
+  }
+
+  // ── 외부 제공용 데이터 export (오너/외부 분석자) ─────────────────────────────
+  //   EXPORT_TOKEN 환경변수 설정 시 Bearer 인증 필수. 개인정보 없는 집계 원장만 제공.
+  if (u.pathname === '/api/export' || u.pathname === '/api/export/catalog') {
+    const tok = process.env.EXPORT_TOKEN || '';
+    if (tok && req.headers['authorization'] !== `Bearer ${tok}`) {
+      return sendJson(res, 401, { ok: false, error: 'unauthorized — Authorization: Bearer <EXPORT_TOKEN> 필요' });
+    }
+    if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });
+    try {
+      const dataset = u.searchParams.get('dataset') || '';
+      const data = await dataExport.fetchDataset(dataset, u.searchParams.get('start'), u.searchParams.get('end'));
+      if ((u.searchParams.get('format') || 'json').toLowerCase() === 'csv') {
+        const rows = data.rows || data.items || [];
+        res.writeHead(200, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(dataset + '_' + (data.start || 'now') + '.csv')}`,
+        });
+        return res.end(dataExport.toCsv(rows));
+      }
+      return sendJson(res, 200, { ok: true, ...data });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
 
   if (u.pathname === '/api/health') {

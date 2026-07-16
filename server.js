@@ -153,9 +153,15 @@ async function handle(req, res) {
   // ── 외부 제공용 데이터 export (오너/외부 분석자) ─────────────────────────────
   //   EXPORT_TOKEN 환경변수 설정 시 Bearer 인증 필수. 개인정보 없는 집계 원장만 제공.
   if (u.pathname === '/api/export' || u.pathname === '/api/export/catalog') {
-    const tok = process.env.EXPORT_TOKEN || '';
-    if (tok && req.headers['authorization'] !== `Bearer ${tok}`) {
-      return sendJson(res, 401, { ok: false, error: 'unauthorized — Authorization: Bearer <EXPORT_TOKEN> 필요' });
+    // 토큰 비교 — 복사 시 붙는 앞뒤 공백/줄바꿈은 양쪽 모두 trim 해서 비교(흔한 설정 실수 방지)
+    const tok = String(process.env.EXPORT_TOKEN || '').trim();
+    const got = String(req.headers['authorization'] || '').trim().replace(/^Bearer\s+/i, '').trim();
+    if (tok && got !== tok) {
+      return sendJson(res, 401, {
+        ok: false,
+        error: 'unauthorized — Authorization: Bearer <EXPORT_TOKEN> 필요',
+        hint: got ? '토큰이 일치하지 않습니다(Vercel EXPORT_TOKEN 값 확인 · 값 변경 후 재배포 필요)' : '요청에 Authorization 헤더가 없습니다(브라우저 주소창은 헤더를 못 보내므로 curl/코드로 호출하세요)',
+      });
     }
     if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });
     try {

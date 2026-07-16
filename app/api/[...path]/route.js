@@ -20,7 +20,9 @@ async function adapt(request) {
   const req = Readable.from(bodyStr ? [bodyStr] : []);
   req.url = url.pathname + url.search;
   req.method = method;
-  req.headers = { host: url.host };
+  // 들어온 헤더를 전부 전달(authorization·content-type 등) — Node http와 동일하게 키는 소문자
+  req.headers = Object.fromEntries(request.headers);
+  req.headers.host = url.host;
 
   let status = 200;
   let headers = {};

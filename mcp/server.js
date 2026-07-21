@@ -12,6 +12,7 @@
 
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { z } = require('zod');
+const { parsePeriod } = require('../lib/period'); // 기간 자연어 파서("지난달","최근 7일" 등) — 날짜 도구 공용
 
 const productAnalysis = require('../lib/productAnalysis');
 const smartstoreAnalysis = require('../lib/smartstoreAnalysis');
@@ -54,6 +55,30 @@ const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.mess
 const wrap = (fn) => async (args) => { try { return ok(await fn(args)); } catch (e) { return fail(e); } };
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 
+// ── 기간 입력 처리 (period 자연어 → start/end) ──────────────────────────────
+// period가 있으면 파서로 풀고, 없으면 start/end 그대로. 순수 날짜 도구는 wrapR, mode 도구는 withPeriod 사용.
+const hasPeriod = (a) => a && a.period != null && String(a.period).trim() !== '';
+const RANGE = (a = {}) => {
+  if (hasPeriod(a)) { const p = parsePeriod(a.period); return { start: p.start, end: p.end, label: p.label }; }
+  if (a.start && a.end) return { start: a.start, end: a.end, label: null };
+  throw new Error('기간이 필요합니다 — period(예: "지난달","최근 7일","2026년 7월","6월부터") 또는 start·end(YYYY-MM-DD)를 주세요.');
+};
+// 순수 (start,end) 도구용: RANGE로 풀어 fn(start,end,args) 호출 + 응답에 실제 해석 구간 표기
+const wrapR = (fn) => wrap(async (a) => {
+  const r = RANGE(a);
+  const out = await fn(r.start, r.end, a);
+  return (r.label && out && typeof out === 'object' && !Array.isArray(out)) ? { 기간: `${r.start}~${r.end} (${r.label})`, ...out } : out;
+});
+// mode 도구용: period가 있으면 start/end를 채워 넣고 기존 핸들러 로직을 그대로 태움
+const withPeriod = (a) => { if (hasPeriod(a)) { const p = parsePeriod(a.period); return { ...a, start: p.start, end: p.end, _periodLabel: p.label }; } return a || {}; };
+// 기간 스키마 조각 — inputSchema에 ...RANGE_SCHEMA 로 펴 넣음
+const PERIOD_FIELD = z.string().optional().describe('자연어 기간 — "지난달"·"최근 7일"·"이번달"·"2026년 7월"·"6월부터"·"2026-07-01~2026-07-15" 등. 지정하면 start/end 대신 사용(권장).');
+const RANGE_SCHEMA = {
+  start: z.string().optional().describe('시작일 YYYY-MM-DD (period 지정 시 생략 가능)'),
+  end: z.string().optional().describe('종료일 YYYY-MM-DD (period 지정 시 생략 가능)'),
+  period: PERIOD_FIELD,
+};
+
 function build() {
   const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' }, {
     // 클라이언트(Claude)에게 전달되는 전역 지침 — 통화·표기 규칙
@@ -62,33 +87,36 @@ function build() {
       '모든 숫자는 천단위 콤마가 있는 전체 숫자로 쓴다: "70K~275K"(X) → "70,000원~275,000원"(O), "₩9.3M"(X) → "9,300,000원"(O). ' +
       '아주 큰 금액은 전체 숫자를 기본으로 하되 필요 시 "1.2억원" 같은 한국식 표현을 괄호로 보조 병기만 허용: "120,000,000원(1.2억원)". ' +
       '날짜/시간은 한국 시간(KST) 기준. 데이터는 매일 오전 9시(매출)·9시 30분(광고) 자동 갱신된다. ' +
+      '기간 지정 규칙: 날짜 도구는 대부분 period 파라미터로 자연어 기간을 받는다("지난달","최근 7일","이번달","2026년 7월","6월부터","2026-07-01~2026-07-15" 등). ' +
+      '사용자가 상대적 기간("지난달","이번 주" 등)을 말하면 start/end를 직접 계산하지 말고 period에 그 표현을 그대로 넘겨라 — 도구가 KST 기준으로 정확히 해석하고 응답의 "기간" 필드에 실제 조회 구간을 표기한다(오늘 날짜 오산·하루 밀림 방지). 특정 날짜를 아는 경우엔 start/end를 써도 된다. ' +
       '답변 분량 규칙: 도구가 반환한 목록/일별 데이터를 전부 옮겨 적지 말 것 — 핵심 요약 + 상위 5~10개만 표로 보여주고, ' +
       '나머지는 "전체 N건 중 상위만 표시, 더 필요하면 말씀하세요"로 안내한다. 한 답변이 과도하게 길어질 것 같으면 요약을 우선한다. ' +
       '라우팅 규칙: 사용자가 "오늘 챙길 것", "챙길 거 있어", "일일 점검", "이상 없어?"라고 하면 캘린더/일정/할일이 아니라 alerts 도구(업무 데이터 경보 스캔)를 호출한다. ' +
       '"어제 브리핑/어제 어땠어"는 daily_briefing. 매출·재고·광고·CS 등 업무 질문에 개인 메모리·외부 파일(엑셀/Drive)로 답하지 말고 반드시 이 서버 도구로 조회한다.',
   });
-  const D = { start: z.string().describe('시작일 YYYY-MM-DD'), end: z.string().describe('종료일 YYYY-MM-DD') };
+  // 순수 날짜 도구 스키마 — period(자연어) 우선, 없으면 start/end. 핸들러는 wrapR로 감쌀 것.
+  const D = RANGE_SCHEMA;
 
   server.registerTool('cafe24_analysis', {
     title: '자사몰(Cafe24) 상품·매출 분석 [확정집계]',
     description: '기간별 자사몰 매출·주문·객단가·카테고리·충전재등급·상품TOP·인기색상·요일패턴. ' +
       '대시보드 기준(Cafe24 주문일) 확정 집계값 — 매출/판매 분석엔 원시 주문(get_orders 등)으로 직접 계산하지 말고 반드시 이 도구를 사용.',
     inputSchema: D,
-  }, wrap(({ start, end }) => productAnalysis.analyze(start, end)));
+  }, wrapR((start, end) => productAnalysis.analyze(start, end)));
 
   server.registerTool('smartstore_analysis', {
     title: '스마트스토어 상세 분석 — 상품별 TOP 포함 [확정집계]',
     description: '기간별 스마트스토어 매출·**상품별 매출 TOP(productTop)**·카테고리·충전재·유입경로·적용쿠폰·할인이벤트·결제패턴. ' +
       '스마트스토어도 상품 단위 데이터를 제공함 — 자사몰 기준 추정 금지, 상품 TOP 질문엔 이 도구를 직접 호출.',
     inputSchema: D,
-  }, wrap(({ start, end }) => smartstoreAnalysis.analyze(start, end)));
+  }, wrapR((start, end) => smartstoreAnalysis.analyze(start, end)));
 
   server.registerTool('promotion_performance', {
     title: '프로모션 성과(전 몰) [확정집계]',
     description: '기간에 진행된 전 몰 등록 프로모션별 매출·주문 (자사몰=연결쿠폰 실사용, 그 외=대상상품 매칭). ' +
       '프로모션/이벤트 성과 질문엔 반드시 이 도구를 사용 — 원시 주문에서 추정/직접계산 금지.',
     inputSchema: D,
-  }, wrap(({ start, end }) => promoPerformance.allForPeriod(start, end)));
+  }, wrapR((start, end) => promoPerformance.allForPeriod(start, end)));
 
   // ── 통합: 자사몰 쿠폰·혜택 (성과/사용현황/진행중 할인) ──
   server.registerTool('cafe24_coupons', {
@@ -98,9 +126,11 @@ function build() {
     inputSchema: {
       mode: z.enum(['performance', 'usage', 'benefits']).describe('performance=연결쿠폰 성과 / usage=실사용 집계 / benefits=진행중 혜택'),
       start: z.string().optional().describe('YYYY-MM-DD (performance·usage 필수)'), end: z.string().optional().describe('YYYY-MM-DD'),
+      period: PERIOD_FIELD,
       coupon: z.string().optional().describe('usage 모드: 쿠폰명 부분일치 → 그 쿠폰 구매 주문 리스트'),
     },
-  }, wrap(async ({ mode, start, end, coupon }) => {
+  }, wrap(async (a) => {
+    const { mode, start, end, coupon } = withPeriod(a);
     if (mode === 'benefits') {
       const j = await cafe24api.adminGet('/benefits', { shop_no: 1, limit: 100 });
       const today = new Date().toISOString().slice(0, 10);
@@ -126,8 +156,9 @@ function build() {
     title: '자사몰 고객·태그·혜택 분석 [확정집계]',
     description: 'mode 선택: member=회원 vs 비회원 매출·객단가·일별 시계열(신규 획득 분석) / tag=상품태그별([클리어런스]·[공동구매] 등) 매출 / benefit=적립금·쿠폰 사용 분류별 매출·의존도. ' +
       '"회원 vs 비회원 비중", "상품태그별 매출", "적립금·쿠폰 사용 분석" 질문에 사용. 개인정보 없이 집계만.',
-    inputSchema: { mode: z.enum(['member', 'tag', 'benefit']).describe('member|tag|benefit'), start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
-  }, wrap(async ({ mode, start, end }) => {
+    inputSchema: { mode: z.enum(['member', 'tag', 'benefit']).describe('member|tag|benefit'), start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD'), period: PERIOD_FIELD },
+  }, wrap(async (a) => {
+    const { mode, start, end } = withPeriod(a);
     if (mode === 'tag') return tagPromotions.tagPromotionSales(start, end);
     if (mode === 'benefit') return benefit.benefitUsage(start, end);
     return orders.memberReport(await orders.fetchOrdersSmart(start, end), start, end);
@@ -140,10 +171,12 @@ function build() {
       '"어떤 광고·검색어로 주문", "조회는 많은데 안 담기는 상품", "몇 시에 많이 사", "7월 프로모션 페이지 뷰" 질문에 사용.',
     inputSchema: {
       mode: z.enum(['inflow', 'behavior', 'pageview']).describe('inflow|behavior|pageview'),
-      start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD'),
+      start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD'),
+      period: PERIOD_FIELD,
       url: z.string().optional().describe('pageview 모드 필수: URL 조각·전체URL·"N월 프로모션"'),
     },
-  }, wrap(({ mode, start, end, url }) => {
+  }, wrap((a) => {
+    const { mode, start, end, url } = withPeriod(a);
     if (mode === 'pageview') return analytics.pageViewsByUrl(url, start, end);
     if (mode === 'behavior') return analytics.behaviorStats(start, end);
     return analytics.inflowPaths(start, end);
@@ -164,7 +197,7 @@ function build() {
     description: '기간 자사몰(Cafe24)·스마트스토어의 정상/취소/반품 분류 → 순매출(반품·취소 제외)·취소율·반품률·반품금액. ' +
       '"진짜 매출(반품 뺀)", "반품률 높은 채널/기간" 분석에 사용. 자사몰은 라이브 주문 분류(다소 느릴 수 있음), 스토어는 DB status 기준.',
     inputSchema: D,
-  }, wrap(({ start, end }) => returns.returnsReport(start, end)));
+  }, wrapR((start, end) => returns.returnsReport(start, end)));
 
   server.registerTool('customer_retention', {
     title: '고객 재구매·LTV·리텐션 (자사몰) [확정집계]',
@@ -183,10 +216,12 @@ function build() {
     inputSchema: {
       mode: z.enum(['summary', 'weekly', 'setcover']).describe('summary|weekly|setcover'),
       start: z.string().optional().describe('YYYY-MM-DD (summary·setcover 필수)'), end: z.string().optional().describe('YYYY-MM-DD'),
+      period: PERIOD_FIELD,
       store: z.string().optional().describe('summary 모드: 매장명 부분일치(예: 센텀)'),
       month: z.string().optional().describe('weekly 모드 필수: YYYY-MM'),
     },
-  }, wrap(({ mode, start, end, store: st, month }) => {
+  }, wrap((a) => {
+    const { mode, start, end, store: st, month } = withPeriod(a);
     if (mode === 'weekly') return offline.weeklyStatus(month);
     if (mode === 'setcover') return offline.setCoverAnalysis(start, end);
     return offline.analyze(start, end, { storeName: st });
@@ -197,7 +232,7 @@ function build() {
     description: '기간 온라인(이카운트: 자사몰+스마트스토어+외부채널)과 오프라인(매장 주문서)의 매출 합계·비중(%)·일별 시계열을 한 번에 비교. ' +
       '"온·오프 비중", "오프라인이 온라인 대비 얼마나", "전사 매출(온+오프)" 질문에 사용. 서로 다른 원장이라 합산은 근사치.',
     inputSchema: D,
-  }, wrap(({ start, end }) => offline.onOffCompare(start, end)));
+  }, wrapR((start, end) => offline.onOffCompare(start, end)));
 
   server.registerTool('y_league', {
     title: 'Y리그 — 좌수왕·캐스트·스토어 랭킹 (오프라인 매장 리그) [확정집계]',
@@ -206,7 +241,7 @@ function build() {
       '"Y리그", "좌수", "좌수왕", "캐스트 순위", "스토어 리그", "매장 리그/베스트 스토어" 질문에 사용. 스토어 리그 1위 매장의 상세(카테고리 등)는 이 도구로 1위 확인 후 offline_analysis(store 필터)로 조회. ' +
       '※ 공식 화면은 일부 노출 보정(인원 화이트리스트 등)이 있어 소폭 다를 수 있음(여기는 원천 집계).',
     inputSchema: D,
-  }, wrap(({ start, end }) => jwasuLeague.league(start, end)));
+  }, wrapR((start, end) => jwasuLeague.league(start, end)));
 
   server.registerTool('staff_schedule', {
     title: '매니저 근무 스케줄 조회 (오프라인 매장) [조회전용]',
@@ -235,9 +270,10 @@ function build() {
       store: z.string().optional().describe('매장명(부분일치)'),
       start: z.string().optional().describe('발송일 시작 YYYY-MM-DD'),
       end: z.string().optional().describe('발송일 종료 YYYY-MM-DD'),
+      period: PERIOD_FIELD,
       status: z.string().optional().describe('배송상태 필터(예: SHIPPED)'),
     },
-  }, wrap(({ orderNo, store: st, start, end, status }) => delivery.shipments({ orderNo, storeName: st, start, end, status })));
+  }, wrap((a) => { const { orderNo, store: st, start, end, status } = withPeriod(a); return delivery.shipments({ orderNo, storeName: st, start, end, status }); }));
 
   server.registerTool('bead_refill_targets', {
     title: '비즈 충전 유도 대상 — 본품 구매 N개월 경과·비즈 미구매 회원 [프로모션 타겟]',
@@ -295,7 +331,7 @@ function build() {
       '분야별 예시 질문 목록을 보여줄 것. 신규 직원 온보딩용.',
     inputSchema: {},
   }, wrap(async () => ({
-    안내: '아래는 자연어로 바로 물어볼 수 있는 예시입니다. 날짜(예: 6/20~28)를 함께 말하면 더 정확합니다.',
+    안내: '아래는 자연어로 바로 물어볼 수 있는 예시입니다. 기간은 "지난달"·"최근 7일"·"이번 달"·"7월"·"6월부터"처럼 편하게 말하면 됩니다(정확한 날짜도 가능).',
     '📊 일일 요약': ['어제 매출 브리핑 줘', '오늘 챙길 거 있어? (경보 스캔)', '오늘까지 이번 달 목표 달성률 어때?'],
     '🛒 온라인 매출': ['6월 자사몰 매출·상품 TOP 알려줘', '회원 vs 비회원 매출 비중은?', '이번 달 스마트스토어 상품별 매출', '적립금·쿠폰 사용 분석', '상품태그별(클리어런스 등) 매출', '반품 뺀 순매출과 반품률은?'],
     '📣 마케팅·광고': ['이번 주 매체별 광고비·ROAS', '광고비 대비 실매출·비용률·CAC 뽑아줘', '광고 늘린 주랑 줄인 주 비교해줘', '자사몰에서 어떤 광고·검색어가 실제 주문 만들었어?', '스마트스토어 유입경로 알려줘'],
@@ -303,7 +339,7 @@ function build() {
     '👥 고객': ['재구매율·재구매주기·회원 LTV는?', '신규 의존도 얼마나 돼?'],
     '📦 재고·물류': ['맥스 커버 재고 얼마나 남았어?', '이 품목 재고 소진 속도는?', '발주 필요한 품목 알려줘', '○○매장 어제 택배 발송 현황'],
     '📈 비교·추이': ['전년/전월/전주 대비 채널 비교', '월별 매출 추이', '제품별 판매 예측'],
-    팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 명시하는 것이 좋습니다. 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
+    팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 "지난달"·"최근 7일" 같은 자연어로 말하면 시스템이 KST 기준으로 정확히 잡습니다(날짜 계산 불필요). 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
   })));
 
   // ── 통합: 스마트스토어 운영 (상품/재고·정산) ──
@@ -314,10 +350,11 @@ function build() {
     inputSchema: {
       mode: z.enum(['products', 'settlement']).describe('products|settlement'),
       start: z.string().optional().describe('settlement 필수 YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD'),
+      period: PERIOD_FIELD,
       search: z.string().optional().describe('products: 상품명 부분일치'), status: z.string().optional().describe('products: 상태(판매중/품절 등)'),
       lowStock: z.number().int().optional().describe('products: 판매중 & 재고 N개 이하'),
     },
-  }, wrap(({ mode, start, end, search, status, lowStock }) => mode === 'settlement' ? ssExtra.settlements(start, end) : ssExtra.products({ search, status, lowStock })));
+  }, wrap((a) => { const { mode, start, end, search, status, lowStock } = withPeriod(a); return mode === 'settlement' ? ssExtra.settlements(start, end) : ssExtra.products({ search, status, lowStock }); }));
 
   server.registerTool('cs_order_lookup', {
     title: 'CS 주문 조회 — 주문번호로 자사몰+스마트스토어 통합 상태 확인 [조회전용]',
@@ -364,7 +401,7 @@ function build() {
     description: '기간 스마트스토어 유입수: 일별 총유입 + 채널별 합계 + (기간 짧으면)일별×채널 상세. ' +
       'on.bizInflow에 일별 데이터가 적재돼 있음 — "일별 유입은 월합산만" 같은 추정 금지, 일별까지 이 도구로 제공.',
     inputSchema: D,
-  }, wrap(async ({ start, end }) => {
+  }, wrapR(async (start, end) => {
     const s = await bizadvisor.summary(start, end);
     const days = s.days || [];
     const out = {
@@ -382,8 +419,9 @@ function build() {
     title: '기타채널 매출 (쿠팡·롯데·현대·신세계·오늘의집 등) [확정집계]',
     description: '기간 기타채널 매출(이카운트). group 미지정 → 채널 그룹별 매출·주문 요약. group 지정(쿠팡·롯데홈쇼핑·현대 이지웰·현대 M포인트몰·신세계몰·오늘의집·29CM 등) → 그 채널 상품별 매출·카테고리·충전재·색상·입점몰별 상세. ' +
       '"기타채널 매출", "쿠팡에서 뭐 팔렸어" 질문에 사용.',
-    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD'), group: z.string().optional().describe('채널 그룹명(지정 시 상품 상세)') },
-  }, wrap(async ({ start, end, group }) => {
+    inputSchema: { start: z.string().optional().describe('YYYY-MM-DD'), end: z.string().optional().describe('YYYY-MM-DD'), period: PERIOD_FIELD, group: z.string().optional().describe('채널 그룹명(지정 시 상품 상세)') },
+  }, wrap(async (a) => {
+    const { start, end, group } = withPeriod(a);
     if (!group) return otherChannels.overview(start, end);
     const d = await otherChannels.groupDetail(group, start || '', end || '');
     return { group, totals: d.totals, 상품TOP: (d.products || []).slice(0, 15), 카테고리: d.byCategory, 충전재등급: d.byBead, 색상: (d.byColor || []).slice(0, 20), 입점몰별: d.subs };
@@ -394,8 +432,9 @@ function build() {
     title: '매출 비교·추이·할인율 — 전년/전월/전주·월별추이·할인분석 [확정집계]',
     description: 'mode 선택: compare=선택 기간 자사몰·스마트스토어 매출을 전년/전월/전주 동기간과 비교(start/end) / monthly=채널별 월 매출 시계열(2024~현재) / discount=자사몰 품목별 실판매단가 vs 정상가 → 할인율·가중평균(start/end). ' +
       '"전년 대비", "월별 추이", "할인율 분석" 질문에 사용.',
-    inputSchema: { mode: z.enum(['compare', 'monthly', 'discount']).describe('compare|monthly|discount'), start: z.string().optional().describe('compare·discount 필수 YYYY-MM-DD'), end: z.string().optional() },
-  }, wrap(({ mode, start, end }) => {
+    inputSchema: { mode: z.enum(['compare', 'monthly', 'discount']).describe('compare|monthly|discount'), start: z.string().optional().describe('compare·discount 필수 YYYY-MM-DD'), end: z.string().optional(), period: PERIOD_FIELD },
+  }, wrap((a) => {
+    const { mode, start, end } = withPeriod(a);
     if (mode === 'monthly') return compare.monthlySeries('2024-01-01');
     if (mode === 'discount') return productPrices.discountAnalysis(start, end);
     return compare.periodCompare(start, end);
@@ -459,8 +498,8 @@ function build() {
     title: '광고효율 — 매체별 ROAS·CTR·CPC·CPA [adboard]',
     description: '기간별 광고 매체 효율. 벤더(네이버·메타·크리테오·카카오)별 + 상세매체별 광고비·전환·전환매출·ROAS·CTR·CPC·CVR·CPA + 전체 합계. ' +
       '데이터 출처: ad-dashboard(mkboard)가 각 매체 API에서 적재한 일별 광고 데이터. 매출(이카운트)과는 다른 집계라 직접 합산하지 말 것.',
-    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
-  }, wrap(async ({ start, end }) => adEfficiency.efficiency(start, end)));
+    inputSchema: D,
+  }, wrapR((start, end) => adEfficiency.efficiency(start, end)));
 
   server.registerTool('marketing_overview', {
     title: '통합 마케팅 개요 — 광고+온라인+오프라인+트래픽 한 번에 (전사매출·비용률·CAC) [교차]',
@@ -468,8 +507,8 @@ function build() {
       '실질 마케팅비용률(온라인 기준+전사 기준)·신규가입당 광고비(CAC)·오프라인 비중까지 제공. ' +
       '"광고 대비 매출", "전사 매출과 광고", "이 기간 마케팅 종합" 질문엔 여러 도구 대신 이 도구 하나로 답할 것. ' +
       '⚠️ 주문 단위 귀속 없음 → 집계 수준 대조. convValue(광고기여)와 실매출은 다른 수치라 합산 금지.',
-    inputSchema: { start: z.string().describe('YYYY-MM-DD'), end: z.string().describe('YYYY-MM-DD') },
-  }, wrap(async ({ start, end }) => marketing.overview(start, end)));
+    inputSchema: D,
+  }, wrapR((start, end) => marketing.overview(start, end)));
 
   server.registerTool('marketing_sales_series', {
     title: '일별 마케팅↔매출 시계열 (광고×온라인×오프라인×회원/비회원×트래픽) [교차·관계분석]',
@@ -477,7 +516,7 @@ function build() {
       '광고와 매출(온·오프)의 관계·상관·추세·시차 분석엔 이 도구를 사용 — 여러 도구를 따로 부르지 말 것(날짜 정렬은 서버가 끝냄). ' +
       '⚠️ 주문 단위 광고 귀속 없음 → 상관관계(인과 아님).',
     inputSchema: D,
-  }, wrap(({ start, end }) => marketing.series(start, end)));
+  }, wrapR((start, end) => marketing.series(start, end)));
 
   server.registerTool('marketing_period_compare', {
     title: '두 구간 마케팅↔매출 비교 (프로모션 전/중/후·광고 늘린 주 등) [교차]',

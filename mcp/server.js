@@ -547,9 +547,10 @@ async function runHttp() {
   const TOKEN = process.env.MCP_TOKEN || '';
 
   const readBody = (req) => new Promise((resolve) => {
-    let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 4e6) req.destroy(); });
-    req.on('end', () => { try { resolve(data ? JSON.parse(data) : undefined); } catch (_) { resolve(undefined); } });
+    // 바이트를 모아 한 번에 UTF-8 디코드 — 한글 인자("맥스 커버" 등)가 chunk 경계에서 깨지는 문제 방지
+    const chunks = []; let len = 0;
+    req.on('data', (c) => { chunks.push(c); len += c.length; if (len > 4e6) req.destroy(); });
+    req.on('end', () => { try { const s = Buffer.concat(chunks).toString('utf8'); resolve(s ? JSON.parse(s) : undefined); } catch (_) { resolve(undefined); } });
     req.on('error', () => resolve(undefined));
   });
 

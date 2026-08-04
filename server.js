@@ -80,9 +80,10 @@ const Y = () => report.yesterdayStr();
 
 function readBody(req) {
   return new Promise((resolve) => {
-    let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 1e6) req.destroy(); });
-    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (_) { resolve({}); } });
+    // 바이트를 모아 한 번에 UTF-8 디코드 — 한글이 chunk 경계에서 잘려 깨지는(�) 문제 방지
+    const chunks = []; let len = 0;
+    req.on('data', (c) => { chunks.push(c); len += c.length; if (len > 1e6) req.destroy(); });
+    req.on('end', () => { try { const s = Buffer.concat(chunks).toString('utf8'); resolve(s ? JSON.parse(s) : {}); } catch (_) { resolve({}); } });
     req.on('error', () => resolve({}));
   });
 }
@@ -111,9 +112,8 @@ function cloudtypeSync(pathname, { method = 'GET', body = null, timeout = 15000 
       },
       timeout,
     }, (r2) => {
-      let buf = '';
-      r2.on('data', (c) => { buf += c; });
-      r2.on('end', () => { try { resolve(JSON.parse(buf)); } catch (_) { resolve({ ok: false, error: 'cloudtype 응답 파싱 실패(HTTP ' + r2.statusCode + ')', raw: String(buf).slice(0, 200) }); } });
+      const chunks = []; r2.on('data', (c) => chunks.push(c));
+      r2.on('end', () => { const buf = Buffer.concat(chunks).toString('utf8'); try { resolve(JSON.parse(buf)); } catch (_) { resolve({ ok: false, error: 'cloudtype 응답 파싱 실패(HTTP ' + r2.statusCode + ')', raw: String(buf).slice(0, 200) }); } });
     });
     r.on('timeout', () => r.destroy(new Error('cloudtype 응답 시간초과')));
     r.on('error', reject);

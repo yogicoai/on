@@ -80,9 +80,10 @@ const Y = () => report.yesterdayStr();
 
 function readBody(req) {
   return new Promise((resolve) => {
-    // 바이트를 모아 한 번에 UTF-8 디코드 — 한글이 chunk 경계에서 잘려 깨지는(�) 문제 방지
+    // 바이트를 모아 한 번에 UTF-8 디코드 — 한글이 chunk 경계에서 잘려 깨지는(�) 문제 방지.
+    //   실 HTTP는 Buffer chunk, Vercel 어댑터(Readable.from(문자열))는 문자열 chunk를 주므로 둘 다 Buffer로 정규화.
     const chunks = []; let len = 0;
-    req.on('data', (c) => { chunks.push(c); len += c.length; if (len > 1e6) req.destroy(); });
+    req.on('data', (c) => { const b = Buffer.isBuffer(c) ? c : Buffer.from(c); chunks.push(b); len += b.length; if (len > 1e6) req.destroy(); });
     req.on('end', () => { try { const s = Buffer.concat(chunks).toString('utf8'); resolve(s ? JSON.parse(s) : {}); } catch (_) { resolve({}); } });
     req.on('error', () => resolve({}));
   });

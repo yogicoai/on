@@ -1,0 +1,63 @@
+# 온라인 매출 수집을 10분마다 돌린다.
+#
+# Vercel 무료 요금제는 크론이 하루 1회뿐이라 낮 동안의 최신화를 맡길 수 없다.
+# 이 저장소는 공개라 Actions 실행 시간이 무료이므로 여기서 주기를 담당한다.
+# vercel.json 의 하루 1회 크론은 그대로 둔다 — 아래 "알아둘 것" 참고.
+#
+# 하는 일은 배포된 사이트의 /api/cron/sync 를 부르는 것뿐이다.
+# 무엇을 수집할지 판단하는 로직은 전부 그 라우트 안에 있다.
+#
+# 알아둘 것
+#   · 예약 실행은 정시에 오지 않는다. GitHub 부하에 따라 5~15분 늦기도 한다.
+#     "10분마다"는 최선 노력이지 보장이 아니다.
+#   · 공개 저장소에 60일간 커밋이 없으면 예약 워크플로가 자동으로 꺼진다.
+#     그때를 대비해 Vercel 쪽 하루 1회 크론을 안전망으로 남겨둔다.
+#   · SYNC_URL / CRON_SECRET 은 저장소 Secrets 에 넣는다.
+#     CRON_SECRET 을 넣었으면 Vercel 환경변수에도 같은 값을 넣어야 한다.
+
+name: 온라인 매출 수집
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  # 손으로도 돌릴 수 있게 — 밀린 걸 바로 따라잡고 싶을 때
+  workflow_dispatch:
+
+# 앞 실행이 아직 안 끝났으면 겹쳐 돌리지 않는다
+concurrency:
+  group: online-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 수집 호출
+        env:
+          BASE: ${{ secrets.SYNC_URL || 'https://on-iota-three.vercel.app' }}
+          SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          args=(-sS --max-time 120 -w '\n%{http_code}')
+          if [ -n "${SECRET:-}" ]; then
+            args+=(-H "authorization: Bearer ${SECRET}")
+          fi
+
+          out=$(curl "${args[@]}" "${BASE}/api/cron/sync")
+          code=$(printf '%s' "$out" | tail -n1)
+          body=$(printf '%s' "$out" | sed '$d')
+
+          echo "HTTP ${code}"
+          echo "$body"
+
+          if [ "$code" != "200" ]; then
+            echo "::error::수집 호출 실패 (HTTP ${code})"
+            exit 1
+          fi
+
+          # 라우트가 200 을 주면서 개별 수집만 실패할 수 있다 — 그건 경고로 남긴다.
+          if printf '%s' "$body" | grep -q '"ok":false'; then
+            echo "::warning::일부 수집이 실패했습니다 — 다음 차례에 다시 시도합니다"
+          fi

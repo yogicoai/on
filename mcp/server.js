@@ -49,6 +49,8 @@ const csTools = require('../lib/csTools');             // CS: 주문 통합조�
 const csKnowledge = require('../lib/csKnowledge');     // CS: 정책/FAQ 지식·과거 답변 사례(응답 초안용)
 const alerts = require('../lib/alerts');               // 경보 스캔 — "오늘 챙길 것"(이상신호 자동 감지)
 const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 진열 재고/품절
+const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
+const jwasuSales = require('../lib/jwasuSales');        // 좌수(상담)↔매출 상관·매장별 효율(원샷)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -227,6 +229,13 @@ function build() {
     return offline.analyze(start, end, { storeName: st });
   }));
 
+  server.registerTool('daily_breakdown', {
+    title: '일별 온·오프라인 매출 + 각 날짜 최다판매 상품 [확정집계·원샷]',
+    description: '기간을 하루 단위로 쪼개 온라인(이카운트)·오프라인(매장) 매출·수량·주문수 + **그날 가장 많이 팔린 상품(수량 1위)**·상위3를 한 번에 반환. ' +
+      '"8월 1~11일 일별로 온·오프 나눠 정리하고 각 날 제일 많이 팔린 상품", "날짜별 베스트셀러" 류 질문엔 여러 번 호출하지 말고 이 도구 하나만 사용(원샷).',
+    inputSchema: D,
+  }, wrapR((start, end) => dailyBreakdown.dailyBreakdown(start, end)));
+
   server.registerTool('online_offline_compare', {
     title: '온라인 vs 오프라인 매출 비교 — 합계·비중·일별 [교차]',
     description: '기간 온라인(이카운트: 자사몰+스마트스토어+외부채널)과 오프라인(매장 주문서)의 매출 합계·비중(%)·일별 시계열을 한 번에 비교. ' +
@@ -242,6 +251,15 @@ function build() {
       '※ 공식 화면은 일부 노출 보정(인원 화이트리스트 등)이 있어 소폭 다를 수 있음(여기는 원천 집계).',
     inputSchema: D,
   }, wrapR((start, end) => jwasuLeague.league(start, end)));
+
+  server.registerTool('jwasu_sales_analysis', {
+    title: '좌수(상담 인원)↔매출 분석 — 일별 상관·매장별 상담효율 [Y리그·원샷]',
+    description: '기간 오프라인 좌수(Y리그 실적좌수=상담 인원)와 매출의 관계를 한 번에 분석: ' +
+      '일별(좌수·매출·좌수당매출) + **좌수↔매출 상관계수** + **매장별 상담당 매출효율**(매출÷좌수). ' +
+      '"좌수가 매출에 얼마나 영향 주나", "상담 대비 매출 효율 매장별로", "좌수 많은 날 매출" 질문엔 이 도구 하나만 사용. ' +
+      '좌수는 realtime API가 월초누적으로 주는 걸 서버가 일별로 차분·전체 매니저 커버리지로 집계함(수동 계산 불필요). 근무인원이 아니라 실제 상담 인원 기준.',
+    inputSchema: D,
+  }, wrapR((start, end) => jwasuSales.analyze(start, end)));
 
   server.registerTool('staff_schedule', {
     title: '매니저 근무 스케줄 조회 (오프라인 매장) [조회전용]',

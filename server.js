@@ -161,7 +161,7 @@ async function handle(req, res) {
       return sendJson(res, 401, {
         ok: false,
         error: 'unauthorized — Authorization: Bearer <EXPORT_TOKEN> 필요',
-        hint: got ? '토큰이 일치하지 않습니다(Vercel EXPORT_TOKEN 값 확인 · 값 변경 후 재배포 필요)' : '요청에 Authorization 헤더가 없습니다(브라우저 주소창은 헤더를 못 보내므로 curl/코드로 호출하세요)',
+        hint: got ? '보낸 토큰이 서버 값과 다릅니다 — 호출하는 쪽(클라이언트)에서 발급받은 토큰을 정확히 넣으세요. 이 API 서버는 정상이며 여기서 재배포할 필요 없습니다.' : '요청에 Authorization 헤더가 없습니다(브라우저 주소창은 헤더를 못 보내므로 curl/코드로 호출하세요)',
       });
     }
     if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });

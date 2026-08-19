@@ -51,6 +51,7 @@ const alerts = require('../lib/alerts');               // 경보 스캔 — "오
 const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 진열 재고/품절
 const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
 const jwasuSales = require('../lib/jwasuSales');        // 좌수(상담)↔매출 상관·매장별 효율(원샷)
+const productCatalog = require('../lib/productCatalog'); // 제품/색상 카탈로그(이름·hex·이미지) 마스터
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -342,6 +343,36 @@ function build() {
       '"오늘 챙길 거 있어?", "이상 없어?", "일일 점검", "모닝 체크" 질문엔 이 도구 하나만 호출. 스캔 10~30초.',
     inputSchema: {},
   }, wrap(() => alerts.scan()));
+
+  server.registerTool('product_catalog', {
+    title: '제품 카탈로그 — 제품·색상·hex·이미지 조회 [제품 마스터]',
+    description: '요기보 제품 70종(제품+색상 단위) 정보: 제품명·카테고리(빈백 소파/서포트 쿠션/바디필로우/메이트 등)·색상·hex 컬러코드·규격·360/정면/측면/후면 이미지 URL. ' +
+      'search(제품명·색상 부분일치)·category 필터. "맥스 색상 종류", "아쿠아블루 hex 코드", "빈백 소파 제품 목록", "줄라 방수라인 제품" 질문에 사용. ' +
+      'withImages=true면 이미지 URL 포함. 매출/재고가 아니라 제품 사양·색상·이미지 참고용(영상제작·상세페이지용).',
+    inputSchema: {
+      search: z.string().optional().describe('제품명·색상 부분일치(예: 맥스, 아쿠아블루)'),
+      category: z.string().optional().describe('카테고리 필터(예: 빈백 소파)'),
+      withImages: z.boolean().optional().describe('true면 360/정면/측면/후면 이미지 URL 포함'),
+    },
+  }, wrap((a) => productCatalog.products(a || {})));
+
+  server.registerTool('color_chips', {
+    title: '표준 색상칩 — 이름·hex 코드 [색상 마스터]',
+    description: '요기보 표준 색상칩 25종: 색상명·hex 컬러코드·비고(스탠다드/실측 적용 등). "체리레드 색상코드", "표준 색상 전체", "색상칩 hex" 질문에 사용.',
+    inputSchema: {},
+  }, wrap(() => productCatalog.colors()));
+
+  server.registerTool('models_info', {
+    title: '전속 모델 정보 — 여성/남성/아동 AI 모델·등록상태 [모델 마스터]',
+    description: '요기보 전속 AI 모델(영상·상세페이지 제작용): 카테고리(여성/남성/아동)·코드(A/B/C/D)·이름·키(제품 비례)·외모 설명·**등록상태**(시트 완성도·착석 제품 등 제작 진행). ' +
+      'category(여성/남성/아동)·search(이름·외모) 필터. "여성 전속모델 목록", "모델 B 정보", "아동 모델 몇 명", "영상 테스트한 모델" 질문에 사용. ' +
+      'withImages=true면 대표/시트 이미지 URL 포함. 매출 아님 — 콘텐츠 제작용 모델 마스터.',
+    inputSchema: {
+      category: z.string().optional().describe('여성 | 남성 | 아동'),
+      search: z.string().optional().describe('이름·외모 부분일치'),
+      withImages: z.boolean().optional().describe('true면 대표/시트 이미지 URL 포함'),
+    },
+  }, wrap((a) => productCatalog.models(a || {})));
 
   server.registerTool('usage_guide', {
     title: '사용 가이드 — 무엇을 물어볼 수 있나요? [도움말]',

@@ -550,6 +550,22 @@ function build() {
     inputSchema: D,
   }, wrapR((start, end) => adEfficiency.efficiency(start, end)));
 
+  server.registerTool('ad_campaigns', {
+    title: '광고 캠페인별 성과 — 캠페인 단위 광고비·ROAS [adboard·CSV]',
+    description: '기간 캠페인 단위 광고 성과(ADVoost 쇼핑_샐리필/요기보·카탈로그·트래픽·전환 등 7종): 캠페인별 광고비·노출·클릭·전환·전환매출·장바구니·ROAS·CTR·CPC + 합계. ' +
+      '"캠페인별 광고 성과", "ADVoost 요기보 캠페인 ROAS", "어떤 캠페인이 잘됐어", "샐리필 광고" 질문에 사용. ' +
+      '⚠️ CSV 업로드분(수기 갱신)이라 매체별 ad_efficiency와 별개 소스 — 네이버 ADVoost/커뮤니케이션애드 위주, 최신성은 업로드 시점 기준. 매체 전체 광고비는 ad_efficiency.',
+    inputSchema: D,
+  }, wrapR(async (start, end) => {
+    const rows = await adEfficiency.campaigns(start, end);
+    if (!rows.length) return { 캠페인수: 0, 안내: '이 기간 업로드된 캠페인 데이터 없음(CSV 미업로드 구간일 수 있음).' };
+    const byC = {};
+    for (const r of rows) { const c = byC[r.campaign] = byC[r.campaign] || { campaign: r.campaign, spend: 0, imp: 0, clk: 0, conv: 0, convValue: 0, cart: 0 }; c.spend += r.spend; c.imp += r.imp; c.clk += r.clk; c.conv += r.conv; c.convValue += r.convValue; c.cart += r.cart; }
+    const 캠페인별 = Object.values(byC).map((c) => ({ ...c, roas: c.spend ? +(c.convValue / c.spend).toFixed(2) : null, ctr: c.imp ? +((c.clk / c.imp) * 100).toFixed(2) : null, cpc: c.clk ? Math.round(c.spend / c.clk) : null, cpa: c.conv ? Math.round(c.spend / c.conv) : null })).sort((a, b) => b.spend - a.spend);
+    const 합계 = 캠페인별.reduce((t, c) => ({ spend: t.spend + c.spend, convValue: t.convValue + c.convValue, conv: t.conv + c.conv }), { spend: 0, convValue: 0, conv: 0 });
+    return { 캠페인수: 캠페인별.length, 합계: { ...합계, roas: 합계.spend ? +(합계.convValue / 합계.spend).toFixed(2) : null }, 캠페인별, 주의: 'CSV 업로드분(네이버 ADVoost·커뮤니케이션애드 위주 7종, 수기 갱신). 매체별 전체 광고비/ROAS는 ad_efficiency 사용.' };
+  }));
+
   server.registerTool('marketing_overview', {
     title: '통합 마케팅 개요 — 광고+온라인+오프라인+트래픽 한 번에 (전사매출·비용률·CAC) [교차]',
     description: '기간 하나로 전사매출(온라인+오프라인 매장)·채널별 매출·광고(매체별 광고비·ROAS)·트래픽(방문·신규가입·구매)을 한 번에 조합. ' +

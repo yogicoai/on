@@ -96,9 +96,10 @@ GET /api/export?dataset=<이름>&period=<기간>&format=json|csv
 
 ## 3. 응답 필드
 
-**sales-online** — `orderNo` 주문번호 · `date` 출고일 · `store` 채널 · `productName` 상품명 · `color` 색상 · `category` 카테고리 · `beadType` 충전재 · `qty` 수량 · `amount` 금액(원) · `isSet` 세트여부 · `isCover` 커버여부
+**sales-online** — `orderNo` 주문번호 · `date` 출고일 · `store` 채널 · `productName` 상품명 · `color` 색상 · `category` 카테고리 · `beadType` 충전재 · `qty` 수량 · `amount` 금액(원) · `isSet` 세트여부 · `isCover` 커버여부 · `isReturn` 반품여부
+> 💡 **순매출(반품 반영)**: 반품/취소는 **음수 행**(`amount<0`, `isReturn=true`)으로 이미 포함돼 있습니다. 따라서 **`amount` 합계 = 순매출**이며, `isReturn=true` 행만 모으면 반품 내역입니다. (별도 순매출 데이터셋 불필요)
 
-**sales-offline** — 위와 동일 + `manager` 판매사원 (`store`는 매장명)
+**sales-offline** — 위와 동일 + `manager` 판매사원 (`store`는 매장명). 반품 처리(음수 행·순매출)는 sales-online과 동일.
 
 **ads** — `date` 일자 · `platform` 매체 · `spend` 광고비(원) · `imp` 노출 · `clk` 클릭 · `conv` 전환수 · `convValue` 전환매출(원)
 

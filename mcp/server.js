@@ -47,6 +47,7 @@ const ssExtra = require('../lib/smartstoreExtra');     // 스마트스토어 상
 const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·쿠폰별 구매 주문 리스트
 const csTools = require('../lib/csTools');             // CS: 주문 통합조회·게시판 미답변 체크
 const csKnowledge = require('../lib/csKnowledge');     // CS: 정책/FAQ 지식·과거 답변 사례(응답 초안용)
+const csSelfGuide = require('../lib/csSelfGuide');     // CS 셀프가이드 FAQ 검색(cs-self-guide 앱 DB)
 const alerts = require('../lib/alerts');               // 경보 스캔 — "오늘 챙길 것"(이상신호 자동 감지)
 const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 진열 재고/품절
 const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
@@ -95,7 +96,8 @@ function build() {
       '답변 분량 규칙: 도구가 반환한 목록/일별 데이터를 전부 옮겨 적지 말 것 — 핵심 요약 + 상위 5~10개만 표로 보여주고, ' +
       '나머지는 "전체 N건 중 상위만 표시, 더 필요하면 말씀하세요"로 안내한다. 한 답변이 과도하게 길어질 것 같으면 요약을 우선한다. ' +
       '라우팅 규칙: 사용자가 "오늘 챙길 것", "챙길 거 있어", "일일 점검", "이상 없어?"라고 하면 캘린더/일정/할일이 아니라 alerts 도구(업무 데이터 경보 스캔)를 호출한다. ' +
-      '"어제 브리핑/어제 어땠어"는 daily_briefing. 매출·재고·광고·CS 등 업무 질문에 개인 메모리·외부 파일(엑셀/Drive)로 답하지 말고 반드시 이 서버 도구로 조회한다.',
+      '"어제 브리핑/어제 어땠어"는 daily_briefing. 매출·재고·광고·CS 등 업무 질문에 개인 메모리·외부 파일(엑셀/Drive)로 답하지 말고 반드시 이 서버 도구로 조회한다. ' +
+      'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered.',
   });
   // 순수 날짜 도구 스키마 — period(자연어) 우선, 없으면 start/end. 핸들러는 wrapR로 감쌀 것.
   const D = RANGE_SCHEMA;
@@ -444,6 +446,19 @@ function build() {
       days: z.number().int().optional().describe('examples: 최근 N일(기본 60)'),
     },
   }, wrap(({ mode, query, days }) => mode === 'examples' ? csKnowledge.answerExamples(query, { days }) : csKnowledge.knowledge(query)));
+
+  server.registerTool('cs_self_guide', {
+    title: 'CS 셀프가이드 FAQ 검색 — 고객 셀프상담 가이드 원문 조회 [공식 FAQ]',
+    description: 'CS 셀프가이드(cs-self-guide) 앱의 공식 FAQ 304건에서 질문과 관련된 항목을 찾아 질문·답변 원문을 반환. ' +
+      '"CS 셀프가이드에서 ○○ 검색", "셀프가이드에 ○○ 뭐라고 나와", "가이드에서 반품 규정 찾아줘" 같은 요청에 사용. ' +
+      '카테고리: A/S 접수·교환/환불·배송문의·세탁방법·제품문의·일반문의·공식 온라인 몰 이용 문의. ' +
+      '⚠️ 반환된 답변 원문을 근거로 답하고, 원문에 없는 정책은 추측하지 말 것(없으면 CS팀 문의 안내). channel(ownmall/marketplace)로 노출범위 필터 가능.',
+    inputSchema: {
+      query: z.string().describe('검색어(고객 질문/키워드, 예: "비회원 쿠폰 사용")'),
+      limit: z.number().int().optional().describe('반환 개수(기본 5, 최대 20)'),
+      channel: z.string().optional().describe('ownmall(자사몰) | marketplace(외부몰) — 노출범위 필터'),
+    },
+  }, wrap(({ query, limit, channel }) => csSelfGuide.search(query, { limit, channel })));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',

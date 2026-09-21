@@ -534,6 +534,15 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, ...(await promoDefs.status()) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
+  // 구간 프로모션 성과(대시보드 KPI·성과 화면) — MCP promotion_performance 와 동일 계산
+  if (u.pathname === '/api/promo-defs/perf') {
+    try {
+      const s = u.searchParams.get('start'), e = u.searchParams.get('end');
+      const r = await promoPerformance.allForPeriod(s || undefined, e || undefined);
+      const mall = u.searchParams.get('mall');
+      return sendJson(res, 200, { ok: true, ...r, promotions: mall ? r.promotions.filter((p) => p.mall === mall) : r.promotions });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   if (u.pathname === '/api/promo-defs/list') {
     try {
       return sendJson(res, 200, { ok: true, items: await promoDefs.listDefs({ mall: u.searchParams.get('mall') || undefined, start: u.searchParams.get('start') || undefined, end: u.searchParams.get('end') || undefined }) });

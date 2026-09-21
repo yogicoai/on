@@ -248,7 +248,7 @@ function renderKpis() {
     { id: 'dsOrders', label: '주문수 · 객단가 <span class="hint" style="font-weight:500">이달·이카운트</span>',
       val: '집계 중…', sub: '<span id="dsOrdSub">집계 중…</span>' },
     { label: '프로모션 성과', val: '<span id="kpiPromoPerf" class="muted" style="font-size:18px">집계 중…</span>',
-      sub: '<span id="kpiPromoSub">그달 진행 프로모션 · 자사몰 쿠폰 기준 · 클릭 시 ③ 프로모션 매출</span>', cls: 'pink', act: 'tab:buyers' },
+      sub: '<span id="kpiPromoSub">그달 진행 프로모션 · 대상상품 기준 · 클릭 시 ③ 프로모션 매출</span>', cls: 'pink', act: 'tab:buyers' },
   ];
   el('kpis').innerHTML = cards.map((c) =>
     `<div class="kpi ${c.act ? 'clickable' : ''} ${c.cls || ''}"${c.act ? ` data-act="${c.act}"` : ''}><div class="label">${c.label}</div><div class="val num"${c.id ? ` id="${c.id}"` : ''}>${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
@@ -271,18 +271,19 @@ async function loadKpiEcountRevenue(storeName, spanId, startId, endId) {
     v.innerHTML = `🧾 이카운트 판매 <b>${won(j.amount)}</b><br><span class="muted" style="font-size:10px">출고일 기준 집계${incomplete ? ` · ⚠️ ${j.latestDate}까지 적재(이후 미출고)` : ''}</span>`;
   } catch (_) { v.textContent = '🧾 이카운트 매출 -'; }
 }
-// 자사몰 '프로모션 성과' KPI — 이번 달 진행 프로모션(이벤트)의 연결 쿠폰 실사용 매출 합
+// 자사몰 '프로모션 성과' KPI — 선택 구간에 진행된 프로모션의 대상상품 매출(MD 정의 기준).
+//   ※ 예전엔 연결쿠폰 실사용 기준이었는데, 자사몰이 즉시할인으로 바뀌며 0원이 되어 상품매칭으로 통일했다.
 async function loadKpiPromoPerf() {
   const v = el('kpiPromoPerf'); if (!v) return;
   try {
     const s = el('start').value, e = el('end').value; // 상단 선택 구간 기준
-    const j = await (await fetch(`/api/promotions/coupon-performance?mall=${enc('자사몰')}&start=${enc(s)}&end=${enc(e)}`)).json();
+    const j = await (await fetch(`/api/promo-defs/perf?mall=${enc('자사몰')}&start=${enc(s)}&end=${enc(e)}`)).json();
     if (!j.ok) throw new Error(j.error);
-    const events = j.promotions || []; // 백엔드가 선택구간과 겹치는 이벤트만
-    const rev = events.reduce((a, p) => a + (p.hasCoupons ? p.totals.revenue : 0), 0);
-    const withCp = events.filter((p) => p.hasCoupons).length;
+    const rows = (j.promotions || []).filter((p) => p.mall === '자사몰');
+    const rev = rows.reduce((a, p) => a + (p.sales || 0), 0);
     v.classList.remove('muted'); v.style.fontSize = ''; v.textContent = won(rev);
-    const sub = el('kpiPromoSub'); if (sub) sub.textContent = `진행 이벤트 ${num(events.length)}개(쿠폰연결 ${num(withCp)}) · 선택 구간 · 클릭 시 ③`;
+    const sub = el('kpiPromoSub');
+    if (sub) sub.textContent = `진행 프로모션 ${num(rows.length)}개 · 대상상품 기준 · 선택 구간 · 클릭 시 ③`;
   } catch (_) { v.classList.remove('muted'); v.style.fontSize = ''; v.textContent = '-'; }
 }
 

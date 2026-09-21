@@ -53,6 +53,7 @@ const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 �
 const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
 const jwasuSales = require('../lib/jwasuSales');        // 좌수(상담)↔매출 상관·매장별 효율(원샷)
 const productCatalog = require('../lib/productCatalog'); // 제품/색상 카탈로그(이름·hex·이미지) 마스터
+const yoyAnalysis = require('../lib/yoyAnalysis'); // 전사 기간 대 기간 비교(연월 원샷)
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -97,6 +98,10 @@ function build() {
       '나머지는 "전체 N건 중 상위만 표시, 더 필요하면 말씀하세요"로 안내한다. 한 답변이 과도하게 길어질 것 같으면 요약을 우선한다. ' +
       '라우팅 규칙: 사용자가 "오늘 챙길 것", "챙길 거 있어", "일일 점검", "이상 없어?"라고 하면 캘린더/일정/할일이 아니라 alerts 도구(업무 데이터 경보 스캔)를 호출한다. ' +
       '"어제 브리핑/어제 어땠어"는 daily_briefing. 매출·재고·광고·CS 등 업무 질문에 개인 메모리·외부 파일(엑셀/Drive)로 답하지 말고 반드시 이 서버 도구로 조회한다. ' +
+      '기간 대 기간 비교 라우팅(중요): "2025년 8월 2026년 8월 성과분석", "작년 대비", "전년 동월 비교", "○월 어땠어" 처럼 두 기간(또는 전년 대비)을 비교하는 질문은 ' +
+      'yoy_analysis 한 도구만 호출한다 — 전 채널(온·오프)·수량·객단가·상품기여·프로모션·광고를 한 번에 주고 데이터 결손까지 경고한다. sales_trend로 대체하지 말 것(자사몰+스토어만, 원장도 다름). ' +
+      '원장 기준 규칙(중요): 자사몰 매출은 원장이 둘이다 — sales_trend·자사몰 상품분석은 Cafe24 주문일 기준, 그 외 대부분(yoy_analysis·marketing_*·promotion_performance·offline_*)은 이카운트 출고일 기준이다. ' +
+      '두 기준의 숫자를 한 답변에서 합산·혼용하지 말고, 수치를 제시할 때 어느 기준인지 밝힌다. 출고 시차 때문에 최근 달은 출고 기준이 주문 기준보다 작게 나오는 것이 정상이다. ' +
       'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered.',
   });
   // 순수 날짜 도구 스키마 — period(자연어) 우선, 없으면 start/end. 핸들러는 wrapR로 감쌀 것.
@@ -121,6 +126,9 @@ function build() {
     description: '기간에 진행된 전 몰 프로모션별 매출·주문·수량 + 목표매출 대비 달성률. ' +
       'MD 제출 정의(promo_defs)의 대상상품을 이카운트 원장에 매칭해 집계 — 전 몰 동일 기준(자사몰=홈페이지·스마트스토어·오프라인). ' +
       '프로모션/이벤트 성과 질문엔 반드시 이 도구를 사용 — 원시 주문에서 추정/직접계산 금지. ' +
+      '각 행의 **비교** 필드에 전년 동기·직전 동일기간 매출과 증감률(리프트)이 함께 온다 — 매출 금액만 말하지 말고 반드시 이 비교값으로 잘했는지 판단해 답하라. ' +
+      '범위가 "전제품"인 프로모션의 매출은 그 기간 그 몰의 매출 전액이므로(프로모션 기여분이 아님) 비교값 없이는 성패를 말할 수 없다. ' +
+      '비교.직전기간.주의(베이스라인 오염 경고)·비교.교란요인(공동구매 등)·비교.전년동기.사유(원장 미적재)가 있으면 그대로 전달할 것. ' +
       '⚠️ 기간이 겹치는 프로모션(전제품 + 품목특가)이 있으면 totals는 중복 합산되므로 합계주의 필드를 함께 전달할 것.',
     inputSchema: D,
   }, wrapR((start, end) => promoPerformance.allForPeriod(start, end)));
@@ -497,7 +505,11 @@ function build() {
   server.registerTool('sales_trend', {
     title: '매출 비교·추이·할인율 — 전년/전월/전주·월별추이·할인분석 [확정집계]',
     description: 'mode 선택: compare=선택 기간 자사몰·스마트스토어 매출을 전년/전월/전주 동기간과 비교(start/end) / monthly=채널별 월 매출 시계열(2024~현재) / discount=자사몰 품목별 실판매단가 vs 정상가 → 할인율·가중평균(start/end). ' +
-      '"전년 대비", "월별 추이", "할인율 분석" 질문에 사용.',
+      '"월별 추이", "할인율 분석" 질문에 사용. ' +
+      '⚠️ **원장 주의**: 이 도구의 자사몰 수치는 **Cafe24 주문일(결제일) 기준**이고 오프라인·외부채널이 빠져 있다(자사몰+스마트스토어만). ' +
+      '다른 도구(yoy_analysis·marketing_*·promotion_performance·offline_*)는 **이카운트 출고일 기준**이라 값이 다르다 — 예: 2026-08 자사몰이 여기선 +1.4%, 출고 기준으로는 -20.4%. ' +
+      '두 원장의 숫자를 한 답변에서 섞지 말고, 어느 기준인지 반드시 밝혀라. ' +
+      '**전사(온·오프 전 채널) 전년 대비 분석은 이 도구가 아니라 yoy_analysis 를 사용**하라(출고 기준 4채널 + 수량·객단가 분해 + 결손일 경고 포함).',
     inputSchema: { mode: z.enum(['compare', 'monthly', 'discount']).describe('compare|monthly|discount'), start: z.string().optional().describe('compare·discount 필수 YYYY-MM-DD'), end: z.string().optional(), period: PERIOD_FIELD },
   }, wrap((a) => {
     const { mode, start, end } = withPeriod(a);
@@ -611,6 +623,34 @@ function build() {
       bStart: z.string().describe('B=관심 구간 시작 YYYY-MM-DD (프로모션·광고 늘린 주)'), bEnd: z.string().describe('B구간 종료 YYYY-MM-DD'),
     },
   }, wrap(({ aStart, aEnd, bStart, bEnd }) => marketing.periodCompare(aStart, aEnd, bStart, bEnd)));
+
+  // ── 전사 기간 비교(YoY) — "2025년 8월 vs 2026년 8월" 한 방 ─────────────────
+  server.registerTool('yoy_analysis', {
+    title: '전사 기간 비교 분석 — 전년 대비/연월 대 연월 [확정집계·원샷]',
+    description: '두 기간을 **전 채널(자사몰·스마트스토어·외부채널·오프라인)** 로 한 번에 비교한다. ' +
+      '연월만 적으면 되는 원샷 도구 — "2025년 8월 2026년 8월 성과분석", "작년 8월 대비 올해 8월", "전년 대비 어때", "2026년 8월 어땠어" 류 질문엔 ' +
+      '**여러 도구를 따로 부르지 말고 이 도구 하나만** 사용하라(sales_trend는 자사몰+스토어만 보고 원장도 다르다). ' +
+      '반환: 전사·채널별 매출/수량/주문수/객단가 증감 + 구조진단(매출·수량·객단가 방향이 엇갈릴 때 해석) + 제품군별 + 상품 증감기여 TOP + ' +
+      '신규·소멸 외부채널 + 프로모션 진행현황 + 광고·트래픽 + **데이터경고(원장 결손일·출고시차·신규채널)**. ' +
+      '기준은 이카운트 출고일·상품매출(반품 차감 순매출). 자사몰은 Cafe24 주문일 기준도 참고로 병기한다. ' +
+      '⚠️ 답변할 때 데이터경고를 반드시 함께 전달하라 — 결손일이나 출고시차를 빼고 증감률만 말하면 오독이 된다.',
+    inputSchema: {
+      period: z.string().optional().describe('두 기간을 한 번에: "2025년 8월 vs 2026년 8월", "작년 8월 대비 올해 8월". 한 기간만 주면("2026년 8월") 전년 동기와 자동 비교. "작년 8월"·"전년 동월"·"재작년 8월" 모두 인식.'),
+      aStart: z.string().optional().describe('A(비교 기준·이전) 시작 YYYY-MM-DD — period 대신 직접 지정할 때'),
+      aEnd: z.string().optional().describe('A 종료 YYYY-MM-DD'),
+      bStart: z.string().optional().describe('B(관심 구간·이후) 시작 YYYY-MM-DD'),
+      bEnd: z.string().optional().describe('B 종료 YYYY-MM-DD'),
+      light: z.boolean().optional().describe('true면 상품·프로모션·광고 섹션 생략(빠른 요약). 기본 false'),
+    },
+  }, wrap(async (a) => {
+    const opts = { light: !!a.light };
+    if (a.aStart && a.aEnd && a.bStart && a.bEnd) {
+      return yoyAnalysis.compare({ start: a.aStart, end: a.aEnd, label: `${a.aStart}~${a.aEnd}` },
+        { start: a.bStart, end: a.bEnd, label: `${a.bStart}~${a.bEnd}` }, opts);
+    }
+    if (!a.period) throw new Error('period(예: "2025년 8월 vs 2026년 8월", "2026년 8월") 또는 aStart/aEnd/bStart/bEnd 를 주세요.');
+    return yoyAnalysis.fromText(a.period, opts);
+  }));
 
   return server;
 }

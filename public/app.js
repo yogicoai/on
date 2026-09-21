@@ -2235,7 +2235,7 @@ el('prReset').addEventListener('click', prReset);
 //  채널 인라인 관리 — 각 채널 화면 하단: 이번 달 목표(달성률) + 프로모션(등록/목록)
 //   자사몰·스마트스토어·기타 그룹 공통. 단일 노드를 활성 채널 뷰 하단으로 이동해 사용.
 // ══════════════════════════════════════════════
-let admNode = null, admMall = null, admPrCalInstance = null, admTgMonth = null, admPerfCache = null;
+let admNode = null, admMall = null, admTgMonth = null, admPerfCache = null;
 function curYM() { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}`; }
 function buildChannelAdmin() {
   if (admNode) return admNode;
@@ -2326,7 +2326,7 @@ function ensureAdminModal() {
   // 배경 클릭으로는 닫지 않음(실수로 자주 닫히던 문제) — 닫기 버튼 또는 ESC 로만 닫힘
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || !el('adminModal') || el('adminModal').style.display !== 'flex') return;
-    if (admPrCalInstance && admPrCalInstance.isEditing()) admPrCalInstance.backToCal(); else closeChannelAdminModal();
+    closeChannelAdminModal();
   });
 }
 function openChannelAdminModal(mall) {
@@ -2341,9 +2341,17 @@ function openChannelAdminModal(mall) {
   document.body.style.overflow = 'hidden';
   admMall = mall;
   admPerfCache = null; // 채널 바뀌면 성과 캐시 초기화
-  // 목표·프로모션 성과는 '달력의 현재 월'에 연동 — 달력이 월을 바꾸면 그 달 목표/성과를 다시 표시(월별 따로)
-  admPrCalInstance = createPromoCalendar(el('admPrCalHost'), { scopeMall: mall, onChange: loadAdminPerformance, onMonthChange: (ym) => { loadAdminTarget(ym); renderAdminPerformance(ym); } });
-  admPrCalInstance.openMonth((el('start') && el('start').value) || null); // → onMonthChange → loadAdminTarget + renderAdminPerformance(달력월)
+  // 프로모션 정의는 전사 엑셀 업로드로 일원화 — 채널별 달력 편집은 제거하고 등록 화면으로 안내만 한다.
+  const host = el('admPrCalHost');
+  if (host) {
+    host.innerHTML = `<div class="insightline" style="font-size:13px">
+      전사 프로모션은 <b>엑셀 업로드</b>로 등록합니다 (정의 + 목표매출 한 번에).
+      <div style="margin-top:8px"><button id="admPromoUp" class="btn mini" type="button">📄 프로모션 등록 열기</button></div></div>`;
+    const b = el('admPromoUp');
+    if (b) b.addEventListener('click', () => { closeChannelAdminModal(); openPromoUpload(); });
+  }
+  const ym = ((el('start') && el('start').value) || '').slice(0, 7);
+  loadAdminTarget(ym); renderAdminPerformance(ym);
   loadAdminPerformance();
 }
 function closeChannelAdminModal() {
@@ -2417,7 +2425,7 @@ async function saveAdminTarget() {
     el('admTgMsg').textContent = `${month} 저장됨`; loadAdminTarget(month);
   } catch (e) { el('admTgMsg').textContent = '오류: ' + e.message; }
 }
-// (구) 평면 프로모션 폼/검색/리스트 함수는 채널 모달 내장 달력(createPromoCalendar scopeMall)으로 대체됨.
+// 프로모션 정의·목표 등록은 전사 엑셀 업로드(📄 프로모션 등록)로 일원화됨 — 개별 폼/달력 편집 제거.
 
 // ══════════════════════════════════════════════
 //  AI 판매 분석 (Claude API) — 우하단 플로팅 버튼 + 팝업
@@ -2517,578 +2525,144 @@ function pcMallOptions(scopeMall) {
 // 재사용 가능한 프로모션 달력 컴포넌트(인스턴스) — host 에 렌더.
 //   scopeMall 지정 시 그 몰의 프로모션만 표시하고 편집기 '몰'을 고정(채널 관리 모달용).
 //   scopeMall=null 이면 전 몰 표시 + 몰 선택 가능(헤더 달력용).
-function createPromoCalendar(host, opts) {
-  opts = opts || {};
-  const scopeMall = opts.scopeMall || null;
-  const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
-  const onMonthChange = typeof opts.onMonthChange === 'function' ? opts.onMonthChange : null; // 달력 월 변경 시 (YYYY-MM)
-  let month = null, promos = [], selected = [], editId = null, searchOffset = 0, searchItems = [], lastQuery = '', selectedCoupons = [], couponList = [];
-  const $ = (s) => host.querySelector(s);
-  host.classList.add('pc-host');
-  host.innerHTML = `
-    <div class="pcv-cal">
-      <div class="pc-toolbar">
-        <div class="pc-nav">
-          <button class="pcv-prev btn ghost mini" type="button">‹ 이전</button>
-          <strong class="pcv-title pc-title"></strong>
-          <button class="pcv-next btn ghost mini" type="button">다음 ›</button>
-          <button class="pcv-today btn ghost mini" type="button">이번 달</button>
-        </div>
-        <button class="pcv-new btn" type="button">+ 새 프로모션</button>
-      </div>
-      <div class="pcv-legend pc-legend"></div>
-      <div class="pc-dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
-      <div class="pcv-grid"></div>
-    </div>
-    <div class="pcv-edit" style="display:none"></div>`;
-  $('.pcv-prev').addEventListener('click', () => shiftMonth(-1));
-  $('.pcv-next').addEventListener('click', () => shiftMonth(1));
-  $('.pcv-today').addEventListener('click', () => { const t = new Date(); month = { y: t.getFullYear(), m: t.getMonth() }; load(); });
-  $('.pcv-new').addEventListener('click', () => openEditor(null, null));
+// ══════════════════════════════════════════════
+//  전사 프로모션 등록 — 엑셀 업로드 (정의 + 목표를 한 파일로)
+//    MD가 정리한 엑셀을 올리면: 파싱·검증 → 변경 미리보기 → 확인 후 반영 → MCP 즉시 조회 가능.
+//    반영은 전량 교체(엑셀이 기준)이고 직전 버전은 자동 백업되어 되돌릴 수 있다.
+// ══════════════════════════════════════════════
+let _promoFile = null; // 선택된 엑셀(미리보기 후 적용에 재사용)
 
-  function shiftMonth(d) { let y = month.y, m = month.m + d; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } month = { y, m }; load(); }
-  function showCal() { $('.pcv-edit').style.display = 'none'; $('.pcv-cal').style.display = ''; }
-  function isEditing() { return $('.pcv-edit').style.display !== 'none'; }
-  async function load() {
-    showCal();
-    $('.pcv-title').textContent = `${month.y}년 ${month.m + 1}월`;
-    if (onMonthChange) onMonthChange(`${month.y}-${pad(month.m + 1)}`); // 목표 카드 등 외부 동기화
-    $('.pcv-grid').innerHTML = '<div class="empty">불러오는 중…</div>';
-    try { const url = scopeMall ? `/api/promotions/list?mall=${enc(scopeMall)}` : '/api/promotions/list'; const j = await (await fetch(url)).json(); promos = (j.ok && j.items) || []; }
-    catch (_) { promos = []; }
-    renderGrid();
-  }
-  function renderGrid() {
-    const { y, m } = month;
-    const first = new Date(y, m, 1), last = new Date(y, m + 1, 0);
-    const startGrid = new Date(y, m, 1 - first.getDay());        // 그 달 1일이 속한 주의 일요일
-    const endGrid = new Date(y, m + 1, 0 + (6 - last.getDay())); // 말일이 속한 주의 토요일
-    const gS = pcDateStr(startGrid), gE = pcDateStr(endGrid);
-    const vis = promos.filter((p) => p.start && p.end && pcOverlap(p.start, p.end, gS, gE));
-    // 전역 레인 배정(같은 프로모션은 모든 주에서 같은 줄에 유지)
-    vis.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : (b.end > a.end ? 1 : -1)));
-    const lanes = [];
-    vis.forEach((p) => { for (let li = 0; ; li++) { const lane = lanes[li] || (lanes[li] = []); if (lane.every((q) => !pcOverlap(p.start, p.end, q.start, q.end))) { lane.push(p); p._lane = li; break; } } });
-    const weeks = []; const cur = new Date(startGrid);
-    while (cur <= endGrid) { const w = []; for (let i = 0; i < 7; i++) { w.push(new Date(cur)); cur.setDate(cur.getDate() + 1); } weeks.push(w); }
-    const todayStr = pcDateStr(new Date());
-    let html = '';
-    weeks.forEach((week) => {
-      const wS = pcDateStr(week[0]), wE = pcDateStr(week[6]);
-      const segs = vis.filter((p) => pcOverlap(p.start, p.end, wS, wE)).map((p) => {
-        const sS = p.start > wS ? p.start : wS, sE = p.end < wE ? p.end : wE;
-        const col = Math.round((pcParse(sS) - week[0]) / 86400000);
-        const span = Math.round((pcParse(sE) - pcParse(sS)) / 86400000) + 1;
-        return { p, col, span, contL: p.start < wS, contR: p.end > wE };
-      });
-      const maxLane = segs.reduce((mx, s) => Math.max(mx, s.p._lane), -1);
-      const wh = Math.max(86, 30 + (maxLane + 1) * 22 + 8);
-      let cells = '';
-      week.forEach((d) => {
-        const ds = pcDateStr(d), inMonth = d.getMonth() === m, hol = PC_HOLIDAYS[ds], dow = d.getDay();
-        const cls = ['pc-day']; if (!inMonth) cls.push('pc-out'); if (ds === todayStr) cls.push('pc-today'); if (dow === 0 || hol) cls.push('pc-sun'); else if (dow === 6) cls.push('pc-sat');
-        cells += `<div class="${cls.join(' ')}" data-date="${ds}" style="min-height:${wh}px"><div class="pc-dnum">${d.getDate()}${hol ? `<span class="pc-hol">${hol}</span>` : ''}</div></div>`;
-      });
-      let bars = '';
-      segs.forEach((s) => {
-        const leftPct = s.col / 7 * 100, widPct = s.span / 7 * 100, c = pcColor(s.p.mall);
-        const label = scopeMall ? ae(s.p.name) : `[${ae(s.p.mall)}] ${ae(s.p.name)}`;
-        bars += `<div class="pc-bar${s.contL ? ' contL' : ''}${s.contR ? ' contR' : ''}" data-id="${s.p.id}" title="${label} (${s.p.start}~${s.p.end})" style="left:calc(${leftPct}% + 3px);width:calc(${widPct}% - 6px);top:${30 + s.p._lane * 22}px;background:${c}">${s.contL ? '◀ ' : ''}${label}</div>`;
-      });
-      html += `<div class="pc-week"><div class="pc-daycells">${cells}</div><div class="pc-bars">${bars}</div></div>`;
-    });
-    $('.pcv-grid').innerHTML = html || '<div class="empty">표시할 주가 없습니다</div>';
-    const malls = [...new Set(vis.map((p) => p.mall))];
-    $('.pcv-legend').innerHTML = malls.length ? malls.map((mm) => `<span class="pc-leg"><i style="background:${pcColor(mm)}"></i>${ae(mm)}</span>`).join('') : '<span class="muted" style="font-size:12px">이 달 등록된 프로모션이 없습니다 — 날짜를 클릭해 추가하세요</span>';
-    $('.pcv-grid').querySelectorAll('.pc-bar').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); const p = promos.find((x) => x.id === b.dataset.id); if (p) openEditor(p, null); }));
-    $('.pcv-grid').querySelectorAll('.pc-day').forEach((c) => c.addEventListener('click', () => openEditor(null, c.dataset.date)));
-  }
-  // ── 상세 프로모션 편집기 ──
-  function openEditor(promo, date) {
-    $('.pcv-cal').style.display = 'none'; $('.pcv-edit').style.display = '';
-    editId = promo ? promo.id : null;
-    selected = promo ? (promo.products || []).map((p) => ({ productNo: p.productNo, productName: p.productName, price: p.price || 0, discountRate: p.discountRate || 0, source: p.source })) : [];
-    selectedCoupons = promo ? (promo.coupons || []).map((c) => ({ ...c })) : []; // 자사몰 연결 쿠폰(스냅샷)
-    couponList = [];
-    searchOffset = 0; searchItems = [];
-    const malls = pcMallOptions(scopeMall);
-    // 전 몰 달력에서 기존 프로모션 편집 시, 그 몰이 현재 채널탭에 없어도 옵션에 포함(저장 시 몰이 바뀌는 것 방지)
-    if (!scopeMall && promo && promo.mall && !malls.includes(promo.mall)) malls.push(promo.mall);
-    const selMall = promo ? promo.mall : (scopeMall || malls[1] || malls[0]);
-    const isCafe24 = (scopeMall || selMall) === '자사몰'; // 쿠폰 연결은 자사몰만
-    const start = promo ? promo.start : (date || ''), end = promo ? promo.end : (date || '');
-    const mallField = scopeMall
-      ? `<label>몰 <span class="pcv-mall pcv-locked" data-val="${ae(scopeMall)}">${ae(scopeMall)} <i>고정</i></span></label>`
-      : `<label>몰 <select class="pcv-mall">${malls.map((mm) => `<option value="${ae(mm)}" ${mm === selMall ? 'selected' : ''}>${ae(mm)}</option>`).join('')}</select></label>`;
-    $('.pcv-edit').innerHTML = `
-      <div class="pc-edhead">
-        <button class="pcv-back btn ghost mini" type="button">‹ 달력으로</button>
-        <strong>${promo ? '프로모션 수정' : '새 프로모션 계획'}</strong>
-        ${promo ? `<span class="pc-edrange">${promo.start} ~ ${promo.end}</span>` : ''}
-      </div>
-      <div class="pc-edcard">
-        <div class="pc-edsub">기본 정보</div>
-        <div class="pc-edform">
-          ${mallField}
-          <label class="grow">프로모션명 <input type="text" class="pcv-name" value="${promo ? ae(promo.name) : ''}" placeholder="예: 6월 여름 프로모션"></label>
-          <label>시작 <input type="date" class="pcv-start" value="${start}"></label>
-          <label>종료 <input type="date" class="pcv-end" value="${end}"></label>
-        </div>
-        <label class="pc-memo">상세 프로모션 계획 <textarea class="pcv-memo" rows="3" placeholder="혜택 구성 · 배너/노출 위치 · 타깃 · 목표 KPI 등 상세 계획을 메모하세요">${promo ? ae(promo.memo || '') : ''}</textarea></label>
-      </div>
-      <div class="pc-edcard">
-        <div class="pc-edsub">대상 상품 · 할인율 <span>선택 — 상품 없이 일정만 등록해도 됩니다</span></div>
-        <div class="pc-edform">
-          <label class="grow">상품 검색 <input type="text" class="pcv-search" placeholder="상품명 (Cafe24/스마트스토어)"></label>
-          <button class="pcv-searchbtn btn ghost" type="button">검색</button>
-          <span class="pcv-searchmsg muted"></span>
-        </div>
-        <div class="pcv-searchresult"></div>
-        <div class="pc-bulkreg">
-          <div class="pc-bulkhead">엑셀(CSV) 양식으로 대량 등록 <span>상품별 할인율·쿠폰까지 한 번에</span></div>
-          <div class="pc-bulkrow">
-            <button class="pcv-tmpl btn cal mini" type="button">⤓ 엑셀(CSV) 양식 받기</button>
-            <label class="pcv-uplabel btn ghost mini">⤒ 양식 업로드<input type="file" class="pcv-upload" accept=".csv,.xlsx,.xls,text/csv" hidden></label>
-            <span class="pcv-bulkmsg muted"></span>
-          </div>
-          <div class="pc-bulkdesc">양식을 받아 <b>상품명(Cafe24 기준) · 할인율(%) · 쿠폰</b>을 채운 뒤 업로드하면, 각 행의 상품을 찾아 그 행의 <b>할인율·쿠폰</b>을 적용해 일괄 추가합니다. 상품 검색은 모든 몰이 <b>Cafe24 상품명 기준</b>으로 매칭되니 Cafe24 상품명을 사용하세요. (엑셀에서 <b>“CSV UTF-8”</b>로 저장 · 부분일치 · 중복 자동 제외) <span style="color:var(--muted)">쿠폰 칸은 주로 기타 채널 표기용 — Cafe24는 할인율/쿠폰할인으로 확인됩니다.</span></div>
-          <div class="pc-bulkdesc" style="margin-top:8px">또는 상품명을 <b>줄바꿈으로 여러 개</b> 붙여넣어 추가 (할인율은 아래 ‘일괄 할인율’ 적용):</div>
-          <textarea class="pcv-bulknames" rows="2" placeholder="예) 요기보 맥스↵요기보 미디↵요기보 미니 (줄바꿈으로 구분)"></textarea>
-          <div class="pc-bulkrow" style="margin-top:6px">
-            <button class="pcv-bulkaddbtn btn ghost mini" type="button">상품명 대량 추가</button>
-          </div>
-        </div>
-        <div class="pc-edform pc-edbulk">
-          <label>일괄 할인율(%) <input type="number" min="0" max="100" class="pcv-bulk" style="width:84px"></label>
-          <button class="pcv-bulkapply btn ghost mini" type="button">전체 적용</button>
-          <span class="muted" style="font-size:12px">상품별 개별 조정도 가능</span>
-        </div>
-        <div class="pcv-products"></div>
-      </div>
-      ${isCafe24 ? `
-      <div class="pc-edcard pcv-couponcard">
-        <div class="pc-edsub">연결 쿠폰 (자사몰) <span>이 기간 진행한 Cafe24 쿠폰을 불러와 저장 → 성과를 <b>쿠폰 기준</b>으로 집계 · 쿠폰이 삭제돼도 기록 유지</span></div>
-        <div class="pc-bulkrow">
-          <button class="pcv-loadcoupons btn cal mini" type="button">이 기간 진행 쿠폰 불러오기</button>
-          <button class="pcv-loadall btn ghost mini" type="button" title="기간 무관 — 적재된 모든 쿠폰(삭제 포함)을 다 불러옵니다">전체 쿠폰 불러오기</button>
-          <button class="pcv-synccoupons btn ghost mini" type="button" title="이 기간 주문에서 사용된 쿠폰명을 적재해 발급종료·삭제 쿠폰도 목록에 뜨게 합니다(수십 초)">만료 쿠폰 포함 갱신</button>
-          <span class="pcv-couponmsg muted"></span>
-        </div>
-        <div class="pcv-couponpick"></div>
-        <div class="pcv-couponsel"></div>
-        <details class="pc-cpmanual"><summary>삭제·만료 쿠폰 번호로 추가 (발급내역 조회)</summary>
-          <div style="padding:8px 0 0">
-            <div class="pc-bulkdesc"><b>Cafe24 쿠폰 관리(삭제된 쿠폰 포함)에서 행을 드래그로 여러 개 선택해 복사 → 그대로 붙여넣으세요.</b> 번호와 쿠폰명을 자동으로 인식해 모두 추가합니다(여러 줄 OK). 삭제된 쿠폰이라도 <b>발급내역으로 실제 사용 매출이 집계</b>됩니다. (또는 한 줄에 「번호〔공백〕쿠폰명」 직접 입력)</div>
-            <textarea class="pcv-cpmanualin" rows="4" placeholder="Cafe24 쿠폰 표에서 행들을 복사해 붙여넣기 (번호 + 쿠폰명 자동 인식)&#10;예) 6085098189300001157   [요기보 원더랜드] 빈백/바디필로우 10% 할인 쿠폰(스탠다드)"></textarea>
-            <div class="pc-bulkrow" style="margin-top:4px"><button class="pcv-cpmanualadd btn ghost mini" type="button">번호로 추가 (발급내역 조회)</button><span class="pcv-cpmanualmsg muted" style="font-size:11px"></span></div>
-          </div>
-        </details>
-      </div>` : ''}
-      <div class="pc-edactions">
-        <button class="pcv-save btn" type="button">${promo ? '수정 저장' : '프로모션 저장'}</button>
-        ${promo ? '<button class="pcv-delete btn danger" type="button">삭제</button>' : ''}
-        <button class="pcv-cancel btn ghost" type="button">취소</button>
-        <span class="pcv-msg muted"></span>
-      </div>`;
-    $('.pcv-back').addEventListener('click', showCal);
-    $('.pcv-cancel').addEventListener('click', showCal);
-    $('.pcv-searchbtn').addEventListener('click', () => doSearch(false));
-    $('.pcv-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(false); } });
-    $('.pcv-bulkaddbtn').addEventListener('click', bulkAddByNames);
-    $('.pcv-tmpl').addEventListener('click', downloadTemplate);
-    $('.pcv-upload').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) uploadCsv(f); e.target.value = ''; });
-    $('.pcv-bulkapply').addEventListener('click', () => { const v = Math.max(0, Math.min(100, +$('.pcv-bulk').value || 0)); selected.forEach((p) => { p.discountRate = v; }); renderProducts(); });
-    $('.pcv-save').addEventListener('click', save);
-    const delBtn = $('.pcv-delete'); if (delBtn) delBtn.addEventListener('click', del);
-    const lcBtn = $('.pcv-loadcoupons'); if (lcBtn) lcBtn.addEventListener('click', () => loadCouponsForEditor(false));
-    const laBtn = $('.pcv-loadall'); if (laBtn) laBtn.addEventListener('click', () => loadCouponsForEditor(true));
-    const scBtn = $('.pcv-synccoupons'); if (scBtn) scBtn.addEventListener('click', syncCouponsForEditor);
-    const maBtn = $('.pcv-cpmanualadd'); if (maBtn) maBtn.addEventListener('click', manualAddCoupons);
-    renderSelectedCoupons();
-    const rates = [...new Set(selected.map((p) => p.discountRate))];
-    $('.pcv-bulk').value = rates.length === 1 ? rates[0] : '';
-    renderProducts();
-  }
-  function renderProducts() {
-    const box = $('.pcv-products'); if (!box) return;
-    if (!selected.length) { box.innerHTML = '<div class="muted" style="font-size:12px;padding:6px 0">선택된 상품 없음 — 검색 후 추가 (상품 없이 일정만 등록해도 됩니다)</div>'; return; }
-    box.innerHTML = `<table style="width:100%;margin-top:6px"><thead><tr><th>상품</th><th class="num">정가</th><th class="num">할인율</th><th class="num">할인가</th><th>쿠폰</th><th></th></tr></thead><tbody>${
-      selected.map((p, i) => `<tr><td>${ae(p.productName)} <span class="muted" style="font-size:11px">${p.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(p.price)}</td><td class="num"><input type="number" min="0" max="100" value="${p.discountRate || 0}" data-i="${i}" class="pcdisc" style="width:56px">%</td><td class="num pcfin">${won(Math.round((p.price || 0) * (1 - (p.discountRate || 0) / 100)))}</td><td><input type="text" value="${ae(p.coupon || '')}" data-ci="${i}" class="pccoupon" placeholder="-" style="width:130px"></td><td class="num"><button class="delx" data-del="${i}">✕</button></td></tr>`).join('')
-    }</tbody></table>`;
-    box.querySelectorAll('.pcdisc').forEach((inp) => inp.addEventListener('input', () => { const i = +inp.dataset.i, v = Math.max(0, Math.min(100, +inp.value || 0)); selected[i].discountRate = v; const c = inp.closest('tr').querySelector('.pcfin'); if (c) c.textContent = won(Math.round((selected[i].price || 0) * (1 - v / 100))); }));
-    box.querySelectorAll('.pccoupon').forEach((inp) => inp.addEventListener('input', () => { selected[+inp.dataset.ci].coupon = inp.value; }));
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { selected.splice(+b.dataset.del, 1); renderProducts(); }));
-  }
-  async function doSearch(more) {
-    const q = $('.pcv-search').value.trim(), mall = scopeMall || $('.pcv-mall').value;
-    if (!more) { searchOffset = 0; searchItems = []; lastQuery = q; }
-    $('.pcv-searchmsg').textContent = '검색 중…';
-    try {
-      const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(mall)}&limit=50&offset=${searchOffset}`)).json();
-      if (!j.ok) throw new Error(j.error);
-      const items = j.items || [];
-      searchItems = searchItems.concat(items); searchOffset += items.length;
-      const hasMore = items.length >= 50;
-      $('.pcv-searchmsg').textContent = `${searchItems.length}개 표시${hasMore ? '+' : ''} · ${j.source || ''}`;
-      renderSearch(hasMore);
-    } catch (e) { $('.pcv-searchmsg').textContent = '오류: ' + e.message; }
-  }
-  function renderSearch(hasMore) {
-    const box = $('.pcv-searchresult'); if (!box) return;
-    if (!searchItems.length) { box.innerHTML = '<div class="empty">검색 결과 없음</div>'; return; }
-    box.innerHTML = `<div class="pc-srhead"><span class="muted" style="font-size:12px">검색결과 ${searchItems.length}개${hasMore ? '+ (더 있음)' : ''}</span>
-      <button class="pcv-addall btn ghost mini" type="button" title="이 검색어에 일치하는 상품을 전부 불러와 한 번에 추가">+ 검색결과 전체 추가${hasMore ? '' : ` (${searchItems.length}개)`}</button></div>
-      <div class="prsearchbox"><table style="width:100%"><tbody>${searchItems.map((r) => `<tr><td>${ae(r.productName)} <span class="muted" style="font-size:11px">${r.source === 'smartstore' ? '스토어' : 'Cafe24'}</span></td><td class="num">${won(r.price)}</td><td class="num"><button class="linklike" data-add="${enc(JSON.stringify(r))}">+ 추가</button></td></tr>`).join('')}</tbody></table>${hasMore ? `<div class="prmore"><button class="btn ghost mini pcv-more" type="button">더 불러오기 (현재 ${searchItems.length}개)</button></div>` : ''}</div>`;
-    box.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
-      const p = JSON.parse(decodeURIComponent(b.dataset.add));
-      if (selected.some((x) => x.productNo === p.productNo && x.source === p.source)) { $('.pcv-searchmsg').textContent = '이미 추가된 상품'; return; }
-      selected.push({ productNo: p.productNo, productName: p.productName, price: p.price, discountRate: (+$('.pcv-bulk').value || 0), source: p.source });
-      renderProducts();
-    }));
-    const addall = box.querySelector('.pcv-addall'); if (addall) addall.addEventListener('click', addAllSearchResults);
-    const more = box.querySelector('.pcv-more'); if (more) more.addEventListener('click', () => doSearch(true));
-  }
-  // ── 대량 추가 ──
-  function dedupAdd(items, override) {
-    const baseRate = (+$('.pcv-bulk').value || 0);
-    let added = 0;
-    for (const p of items) {
-      if (!p || !p.productNo) continue;
-      if (selected.some((x) => x.productNo === p.productNo && x.source === p.source)) continue;
-      selected.push({
-        productNo: p.productNo, productName: p.productName, price: p.price,
-        discountRate: (override && override.discountRate != null) ? override.discountRate : baseRate,
-        coupon: (override && override.coupon) || '',
-        source: p.source,
-      });
-      added++;
-    }
-    if (added) renderProducts();
-    return added;
-  }
-  // 한 검색어에 일치하는 상품을 전 페이지 끝까지 모두 가져옴(안전 상한 50페이지)
-  async function fetchAllMatches(q) {
-    const mall = scopeMall || $('.pcv-mall').value;
-    const all = []; let off = 0;
-    for (let page = 0; page < 50; page++) {
-      const j = await (await fetch(`/api/products/search?q=${enc(q)}&mall=${enc(mall)}&limit=100&offset=${off}`)).json();
-      if (!j.ok) break;
-      const items = (j.items || []).map((r) => ({ productNo: r.productNo, productName: r.productName, price: r.price, source: r.source || (mall === '스마트스토어' ? 'smartstore' : 'cafe24') }));
-      all.push(...items);
-      if (items.length < 100) break;
-      off += items.length;
-    }
-    return all;
-  }
-  async function addAllSearchResults() {
-    $('.pcv-searchmsg').textContent = '전체 불러와 추가 중…';
-    try {
-      const all = await fetchAllMatches(lastQuery);
-      const added = dedupAdd(all);
-      $('.pcv-searchmsg').textContent = `검색결과 ${all.length}개 중 ${added}개 추가 (중복 제외)`;
-    } catch (e) { $('.pcv-searchmsg').textContent = '오류: ' + e.message; }
-  }
-  async function bulkAddByNames() {
-    const raw = $('.pcv-bulknames').value || '';
-    const names = [...new Set(raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
-    if (!names.length) { $('.pcv-bulkmsg').textContent = '상품명을 한 줄에 하나씩 입력하세요'; return; }
-    $('.pcv-bulkmsg').textContent = `${names.length}개 상품명 검색·추가 중…`;
-    let total = 0, added = 0;
-    try {
-      for (const nm of names) { const m = await fetchAllMatches(nm); total += m.length; added += dedupAdd(m); }
-      $('.pcv-bulkmsg').textContent = `${names.length}개 상품명 · 일치 ${total}개 중 ${added}개 추가 (중복 제외)`;
-    } catch (e) { $('.pcv-bulkmsg').textContent = '오류: ' + e.message; }
-  }
-  // ── 엑셀(CSV) 양식: 상품명 · 할인율(%) · 쿠폰 ──
-  function downloadTemplate() {
-    const sample = [
-      '상품명(Cafe24 기준),할인율(%),쿠폰',
-      '요기보 맥스,20,',
-      '요기보 미디,15,5천원 쿠폰다운',
-      '줄라 미니,10,10% 쿠폰할인',
-    ].join('\r\n');
-    const blob = new Blob(['﻿' + sample], { type: 'text/csv;charset=utf-8' }); // BOM → 엑셀 한글 정상
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = '프로모션_상품_양식.csv';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
-  // 따옴표 없는 단순 CSV 한 줄 파싱 (필드 내 콤마는 미지원 — 양식 기준)
-  function parsePromoCsv(text) {
-    const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const out = [];
-    lines.forEach((line, i) => {
-      if (i === 0 && /상품명|할인율|쿠폰/.test(line)) return; // 헤더 스킵
-      const c = line.split(',');
-      const name = (c[0] || '').trim();
-      const rate = Math.max(0, Math.min(100, parseFloat(String(c[1] || '').replace('%', '').trim()) || 0));
-      const coupon = (c.slice(2).join(',') || '').trim();
-      if (name) out.push({ name, rate, coupon });
-    });
-    return out;
-  }
-  async function uploadCsv(file) {
-    let text = '';
-    try { text = await file.text(); } catch (_) { $('.pcv-bulkmsg').textContent = '파일을 읽지 못했어요'; return; }
-    if (/\.xlsx?$/i.test(file.name) && !/[,\n]/.test(text)) { $('.pcv-bulkmsg').textContent = '엑셀(.xlsx)은 “CSV UTF-8”로 저장해 올려주세요'; return; }
-    const rows = parsePromoCsv(text);
-    if (!rows.length) { $('.pcv-bulkmsg').textContent = '양식에서 데이터 행을 찾지 못했어요 (상품명,할인율,쿠폰)'; return; }
-    $('.pcv-bulkmsg').textContent = `${rows.length}행 처리 중…`;
-    let total = 0, added = 0;
-    try {
-      for (const r of rows) { const m = await fetchAllMatches(r.name); total += m.length; added += dedupAdd(m, { discountRate: r.rate, coupon: r.coupon }); }
-      $('.pcv-bulkmsg').textContent = `양식 ${rows.length}행 · 일치 ${total}개 중 ${added}개 추가 (할인율·쿠폰 적용, 중복 제외)`;
-    } catch (e) { $('.pcv-bulkmsg').textContent = '오류: ' + e.message; }
-  }
-  async function save() {
-    const mall = scopeMall || $('.pcv-mall').value, name = $('.pcv-name').value.trim(), start = $('.pcv-start').value, end = $('.pcv-end').value, memo = $('.pcv-memo').value.trim();
-    if (!name || !start || !end) { $('.pcv-msg').textContent = '이름·시작·종료를 입력하세요'; return; }
-    if (end < start) { $('.pcv-msg').textContent = '종료일이 시작일보다 빠릅니다'; return; }
-    $('.pcv-msg').textContent = '저장 중…';
-    try {
-      const body = { mall, name, start, end, memo, products: selected, coupons: selectedCoupons };
-      if (editId) body.id = editId;
-      const j = await (await fetch('/api/promotions/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
-      if (!j.ok) throw new Error(j.error);
-      $('.pcv-msg').textContent = '저장됨'; showCal(); await load(); if (onChange) onChange();
-    } catch (e) { $('.pcv-msg').textContent = '오류: ' + e.message; }
-  }
-  async function del() {
-    if (!editId || !confirm('이 프로모션을 삭제할까요?')) return;
-    try { await fetch('/api/promotions/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId }) }); showCal(); await load(); if (onChange) onChange(); }
-    catch (_) {}
-  }
-  // ── 자사몰 연결 쿠폰 (불러오기 → 선택 → 스냅샷 저장) ──
-  async function loadCouponsForEditor(all) {
-    const s = $('.pcv-start').value, e = $('.pcv-end').value;
-    const pick = $('.pcv-couponpick'); if (!pick) return;
-    if (!all && (!s || !e)) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
-    $('.pcv-couponmsg').textContent = all ? '전체 쿠폰 불러오는 중…' : '쿠폰 불러오는 중…'; pick.innerHTML = '<div class="empty">불러오는 중…</div>';
-    try {
-      const j = await (await fetch(`/api/cafe24/coupons?start=${enc(s)}&end=${enc(e)}${all ? '&all=1' : ''}`)).json();
-      if (!j.ok) throw new Error(j.error);
-      couponList = j.coupons || [];
-      $('.pcv-couponmsg').textContent = all ? `전체 ${num(j.count)}개 불러옴 (삭제 포함, 사용 많은 순)` : `전체 ${num(j.count)}개 중 이 기간 사용 ${num(j.used)}개 (사용 많은 순)`;
-      renderCouponPick();
-    } catch (err) { $('.pcv-couponmsg').textContent = '오류: ' + err.message; pick.innerHTML = ''; }
-  }
-  function renderCouponPick() {
-    const pick = $('.pcv-couponpick'); if (!pick) return;
-    if (!couponList.length) { pick.innerHTML = '<div class="empty">쿠폰 없음</div>'; return; }
-    const ckey = (c) => c.coupon_no || c.coupon_name; // 만료쿠폰은 번호가 없어 이름을 키로
-    const selSet = new Set(selectedCoupons.map(ckey));
-    pick.innerHTML = `<div class="prsearchbox" style="max-height:260px;margin-top:6px">
-      <div class="pcv-cphead"><input type="text" class="pcv-couponq" placeholder="쿠폰명 검색"><button class="pcv-couponadd btn mini" type="button">체크한 쿠폰 추가</button></div>
-      <table style="width:100%"><tbody>${couponList.map((c, i) => `<tr>
-        <td style="width:28px;text-align:center"><input type="checkbox" class="pcv-cpck" data-i="${i}" ${selSet.has(ckey(c)) ? 'checked disabled' : ''}></td>
-        <td>${ae(c.coupon_name)} <span class="muted" style="font-size:11px">· ${ae(c.benefitText)} · ${ae(c.targetLabel)}${c.usedOrders ? ` · <span class="pos">이 기간 ${c.usedOrders}주문</span>` : ''}${c.expired ? ' · <span class="neg">만료</span>' : ''}</span></td></tr>`).join('')}</tbody></table></div>`;
-    const q = pick.querySelector('.pcv-couponq');
-    if (q) q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); pick.querySelectorAll('tbody tr').forEach((tr, i) => { tr.style.display = (!v || (couponList[i].coupon_name || '').toLowerCase().includes(v)) ? '' : 'none'; }); });
-    const addBtn = pick.querySelector('.pcv-couponadd');
-    if (addBtn) addBtn.addEventListener('click', () => {
-      pick.querySelectorAll('.pcv-cpck:checked:not(:disabled)').forEach((cb) => {
-        const c = couponList[+cb.dataset.i]; if (!c) return;
-        const k = c.coupon_no || c.coupon_name;
-        if (!selectedCoupons.some((x) => (x.coupon_no || x.coupon_name) === k)) selectedCoupons.push({ coupon_no: c.coupon_no, coupon_name: c.coupon_name, benefitText: c.benefitText, targetLabel: c.targetLabel, productNos: c.productNos || [], savedAt: new Date().toISOString() });
-      });
-      renderSelectedCoupons(); renderCouponPick();
-    });
-  }
-  // 만료·발급종료 쿠폰도 목록에 뜨게 — 이 기간 issues를 캐시에 적재 후 재조회
-  async function syncCouponsForEditor() {
-    const s = $('.pcv-start').value, e = $('.pcv-end').value;
-    if (!s || !e) { $('.pcv-couponmsg').textContent = '기간(시작/종료)을 먼저 입력하세요'; return; }
-    $('.pcv-couponmsg').textContent = '주문에서 사용 쿠폰명 적재 중… (삭제 쿠폰 포함, 수십 초)';
-    try {
-      const r = await (await fetch(`/api/cafe24/sync-coupons-from-orders?start=${enc(s)}&end=${enc(e)}`)).json();
-      if (!r.ok) throw new Error(r.error || '실패');
-      if (r.delegated) { // Vercel → cloudtype 위임(60초 제한 회피) → 완료까지 폴링
-        $('.pcv-couponmsg').textContent = r.already ? 'cloudtype에서 이미 적재 진행 중 — 완료까지 대기…' : 'cloudtype에서 쿠폰 적재 시작…';
-        const fin = await pollSync2((m) => { $('.pcv-couponmsg').textContent = 'cloudtype 적재 중… ' + m; });
-        if (fin && fin.status === 'error') throw new Error('cloudtype 적재 오류: ' + (fin.error || ''));
-        $('.pcv-couponmsg').textContent = '적재 완료 (cloudtype) — 다시 불러옵니다';
-      } else {
-        $('.pcv-couponmsg').textContent = `갱신 완료(매핑 ${num(r.mappedOrders || 0)}주문, 삭제 쿠폰 포함) — 다시 불러옵니다`;
-      }
-      await loadCouponsForEditor();
-    } catch (err) { $('.pcv-couponmsg').textContent = '갱신 오류: ' + err.message; }
-  }
-  // 삭제·만료 쿠폰을 번호로 추가 — 발급내역(issues)을 조회해 사용 주문을 캐시에 적재 → 성과 집계
-  async function manualAddCoupons() {
-    const ta = $('.pcv-cpmanualin'); if (!ta) return;
-    const msg = $('.pcv-cpmanualmsg');
-    const s = $('.pcv-start').value, e = $('.pcv-end').value;
-    const lines = (ta.value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-    if (!lines.length) { if (msg) msg.textContent = '「번호 쿠폰명」 형식으로 입력하세요'; return; }
-    if (msg) msg.textContent = '발급내역 조회·적재 중…';
-    let added = 0;
-    for (const line of lines) {
-      // Cafe24 표에서 행 복사(탭/다중공백 구분) 또는 "번호 쿠폰명" 단일 형식 모두 대응
-      const parts = line.split(/\t|\s{2,}/).map((x) => x.trim()).filter(Boolean);
-      let no = '', name = '';
-      if (parts.length >= 2) { // 표 붙여넣기: 컬럼 분리됨
-        no = parts.find((x) => /^\d{10,}$/.test(x)) || '';
-        name = parts.find((x) => x.includes('[') && x.includes(']')) || parts.find((x) => /[가-힣]/.test(x) && !/^\d/.test(x) && !/~/.test(x)) || '';
-      }
-      if (!no || !name) { const m = line.match(/^(\d{8,})\s+(.+)$/); if (m) { no = m[1]; name = m[2].trim(); } } // "번호 공백 이름"
-      if (!no || selectedCoupons.some((x) => x.coupon_no === no)) continue;
-      try {
-        const r = await (await fetch(`/api/cafe24/coupon-by-no?no=${enc(no)}&name=${enc(name)}&start=${enc(s)}&end=${enc(e)}`)).json();
-        const cn = (r.ok && r.coupon_name) || name || `쿠폰#${no}`;
-        selectedCoupons.push({ coupon_no: no, coupon_name: cn, benefitText: '', targetLabel: r.ok ? `발급내역 ${num(r.used)}주문 사용` : '(번호 추가)', productNos: [], savedAt: new Date().toISOString() });
-        added += 1;
-      } catch (_) {}
-    }
-    if (msg) msg.textContent = `${added}개 추가 (발급내역 적재 완료) — 저장하면 성과 집계`;
-    if (added) { ta.value = ''; renderSelectedCoupons(); renderCouponPick(); }
-  }
-  function renderSelectedCoupons() {
-    const box = $('.pcv-couponsel'); if (!box) return;
-    if (!selectedCoupons.length) { box.innerHTML = '<div class="muted" style="font-size:12px;padding:8px 0">연결된 쿠폰 없음 — 위 버튼으로 이 프로모션의 쿠폰을 불러와 선택하세요</div>'; return; }
-    const prodTot = selectedCoupons.reduce((a, c) => a + (c.productNos ? c.productNos.length : 0), 0);
-    box.innerHTML = `<div class="muted" style="font-size:12px;margin:8px 0 4px">연결 쿠폰 <b>${num(selectedCoupons.length)}개</b> · 대상상품 합계 ${num(prodTot)}개 — 성과는 이 쿠폰들의 <b>실제 사용분</b>으로 집계됩니다.</div>
-      <table style="width:100%"><tbody>${selectedCoupons.map((c, i) => `<tr><td>${ae(c.coupon_name)} <span class="muted" style="font-size:11px">· ${ae(c.benefitText || '')} · ${ae(c.targetLabel || '')}</span></td><td class="num" style="width:36px"><button class="delx" data-cdel="${i}">✕</button></td></tr>`).join('')}</tbody></table>`;
-    box.querySelectorAll('[data-cdel]').forEach((b) => b.addEventListener('click', () => { selectedCoupons.splice(+b.dataset.cdel, 1); renderSelectedCoupons(); renderCouponPick(); }));
-  }
-  return {
-    openMonth(dateStr) { const t = dateStr ? pcParse(dateStr) : new Date(); month = { y: t.getFullYear(), m: t.getMonth() }; showCal(); load(); },
-    reload: load, isEditing, backToCal: showCal,
-  };
-}
-
-// 헤더 '프로모션 달력' 버튼 → 전 몰 달력 모달(scopeMall=null)
-let pcModalInstance = null;
-function buildPromoCalendar() {
-  if (el('promoCalModal')) return;
+function buildPromoUploadUi() {
+  if (el('promoUpModal')) return;
   const m = document.createElement('div');
-  m.id = 'promoCalModal'; m.className = 'modal'; m.style.display = 'none';
-  m.innerHTML = `<div class="modal-box pcbox">
+  m.id = 'promoUpModal'; m.className = 'modal'; m.style.display = 'none';
+  m.innerHTML = `<div class="modal-box" style="max-width:860px">
     <div class="modal-head">
-      <div><strong>프로모션 달력</strong><div class="modal-sub">전 몰 프로모션을 한눈에 · 빈 날짜 클릭 = 새 프로모션 · 바 클릭 = 상세 계획 편집</div></div>
-      <button id="pcClose" class="btn ghost mini" type="button">닫기 ✕</button>
+      <div><strong>전사 프로모션 등록</strong>
+        <div class="modal-sub" style="font-size:12px;color:var(--muted)">엑셀 하나로 프로모션 정의 + 목표매출을 등록합니다 · 올리면 Claude(MCP)에서 바로 성과 조회</div></div>
+      <button id="puClose" class="btn ghost mini" type="button">닫기 ✕</button>
     </div>
-    <div class="modal-body"><div id="pcHost"></div></div>
-  </div>`;
-  document.body.appendChild(m);
-  el('pcClose').addEventListener('click', closePromoCalendar);
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || m.style.display !== 'flex') return;
-    if (pcModalInstance && pcModalInstance.isEditing()) pcModalInstance.backToCal(); else closePromoCalendar();
-  });
-  pcModalInstance = createPromoCalendar(el('pcHost'), { scopeMall: null });
-  const btn = el('btnPromoCal'); if (btn) btn.addEventListener('click', openPromoCalendar);
-}
-function openPromoCalendar() {
-  buildPromoCalendar();
-  el('promoCalModal').style.display = 'flex'; document.body.style.overflow = 'hidden';
-  pcModalInstance.openMonth((el('start') && el('start').value) || null);
-}
-function closePromoCalendar() { if (el('promoCalModal')) el('promoCalModal').style.display = 'none'; document.body.style.overflow = ''; }
-
-// ── 전사 프로모션 목표 (한 폼: 채널별 목표매출 + 트래픽 목표) — 리포트 목표 페이스 반영 ──
-function buildPromoTargetUi() {
-  if (el('promoTgtModal')) return;
-  const m = document.createElement('div');
-  m.id = 'promoTgtModal'; m.className = 'modal'; m.style.display = 'none';
-  m.innerHTML = `<div class="modal-box">
-    <div class="modal-head"><div><strong>전사 프로모션 목표</strong><div class="modal-sub" style="font-size:12px;color:var(--muted)">프로모션 기간 + 채널별 목표매출만 입력 → 리포트 '목표 페이스'에 반영 · (월별 목표는 각 채널에서 설정)</div></div>
-      <button id="ptClose" class="btn ghost mini" type="button">닫기 ✕</button></div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <button id="ptNew" class="btn" type="button">+ 새 프로모션 목표</button>
-        <button id="ptSeed" class="btn ghost" type="button" title="기존 등록 프로모션을 목록으로 불러옵니다(목표 0 — 채워넣기)">⤓ 기존 프로모션 불러오기</button>
-        <span id="ptMsg" class="muted" style="align-self:center;font-size:12px"></span>
+      <div id="puStatus" class="muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <a id="puTpl" class="btn ghost" href="/api/promo-defs/template" download>⤓ 예제 양식 받기</a>
+        <label class="btn" style="cursor:pointer;margin:0">
+          📄 엑셀 선택<input id="puFile" type="file" accept=".xlsx" style="display:none">
+        </label>
+        <span id="puFileName" class="muted" style="font-size:12px"></span>
       </div>
-      <div id="ptForm"></div>
-      <div id="ptList"></div>
+
+      <div id="puDrop" style="border:2px dashed var(--line,#3a3a3a);border-radius:10px;padding:22px;text-align:center;color:var(--muted);font-size:13px;margin-bottom:12px">
+        여기에 엑셀 파일을 끌어다 놓으셔도 됩니다
+      </div>
+
+      <div id="puResult"></div>
     </div></div>`;
   document.body.appendChild(m);
-  el('ptClose').addEventListener('click', () => { m.style.display = 'none'; document.body.style.overflow = ''; });
-  el('ptNew').addEventListener('click', () => renderPtForm(null));
-  el('ptSeed').addEventListener('click', ptSeed);
+
+  el('puClose').addEventListener('click', closePromoUpload);
+  m.addEventListener('click', (ev) => { if (ev.target === m) closePromoUpload(); });
+  el('puFile').addEventListener('change', (ev) => { const f = ev.target.files && ev.target.files[0]; if (f) pickPromoFile(f); });
+
+  const drop = el('puDrop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.style.borderColor = 'var(--accent,#7E57C2)'; }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.style.borderColor = ''; }));
+  drop.addEventListener('drop', (ev) => { const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) pickPromoFile(f); });
 }
-let _ptMonth = null; // 프로모션 목표 목록 필터 월 (그 달 '시작' 프로모션만)
-let _ptTraffic = {}; // 편집 중 프로모션의 기존 트래픽 목표 — 입력란은 숨겼지만 저장 시 보존(목표매출만 단순 관리)
-function openPromoTargetUi() {
-  buildPromoTargetUi();
-  el('promoTgtModal').style.display = 'flex'; document.body.style.overflow = 'hidden';
-  _ptMonth = (((el('end') && el('end').value) || rangeFor('today')[0]) || '').slice(0, 7); // 현재(선택) 월부터
-  loadPtList();
+
+function openPromoUpload() {
+  buildPromoUploadUi();
+  el('promoUpModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  el('puResult').innerHTML = ''; el('puFileName').textContent = ''; _promoFile = null;
+  loadPromoDefStatus();
 }
-function ptShiftMonth(delta) {
-  const [y, m] = (_ptMonth || rangeFor('today')[0].slice(0, 7)).split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  _ptMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  loadPtList();
-}
-async function loadPtList() {
-  const box = el('ptList'); if (!box) return;
-  if (!_ptMonth) _ptMonth = (((el('end') && el('end').value) || rangeFor('today')[0]) || '').slice(0, 7);
+function closePromoUpload() { if (el('promoUpModal')) el('promoUpModal').style.display = 'none'; document.body.style.overflow = ''; }
+
+async function loadPromoDefStatus() {
+  const box = el('puStatus'); if (!box) return;
   try {
-    const j = await (await fetch('/api/promo-targets/list')).json();
-    const all = (j.ok && j.items) || [];
-    const items = all.filter((p) => (p.start || '').slice(0, 7) === _ptMonth); // 그 달 '시작' 프로모션
-    const nav = `<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap">
-      <button class="btn ghost mini" type="button" id="ptPrev">◀ 이전달</button>
-      <b style="font-size:14px;min-width:76px;text-align:center">${_ptMonth}</b>
-      <button class="btn ghost mini" type="button" id="ptNext">다음달 ▶</button>
-      <span class="muted" style="font-size:12px">이 달 시작 프로모션 ${items.length}개${all.length ? ` · 전체 ${all.length}` : ''}</span>
-    </div>`;
-    box.innerHTML = nav + (items.length
-      ? `<table style="width:100%;font-size:13px"><thead><tr><th>프로모션</th><th>기간</th><th class="num">자사몰</th><th class="num">스마트스토어</th><th class="num">외부채널</th><th></th></tr></thead><tbody>${
-        items.map((p) => `<tr><td><b>${ae(p.name)}</b></td><td class="muted">${p.start} ~ ${p.end}</td><td class="num">${won(p.channels.자사몰 || 0)}</td><td class="num">${won(p.channels.스마트스토어 || 0)}</td><td class="num">${won(p.channels.외부채널 || 0)}</td><td style="white-space:nowrap"><button class="linklike" type="button" data-pt-edit="${enc(JSON.stringify(p))}">수정</button> · <button class="linklike neg" type="button" data-pt-del="${p.id}">삭제</button></td></tr>`).join('')}</tbody></table>`
-      : '<div class="empty">이 달에 시작한 프로모션 목표가 없습니다 — “+ 새 프로모션 목표” 또는 “⤓ 기존 프로모션 불러오기”</div>');
-    el('ptPrev').addEventListener('click', () => ptShiftMonth(-1));
-    el('ptNext').addEventListener('click', () => ptShiftMonth(1));
-    box.querySelectorAll('[data-pt-edit]').forEach((b) => b.addEventListener('click', () => renderPtForm(JSON.parse(decodeURIComponent(b.dataset.ptEdit)))));
-    box.querySelectorAll('[data-pt-del]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('이 프로모션 목표를 삭제할까요?')) return; await fetch('/api/promo-targets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.dataset.ptDel }) }); loadPtList(); }));
-  } catch (e) { box.innerHTML = `<div class="empty">오류: ${e.message}</div>`; }
+    const j = await (await fetch('/api/promo-defs/status')).json();
+    if (!j.적재) { box.innerHTML = '<b>등록된 프로모션이 없습니다</b> — 예제 양식을 받아 작성 후 올려주세요.'; return; }
+    const malls = Object.entries(j.몰별 || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
+    box.innerHTML = `현재 <b>${num(j.적재)}건</b> 등록됨 (${malls}) · 기간 ${j.기간 || '-'} · 최종 갱신 ${String(j.갱신시각 || '').slice(0, 16).replace('T', ' ')}`;
+  } catch (e) { box.textContent = '현황 조회 오류: ' + e.message; }
 }
-function renderPtForm(p) {
-  const ch = (p && p.channels) || {};
-  _ptTraffic = (p && p.trafficTargets) || {}; // 기존 트래픽 목표 보존(입력란은 제거, 저장 시 그대로 유지)
-  const box = el('ptForm'); if (!box) return;
-  box.innerHTML = `<div class="card" style="margin-top:12px">
-    <h3>${p ? '프로모션 목표 수정' : '새 프로모션 목표'}</h3>
-    <div class="setform">
-      <label class="grow">프로모션명 <input type="text" id="ptName" value="${p ? ae(p.name) : ''}" placeholder="예: 6월 전사 프로모션"></label>
-      <label>시작 <input type="date" id="ptStart" value="${p ? p.start : ''}"></label>
-      <label>종료 <input type="date" id="ptEnd" value="${p ? p.end : ''}"></label>
-    </div>
-    <div style="font-weight:700;font-size:12.5px;color:var(--sub);margin:10px 0 4px">채널별 목표 매출 (원)</div>
-    <div class="setform">
-      <label>자사몰 <input type="number" id="ptCa" min="0" step="100000" value="${ch.자사몰 || ''}" placeholder="예: 98000000"></label>
-      <label>스마트스토어 <input type="number" id="ptSs" min="0" step="100000" value="${ch.스마트스토어 || ''}" placeholder="예: 42000000"></label>
-      <label>외부채널 <input type="number" id="ptEx" min="0" step="100000" value="${ch.외부채널 || ''}" placeholder="예: 0"></label>
-    </div>
-    <div class="muted" style="font-size:11.5px;margin:8px 0 2px">달성률은 리포트 ‘목표 페이스’에서 자동 계산돼요 · 할인율은 정가(Cafe24 자사몰 기준) 대비 자동 산정</div>
-    <div class="setform" style="margin-top:10px">
-      <button id="ptSave" class="btn" type="button">저장</button>
-      <button id="ptCancel" class="btn ghost" type="button">취소</button>
-      <span id="ptFormMsg" class="muted"></span>
-    </div></div>`;
-  el('ptSave').addEventListener('click', () => ptSave(p && p.id));
-  el('ptCancel').addEventListener('click', () => { box.innerHTML = ''; });
-  box.scrollIntoView({ behavior: 'smooth', block: 'start' }); // 폼이 위에 보이게 스크롤
-  const nm = el('ptName'); if (nm) nm.focus();
+
+function pickPromoFile(file) {
+  _promoFile = file;
+  el('puFileName').textContent = file.name;
+  uploadPromoExcel(false); // 먼저 미리보기
 }
-async function ptSave(id) {
-  const body = {
-    id: id || undefined,
-    name: el('ptName').value.trim(), start: el('ptStart').value, end: el('ptEnd').value,
-    channels: { 자사몰: +el('ptCa').value || 0, 스마트스토어: +el('ptSs').value || 0, 외부채널: +el('ptEx').value || 0 },
-    trafficTargets: _ptTraffic, // 입력란 제거 — 기존 값 그대로 보존(목표매출만 단순 관리)
-  };
+
+async function uploadPromoExcel(apply) {
+  const box = el('puResult'); if (!_promoFile) return;
+  box.innerHTML = `<div class="muted">${apply ? '반영 중…' : '파일 확인 중…'}</div>`;
   try {
-    const j = await (await fetch('/api/promo-targets/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
-    if (!j.ok) throw new Error(j.error);
-    el('ptForm').innerHTML = ''; loadPtList();
-  } catch (e) { const x = el('ptFormMsg'); if (x) { x.textContent = '오류: ' + e.message; x.className = 'neg'; } }
+    const buf = await _promoFile.arrayBuffer();
+    const r = await fetch('/api/promo-defs/upload' + (apply ? '?apply=1' : ''), {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf,
+    });
+    const j = await r.json();
+
+    if (!j.ok) {
+      box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">
+        <b>오류 ${j.errors ? j.errors.length : 1}건 — 반영되지 않았습니다.</b> 고쳐서 다시 올려주세요.
+        <ul style="margin:8px 0 0 16px;font-size:12px">${(j.errors || [j.error]).slice(0, 12).map((e) => `<li>${ae(e)}</li>`).join('')}</ul></div>`;
+      return;
+    }
+
+    if (j.applied) {
+      box.innerHTML = `<div class="insightline" style="border-left-color:var(--green,#66BB6A)">
+        <b>✅ 반영 완료</b> — 프로모션 ${num(j.counts.promotions)}건 (목표매출 입력 ${num(j.counts.withTarget || 0)}건)<br>
+        <span class="muted" style="font-size:12px">이제 Claude에서 "이번 달 프로모션 성과" 처럼 물어보면 바로 나옵니다.</span>
+        <div style="margin-top:8px"><button id="puUndo" class="btn ghost mini" type="button">↺ 직전 상태로 되돌리기</button></div></div>`;
+      el('puUndo').addEventListener('click', rollbackPromoDefs);
+      loadPromoDefStatus();
+      return;
+    }
+
+    // 미리보기
+    const p = j.preview || {};
+    const chip = (label, n, color) => `<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:${color};color:#111;font-weight:700;font-size:12px;margin-right:6px">${label} ${num(n)}</span>`;
+    const rows = (arr, cols) => (arr || []).slice(0, 8).map((x) => `<li>${cols.map((c) => ae(x[c] || '')).filter(Boolean).join(' · ')}</li>`).join('');
+    const warn = (j.warnings || []).length ? `<div class="muted" style="font-size:12px;margin-top:8px">⚠️ ${(j.warnings || []).slice(0, 5).map(ae).join('<br>⚠️ ')}</div>` : '';
+    const unres = (j.미해석 || []).length ? `<div class="muted" style="font-size:12px;margin-top:6px">품목맵에 없는 대상상품 ${j.미해석.length}건 — 해당 프로모션은 매출이 0으로 잡힐 수 있습니다: ${j.미해석.slice(0, 3).map(ae).join(', ')}</div>` : '';
+
+    box.innerHTML = `<div class="insightline">
+      <b>변경 내용 미리보기</b> <span class="muted" style="font-size:12px">— 아직 반영되지 않았습니다</span><br>
+      <div style="margin:10px 0">
+        ${chip('신규', p.신규 || 0, '#A5D6A7')}${chip('수정', p.수정 || 0, '#FFE082')}${chip('삭제', p.삭제 || 0, '#EF9A9A')}${chip('변동없음', p.변동없음 || 0, '#CFD8DC')}
+      </div>
+      <div style="font-size:12px;color:var(--muted)">총 ${num(j.counts.promotions)}행 · ${Object.entries(j.counts.byMall || {}).map(([k, v]) => `${k} ${v}`).join(' · ')} · 목표매출 입력 ${num(j.counts.withTarget || 0)}건</div>
+      ${p.신규 ? `<div style="margin-top:8px;font-size:12px"><b>신규</b><ul style="margin:4px 0 0 16px">${rows(p.added, ['promo_id', 'mall', 'name'])}</ul></div>` : ''}
+      ${p.수정 ? `<div style="margin-top:8px;font-size:12px"><b>수정</b><ul style="margin:4px 0 0 16px">${rows(p.changed, ['promo_id', 'mall', 'name'])}</ul></div>` : ''}
+      ${p.삭제 ? `<div style="margin-top:8px;font-size:12px"><b>삭제(엑셀에 없음)</b><ul style="margin:4px 0 0 16px">${rows(p.removed, ['promo_id', 'mall', 'name'])}</ul></div>` : ''}
+      ${warn}${unres}
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="puApply" class="btn" type="button">이대로 반영하기</button>
+        <button id="puCancel" class="btn ghost" type="button">취소</button>
+      </div></div>`;
+    el('puApply').addEventListener('click', () => {
+      if ((p.삭제 || 0) > 0 && !confirm(`${p.삭제}건이 삭제됩니다. 진행할까요?\n(되돌리기 가능)`)) return;
+      uploadPromoExcel(true);
+    });
+    el('puCancel').addEventListener('click', () => { box.innerHTML = ''; _promoFile = null; el('puFileName').textContent = ''; });
+  } catch (e) {
+    box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">오류: ${ae(e.message)}</div>`;
+  }
 }
-async function ptSeed() {
-  const msg = el('ptMsg');
-  try { const j = await (await fetch('/api/promo-targets/seed', { method: 'POST' })).json(); if (!j.ok) throw new Error(j.error); if (msg) msg.textContent = `${j.added}개 불러옴 (전체 ${j.total}개 프로모션)`; loadPtList(); }
-  catch (e) { if (msg) msg.textContent = '오류: ' + e.message; }
+
+async function rollbackPromoDefs() {
+  if (!confirm('직전 업로드 상태로 되돌릴까요?')) return;
+  try {
+    const j = await (await fetch('/api/promo-defs/rollback', { method: 'POST' })).json();
+    el('puResult').innerHTML = j.ok
+      ? `<div class="insightline">↺ 되돌렸습니다 — ${num(j.restored)}건 복원 (${String(j.at || '').slice(0, 16).replace('T', ' ')} 시점)</div>`
+      : `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">${ae(j.error || '복원 실패')}</div>`;
+    loadPromoDefStatus();
+  } catch (e) { el('puResult').innerHTML = `<div class="insightline">오류: ${ae(e.message)}</div>`; }
 }
 
 // ── 랜딩: 오늘 데이터 ──
@@ -3101,7 +2675,7 @@ async function ptSeed() {
   buildGroupTabs(); // 기타 채널 그룹들을 상단 탭으로 동적 추가(쿠팡·롯데·현대·신세계…)
   showChannelAdmin('자사몰', el('view-cafe24')); // Cafe24 화면 하단 인라인 관리(목표·프로모션)
   buildAiUi(); // AI 분석 모달
-  buildPromoCalendar(); // 프로모션 달력 모달(헤더 버튼)
-  { const ptBtn = el('btnPromoTgt'); if (ptBtn) ptBtn.addEventListener('click', openPromoTargetUi); } // 전사 프로모션 목표
-  if (/[?&]openpt=1/.test(location.search)) { try { openPromoTargetUi(); } catch (_) {} } // 리포트 '🎯 목표 설정'에서 진입
+  buildPromoUploadUi(); // 프로모션 등록(엑셀 업로드) 모달
+  { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); }
+  if (/[?&]openpt=1/.test(location.search)) { try { openPromoUpload(); } catch (_) {} } // (구) 리포트 '목표 설정' 링크 호환
 })();

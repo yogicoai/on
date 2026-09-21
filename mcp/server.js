@@ -118,8 +118,10 @@ function build() {
 
   server.registerTool('promotion_performance', {
     title: '프로모션 성과(전 몰) [확정집계]',
-    description: '기간에 진행된 전 몰 등록 프로모션별 매출·주문 (자사몰=연결쿠폰 실사용, 그 외=대상상품 매칭). ' +
-      '프로모션/이벤트 성과 질문엔 반드시 이 도구를 사용 — 원시 주문에서 추정/직접계산 금지.',
+    description: '기간에 진행된 전 몰 프로모션별 매출·주문·수량 + 목표매출 대비 달성률. ' +
+      'MD 제출 정의(promo_defs)의 대상상품을 이카운트 원장에 매칭해 집계 — 전 몰 동일 기준(자사몰=홈페이지·스마트스토어·오프라인). ' +
+      '프로모션/이벤트 성과 질문엔 반드시 이 도구를 사용 — 원시 주문에서 추정/직접계산 금지. ' +
+      '⚠️ 기간이 겹치는 프로모션(전제품 + 품목특가)이 있으면 totals는 중복 합산되므로 합계주의 필드를 함께 전달할 것.',
     inputSchema: D,
   }, wrapR((start, end) => promoPerformance.allForPeriod(start, end)));
 

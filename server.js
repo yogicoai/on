@@ -47,6 +47,9 @@ const cafe24Coupons = require('./lib/cafe24Coupons');
 const bizadvisor = require('./lib/bizadvisor');
 const ai = require('./lib/ai');
 const dataExport = require('./lib/dataExport'); // 외부 제공용 export(매출·광고·재고, 개인정보 없음)
+const promoDefs = require('./lib/promoDefs');   // 전사 프로모션 정의(MD 엑셀 적재분) — 성과 계산 기준
+const promoIngest = require('./lib/promoIngest'); // 정의 검증·미리보기·적재(엑셀/JSON 공통)
+const promoExcel = require('./lib/promoExcel');  // 엑셀 → 표준구조 파싱 + 예제 양식 생성
 const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -77,6 +80,21 @@ function sendCsv(res, filename, headers, rows) {
 //업데이트
 
 const Y = () => report.yesterdayStr();
+
+// 바이너리 본문(엑셀 업로드 등) — JSON 파싱 없이 원본 바이트 그대로
+function readRawBody(req, limit = 20e6) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let len = 0;
+    req.on('data', (c) => {
+      const b = Buffer.isBuffer(c) ? c : Buffer.from(c);
+      len += b.length;
+      if (len > limit) { req.destroy(); return reject(new Error(`파일이 너무 큽니다(최대 ${Math.round(limit / 1e6)}MB)`)); }
+      chunks.push(b);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -509,6 +527,47 @@ async function handle(req, res) {
   }
 
   // ── 몰별 프로모션 (몰·상품·할인율) — 전사 promo_periods 대체 ──
+  // ── 전사 프로모션 정의 — 엑셀 업로드(미리보기 → 적용) ─────────────────────
+  //   MD가 정리한 엑셀을 올리면 파싱·검증 후 "신규/수정/삭제"를 먼저 보여주고, 확인 시에만 반영한다.
+  //   엑셀이 유일한 진실이라 적용은 전량 교체 + 직전 버전 스냅샷(롤백 가능).
+  if (u.pathname === '/api/promo-defs/status') {
+    try { return sendJson(res, 200, { ok: true, ...(await promoDefs.status()) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-defs/list') {
+    try {
+      return sendJson(res, 200, { ok: true, items: await promoDefs.listDefs({ mall: u.searchParams.get('mall') || undefined, start: u.searchParams.get('start') || undefined, end: u.searchParams.get('end') || undefined }) });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-defs/upload' && req.method === 'POST') {
+    try {
+      const buf = await readRawBody(req, 20e6); // 엑셀 바이너리
+      if (!buf || !buf.length) throw new Error('업로드된 파일이 비어 있습니다');
+      const parsed = await promoExcel.parse(buf);
+      const v = promoIngest.validate(parsed);
+      const preview = v.ok ? await promoIngest.diff(parsed) : null;
+      const apply = u.searchParams.get('apply') === '1';
+      if (!v.ok) return sendJson(res, 400, { ok: false, errors: v.errors.slice(0, 30), warnings: v.warnings.slice(0, 20), counts: v.counts, 안내: '오류를 고쳐 다시 올려주세요 — 반영되지 않았습니다.' });
+      if (!apply) return sendJson(res, 200, { ok: true, applied: false, counts: v.counts, warnings: v.warnings.slice(0, 20), preview, 미해석: (parsed._meta && parsed._meta.unresolved) || [], 안내: '미리보기입니다. 확인 후 적용하세요.' });
+      const r = await promoIngest.ingest(parsed, { source: 'excel-upload' });
+      return sendJson(res, 200, { ok: true, applied: true, counts: r.counts, warnings: r.warnings, preview, syncedAt: r.syncedAt });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-defs/rollback' && req.method === 'POST') {
+    try { return sendJson(res, 200, await promoIngest.rollback()); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/promo-defs/template') {
+    try {
+      const buf = await promoExcel.template();
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="promo-template.xlsx"',
+      });
+      return res.end(buf);
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+
   if (u.pathname === '/api/promotions/list') {
     try { return sendJson(res, 200, { ok: true, items: await mallPromos.listPromotions(u.searchParams.get('mall') || '') }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

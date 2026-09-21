@@ -603,10 +603,12 @@ function build() {
   server.registerTool('marketing_period_compare', {
     title: '두 구간 마케팅↔매출 비교 (프로모션 전/중/후·광고 늘린 주 등) [교차]',
     description: '두 기간(A·B)의 광고비·온라인/오프라인/전사 매출·회원/비회원·트래픽을 "일평균 기준"으로 비교(기간 길이 달라도 됨) + 증감률 + 증분ROAS(온라인 매출증분÷광고비증분). ' +
-      '"광고 늘린 주 vs 안 늘린 주", "프로모션 기간 vs 평소" 같은 비교 질문에 이 도구를 사용.',
+      '"광고 늘린 주 vs 안 늘린 주", "프로모션 기간 vs 평소" 같은 비교 질문에 이 도구를 사용. ' +
+      '⚠️ 순서 규약: A=비교 기준(평소·직전·전년), B=관심 구간(프로모션·광고 늘린 주). ' +
+      '증감률·증분ROAS는 "A→B 변화"이므로 거꾸로 넣으면 프로모션 성공을 실패로 읽게 된다.',
     inputSchema: {
-      aStart: z.string().describe('A구간 시작 YYYY-MM-DD'), aEnd: z.string().describe('A구간 종료 YYYY-MM-DD'),
-      bStart: z.string().describe('B구간 시작 YYYY-MM-DD'), bEnd: z.string().describe('B구간 종료 YYYY-MM-DD'),
+      aStart: z.string().describe('A=비교 기준 구간 시작 YYYY-MM-DD (평소·직전·전년)'), aEnd: z.string().describe('A구간 종료 YYYY-MM-DD'),
+      bStart: z.string().describe('B=관심 구간 시작 YYYY-MM-DD (프로모션·광고 늘린 주)'), bEnd: z.string().describe('B구간 종료 YYYY-MM-DD'),
     },
   }, wrap(({ aStart, aEnd, bStart, bEnd }) => marketing.periodCompare(aStart, aEnd, bStart, bEnd)));
 

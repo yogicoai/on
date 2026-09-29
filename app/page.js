@@ -10,6 +10,7 @@ const SHELL = `
       <span class="muted">Yogibo</span>
     </div>
     <div class="controls">
+      <div class="ctl-row">
       <div class="ranges">
         <button data-range="today" class="chip active">오늘</button>
         <button data-range="yesterday" class="chip">어제</button>
@@ -20,19 +21,26 @@ const SHELL = `
       <label>시작 <input type="date" id="start" /></label>
       <label>종료 <input type="date" id="end" /></label>
       <button id="apply" class="btn">조회</button>
+      <span class="ctl-div" aria-hidden="true"></span>
       <button id="refresh" class="btn ghost" title="현재 구간을 캐시 무시하고 라이브 재집계">↻ 갱신</button>
-      <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 오전 9시 자동 실행)">⟳ 오늘 재취합(API)</button>
-      <button id="refresh7d" class="btn warn" title="최근 7일 전체(Cafe24 + 스마트스토어 + 트래픽)를 cloudtype에서 재동기화합니다. 모든 채널 공통 (자동: 매일 오전 9시)">⟳ 최근 7일 재동기화</button>
-      <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="Yogibo 일일 매출 대시보드 — 자사몰·스마트스토어·외부채널 통합 일일 매출 리포트">📊 Yogibo 일일 매출 대시보드</button>
-      <button id="btnPromoCal" class="btn cal" type="button" title="전 몰 프로모션을 월간 달력으로 보고 상세 계획을 편집">프로모션 달력</button>
-      <button id="btnPromoTgt" class="btn" type="button" title="프로모션 기간 + 채널별 목표매출 입력 → 리포트 목표 페이스에서 달성률 자동">🎯 프로모션 목표</button>
+      <button id="refreshWeek" class="btn warn" title="오늘 주문을 Cafe24·스마트스토어 API로 재취합하고 오늘 포함 구간 캐시를 갱신합니다. (최근 1주일 전체 동기화는 매일 오전 9시 자동 실행)">⟳ 오늘 재취합</button>
+      <button id="refresh7d" class="btn warn" title="최근 7일 전체(Cafe24 + 스마트스토어 + 트래픽)를 cloudtype에서 재동기화합니다. 모든 채널 공통 (자동: 매일 오전 9시)">⟳ 7일 동기화</button>
+      </div>
+      <div class="ctl-row">
+      <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="Yogibo 일일 매출 대시보드 — 자사몰·스마트스토어·외부채널 통합 일일 매출 리포트">📊 일일 매출보고</button>
+      <span class="ctl-div" aria-hidden="true"></span>
+      <button id="btnPromoUpload" class="btn ghost" type="button" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록">📄 프로모션 등록</button>
+      <button id="btnTargetUpload" class="btn ghost" type="button" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록">🎯 목표 설정</button>
+      <button id="btnFunnelUpload" class="btn ghost" type="button" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록">📊 퍼널 입력</button>
+      <span class="ctl-div" aria-hidden="true"></span>
       <a id="btnAdBoard" href="https://mkt-sage.vercel.app/" target="_blank" rel="noopener" class="btn" title="광고 효율(ROAS·매체별) 대시보드 새 탭으로 열기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 광고 대시보드</a>
       <button id="btnAi" class="btn ai" type="button" hidden title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
+      </div>
     </div>
   </header>
 
   <div class="syncinfo">
-    <span>매일 <b>09:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합(API)</b> 버튼을 눌러 최신 API를 취합하세요.</span>
+    <span>매일 <b>09:00</b> 기준 Cafe24·스마트스토어 <b>최근 7일</b> API 데이터가 자동으로 추가·반영됩니다. 지금 바로 <b>실시간 최신</b> 데이터를 보시려면 <b>⟳ 오늘 재취합</b> 버튼을 눌러 최신 API를 취합하세요.</span>
   </div>
 
   <div class="layout">
@@ -60,6 +68,7 @@ const SHELL = `
       <button class="tab" data-tab="groupbuy">⑥ 공동구매</button>
       <button class="tab" data-tab="product">⑦ 상품 분석</button>
       <button class="tab" data-tab="bizpromote">⑧ 비즈 유도 고객</button>
+      <button class="tab" data-tab="funnel">⑨ 일일 퍼널 점검</button>
     </nav>
 
     <main>
@@ -71,6 +80,11 @@ const SHELL = `
       <section class="panel" id="tab-groupbuy"></section>
       <section class="panel" id="tab-product"></section>
       <section class="panel" id="tab-bizpromote"></section>
+      <!-- ⑨ 일일 퍼널 점검 — 독립 문서를 iframe으로(전역 CSS 변수·클래스명 충돌 방지). 높이는 자식이 postMessage로 알려준다. -->
+      <section class="panel" id="tab-funnel">
+        <iframe id="funnelFrame" src="/dashboards/funnel_daily.html" title="일일 퍼널 점검"
+                style="width:100%;border:0;display:block;height:1400px" loading="lazy"></iframe>
+      </section>
     </main>
   </div>
 
@@ -139,7 +153,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260625f" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260929b" strategy="afterInteractive" />
     </>
   );
 }

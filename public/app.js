@@ -2261,12 +2261,12 @@ function buildChannelAdmin() {
     <div class="card" style="margin-top:14px">
       <h3>프로모션 등록 <span class="hint">엑셀로 일원화되었습니다</span></h3>
       <div class="insightline" style="font-size:13px">
-        프로모션은 <b>📥 데이터 등록 → 전사 프로모션</b>에서 엑셀로 올립니다.
+        프로모션은 상단 <b>📄 프로모션 등록</b>에서 엑셀로 올립니다.
         기간 · 대상 상품 · 할인율 · <b>목표매출</b>을 한 번에 등록하고, 올리기 전에 변경 내용을 확인할 수 있습니다.
         <div class="muted" style="font-size:12px;margin-top:6px">
           채널별로 따로 넣지 않으셔도 됩니다 — 한 프로모션이 여러 몰에서 진행되면 엑셀에 몰마다 한 행씩 적으시면 됩니다.
         </div>
-        <div style="margin-top:10px"><button id="admGoUpload" class="btn" type="button">📥 데이터 등록 열기</button></div>
+        <div style="margin-top:10px"><button id="admGoUpload" class="btn" type="button">📄 프로모션 등록 열기</button></div>
       </div>
     </div>
     <div class="card" style="margin-top:14px">
@@ -2275,7 +2275,7 @@ function buildChannelAdmin() {
     </div>`;
   admNode = n;
   n.querySelector('#admTgSave').addEventListener('click', saveAdminTarget);
-  { const g = n.querySelector('#admGoUpload'); if (g) g.addEventListener('click', () => { closeChannelAdminModal(); openDataEntry(); }); }
+  { const g = n.querySelector('#admGoUpload'); if (g) g.addEventListener('click', () => { closeChannelAdminModal(); openPromoUpload(); }); }
   const tgInp = n.querySelector('#admTgInput');
   if (tgInp) tgInp.addEventListener('input', () => { const v = +tgInp.value || 0; const cv = n.querySelector('#admTgConv'); if (cv) cv.textContent = v ? `= ${won(v * 10000)}` : ''; });
   return n;
@@ -2663,56 +2663,6 @@ async function uploadPromoExcel(apply) {
   }
 }
 
-// ── 데이터 등록 — 무엇을 올리는지 고르는 입구 ───────────────────────────────
-//   엑셀 업로드가 둘(프로모션·퍼널)이라 버튼을 나란히 두면 MD가 어느 쪽인지 헷갈린다.
-//   입구를 하나로 두고, 각 항목이 "무엇을 · 얼마나 자주 · 어떻게" 를 스스로 설명하게 한다.
-function buildDataEntryUi() {
-  if (el('dataEntryModal')) return;
-  const m = document.createElement('div');
-  m.id = 'dataEntryModal'; m.className = 'modal'; m.style.display = 'none';
-  const card = (id, icon, title, what, when, note) => `
-    <button id="${id}" type="button" style="all:unset;cursor:pointer;display:block;width:100%;border:1px solid var(--line,#3a3a3a);border-radius:12px;padding:16px 18px;margin-bottom:10px;transition:border-color .15s"
-            onmouseover="this.style.borderColor='var(--accent,#7E57C2)'" onmouseout="this.style.borderColor=''">
-      <div style="display:flex;align-items:flex-start;gap:12px">
-        <div style="font-size:22px;line-height:1.2">${icon}</div>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:15px;margin-bottom:4px">${title}</div>
-          <div style="font-size:12.5px;color:var(--muted);line-height:1.6">
-            <b>올리는 것</b> — ${what}<br>
-            <b>주기</b> — ${when}
-          </div>
-          ${note ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px;opacity:.85">${note}</div>` : ''}
-        </div>
-        <div style="align-self:center;font-size:18px;color:var(--muted)">›</div>
-      </div>
-    </button>`;
-  m.innerHTML = `<div class="modal-box" style="max-width:620px">
-    <div class="modal-head">
-      <div><strong>데이터 등록</strong>
-        <div class="modal-sub" style="font-size:12px;color:var(--muted)">엑셀로 올리면 됩니다 · 올리기 전에 변경 내용을 먼저 보여드립니다</div></div>
-      <button id="deClose" class="btn ghost mini" type="button">닫기 ✕</button>
-    </div>
-    <div class="modal-body">
-      ${card('dePromo', '📅', '전사 프로모션', '프로모션 기간 · 대상 상품 · 목표매출', '새 프로모션이 확정될 때마다 (보통 월 1~2회)',
-        '올리면 Claude에 "8월 프로모션 성과 알려줘" 처럼 물어보실 수 있습니다.')}
-      ${card('deTarget', '🎯', '전사 월 목표', '채널(자사몰 · 스마트스토어) × 연월 × 순매출목표', '월 시작 1주 전 · 반기 단위로 미리 넣어도 됨',
-        '매출보고의 월 목표가 되고, 퍼널 단계별 목표도 이 값에서 역산합니다.')}
-      ${card('deFunnel', '📊', '일일 퍼널', '이프두의 상품조회 · 장바구니조회 · 주문서작성', '매일 또는 주 1회 몰아서',
-        '방문수 · 주문완료 · 순매출은 시스템이 자동으로 가져옵니다. 3칸만 채우시면 됩니다.')}
-      <div class="muted" style="font-size:12px;margin-top:14px;line-height:1.6">
-        셋 다 항목별 <b>예제 양식</b>을 받아 쓰시면 되고, 잘못 올리셨으면 <b>되돌리기</b>가 됩니다.
-      </div>
-    </div></div>`;
-  document.body.appendChild(m);
-  el('deClose').addEventListener('click', closeDataEntry);
-  m.addEventListener('click', (ev) => { if (ev.target === m) closeDataEntry(); });
-  el('dePromo').addEventListener('click', () => { closeDataEntry(); openPromoUpload(); });
-  el('deTarget').addEventListener('click', () => { closeDataEntry(); openFunnelUpload('targets'); });
-  el('deFunnel').addEventListener('click', () => { closeDataEntry(); openFunnelUpload('funnel'); });
-}
-function openDataEntry() { buildDataEntryUi(); el('dataEntryModal').style.display = 'flex'; document.body.style.overflow = 'hidden'; }
-function closeDataEntry() { if (el('dataEntryModal')) el('dataEntryModal').style.display = 'none'; document.body.style.overflow = ''; }
-
 // ── 일일 퍼널 입력(엑셀 업로드) ─────────────────────────────────────────────
 //   MD가 이프두에서만 얻을 수 있는 3단계(상품조회·장바구니조회·주문서작성)를 올린다.
 //   방문시작·주문완료·순매출·스토어 유입/매출은 시스템이 매일 자동으로 갖고 있어 입력 대상이 아니다.
@@ -2907,12 +2857,10 @@ async function rollbackPromoDefs() {
   showChannelAdmin('자사몰', el('view-cafe24')); // Cafe24 화면 하단 인라인 관리(목표·프로모션)
   buildAiUi(); // AI 분석 모달
   buildPromoUploadUi(); // 프로모션 등록(엑셀 업로드) 모달
-  { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); } // (구) 단독 버튼 호환
+  { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); } // 📄 프로모션 등록
   buildFunnelUploadUi(); // 일일 퍼널 입력(엑셀 업로드) 모달
   { const fnBtn = el('btnFunnelUpload'); if (fnBtn) fnBtn.addEventListener('click', () => openFunnelUpload('funnel')); }
   { const tgBtn = el('btnTargetUpload'); if (tgBtn) tgBtn.addEventListener('click', () => openFunnelUpload('targets')); }
-  buildDataEntryUi();   // 데이터 등록 — 프로모션/퍼널 선택 입구
-  { const deBtn = el('btnDataEntry'); if (deBtn) deBtn.addEventListener('click', openDataEntry); }
   // ⑨ 퍼널 탭 — iframe 높이를 자식이 postMessage로 알려준다(고정 높이면 여백/이중 스크롤이 생김)
   window.addEventListener('message', (ev) => {
     const d = ev.data;
@@ -2924,13 +2872,13 @@ async function rollbackPromoDefs() {
   //   안 지우면 새로고침할 때마다 모달이 다시 떠서 화면을 가린다.
   {
     const q = location.search;
-    const open = { openpt: openPromoUpload, opentg: () => openFunnelUpload('targets'), openfn: () => openFunnelUpload('funnel'), opende: openDataEntry };
+    const open = { openpt: openPromoUpload, opentg: () => openFunnelUpload('targets'), openfn: () => openFunnelUpload('funnel') };
     let hit = false;
     for (const [k, fn] of Object.entries(open)) {
       if (new RegExp('[?&]' + k + '=1').test(q)) { try { fn(); hit = true; } catch (_) {} break; }
     }
     if (hit && window.history && history.replaceState) {
-      const clean = q.replace(/[?&](openpt|opentg|openfn|opende)=1/g, '').replace(/^&/, '?') || '';
+      const clean = q.replace(/[?&](openpt|opentg|openfn)=1/g, '').replace(/^&/, '?') || '';
       history.replaceState(null, '', location.pathname + (clean === '?' ? '' : clean) + location.hash);
     }
   }

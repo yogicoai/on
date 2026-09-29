@@ -606,10 +606,11 @@ async function handle(req, res) {
   }
   if (u.pathname === '/api/funnel/template') {
     try {
-      const buf = await funnelExcel.template();
+      const only = u.searchParams.get('only') || ''; // only=targets → 월 목표만
+      const buf = await funnelExcel.template({ only });
       res.writeHead(200, {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="funnel-template.xlsx"',
+        'Content-Disposition': `attachment; filename="${only === 'targets' ? 'target-template' : 'funnel-template'}.xlsx"`,
       });
       return res.end(buf);
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

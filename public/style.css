@@ -43,6 +43,8 @@ input[type=date]:focus{border-color:var(--accent)}
 .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
 .brand .muted{font-weight:600;font-size:13px}
 .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* 버튼 묶음 구분선 — 조회 / 동기화 / 이동·작업 이 한 줄에 섞여 보이지 않게 */
+.ctl-div{width:1px;align-self:stretch;min-height:22px;background:var(--line,#3a3a3a);opacity:.55;margin:0 2px}
 .controls label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:600}
 .ranges{display:flex;gap:6px}
 .chip{background:#fff;border:1px solid var(--line2);color:var(--sub);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;transition:all .12s}

@@ -2259,15 +2259,23 @@ function buildChannelAdmin() {
       <div id="admTgStatus" style="margin-top:12px"></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h3>프로모션 <span class="hint">이 채널 · 달력에서 날짜/바를 눌러 등록·수정 (명·기간·상품·할인율·상세계획)</span></h3>
-      <div id="admPrCalHost" class="pc-embed"></div>
+      <h3>프로모션 등록 <span class="hint">엑셀로 일원화되었습니다</span></h3>
+      <div class="insightline" style="font-size:13px">
+        프로모션은 <b>📥 데이터 등록 → 전사 프로모션</b>에서 엑셀로 올립니다.
+        기간 · 대상 상품 · 할인율 · <b>목표매출</b>을 한 번에 등록하고, 올리기 전에 변경 내용을 확인할 수 있습니다.
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          채널별로 따로 넣지 않으셔도 됩니다 — 한 프로모션이 여러 몰에서 진행되면 엑셀에 몰마다 한 행씩 적으시면 됩니다.
+        </div>
+        <div style="margin-top:10px"><button id="admGoUpload" class="btn" type="button">📥 데이터 등록 열기</button></div>
+      </div>
     </div>
     <div class="card" style="margin-top:14px">
-      <h3>프로모션 성과 <span class="hint">달력 월 기준 · 자사몰=연결 쿠폰 실사용 기준(쿠폰별 분해), 그 외=상품명 매칭</span></h3>
+      <h3>프로모션 성과 <span class="hint">달력 월 기준 · MD 제출 정의(대상상품 매칭) · 전 몰 동일 기준</span></h3>
       <div id="admPrPerf"></div>
     </div>`;
   admNode = n;
   n.querySelector('#admTgSave').addEventListener('click', saveAdminTarget);
+  { const g = n.querySelector('#admGoUpload'); if (g) g.addEventListener('click', () => { closeChannelAdminModal(); openDataEntry(); }); }
   const tgInp = n.querySelector('#admTgInput');
   if (tgInp) tgInp.addEventListener('input', () => { const v = +tgInp.value || 0; const cv = n.querySelector('#admTgConv'); if (cv) cv.textContent = v ? `= ${won(v * 10000)}` : ''; });
   return n;
@@ -2364,11 +2372,11 @@ async function loadAdminPerformance() {
   const box = el('admPrPerf'); if (!box) return;
   box.innerHTML = '<span class="muted">집계 중…</span>';
   try {
-    const coupon = (admMall === '자사몰'); // 자사몰은 쿠폰 기준, 그 외는 상품명 매칭
-    const url = coupon ? `/api/promotions/coupon-performance?mall=${enc(admMall)}` : `/api/promotions/performance?mall=${enc(admMall)}`;
-    const j = await (await fetch(url)).json();
+    // 전 몰 동일 기준(MD 제출 정의 · 대상상품 매칭). 자사몰의 옛 "연결 쿠폰 실사용" 경로는 폐기했다 —
+    //   2026-07 자사몰이 즉시할인으로 전환되며 쿠폰 매칭 커버리지가 0%가 되어 매출이 전부 0원으로 잡혔다.
+    const j = await (await fetch(`/api/promo-defs/perf?mall=${enc(admMall)}`)).json();
     if (!j.ok) throw new Error(j.error);
-    admPerfCache = { mode: coupon ? 'coupon' : 'product', items: j.promotions || [] };
+    admPerfCache = { mode: 'product', items: j.promotions || [] };
     renderAdminPerformance(admTgMonth);
   } catch (e) { admPerfCache = null; box.innerHTML = `<span class="muted">성과 조회 오류: ${e.message}</span>`; }
 }
@@ -2655,6 +2663,56 @@ async function uploadPromoExcel(apply) {
   }
 }
 
+// ── 데이터 등록 — 무엇을 올리는지 고르는 입구 ───────────────────────────────
+//   엑셀 업로드가 둘(프로모션·퍼널)이라 버튼을 나란히 두면 MD가 어느 쪽인지 헷갈린다.
+//   입구를 하나로 두고, 각 항목이 "무엇을 · 얼마나 자주 · 어떻게" 를 스스로 설명하게 한다.
+function buildDataEntryUi() {
+  if (el('dataEntryModal')) return;
+  const m = document.createElement('div');
+  m.id = 'dataEntryModal'; m.className = 'modal'; m.style.display = 'none';
+  const card = (id, icon, title, what, when, note) => `
+    <button id="${id}" type="button" style="all:unset;cursor:pointer;display:block;width:100%;border:1px solid var(--line,#3a3a3a);border-radius:12px;padding:16px 18px;margin-bottom:10px;transition:border-color .15s"
+            onmouseover="this.style.borderColor='var(--accent,#7E57C2)'" onmouseout="this.style.borderColor=''">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="font-size:22px;line-height:1.2">${icon}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:15px;margin-bottom:4px">${title}</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.6">
+            <b>올리는 것</b> — ${what}<br>
+            <b>주기</b> — ${when}
+          </div>
+          ${note ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px;opacity:.85">${note}</div>` : ''}
+        </div>
+        <div style="align-self:center;font-size:18px;color:var(--muted)">›</div>
+      </div>
+    </button>`;
+  m.innerHTML = `<div class="modal-box" style="max-width:620px">
+    <div class="modal-head">
+      <div><strong>데이터 등록</strong>
+        <div class="modal-sub" style="font-size:12px;color:var(--muted)">엑셀로 올리면 됩니다 · 올리기 전에 변경 내용을 먼저 보여드립니다</div></div>
+      <button id="deClose" class="btn ghost mini" type="button">닫기 ✕</button>
+    </div>
+    <div class="modal-body">
+      ${card('dePromo', '📅', '전사 프로모션', '프로모션 기간 · 대상 상품 · 목표매출', '새 프로모션이 확정될 때마다 (보통 월 1~2회)',
+        '올리면 Claude에 "8월 프로모션 성과 알려줘" 처럼 물어보실 수 있습니다.')}
+      ${card('deTarget', '🎯', '전사 월 목표', '채널(자사몰 · 스마트스토어) × 연월 × 순매출목표', '월 시작 1주 전 · 반기 단위로 미리 넣어도 됨',
+        '매출보고의 월 목표가 되고, 퍼널 단계별 목표도 이 값에서 역산합니다.')}
+      ${card('deFunnel', '📊', '일일 퍼널', '이프두의 상품조회 · 장바구니조회 · 주문서작성', '매일 또는 주 1회 몰아서',
+        '방문수 · 주문완료 · 순매출은 시스템이 자동으로 가져옵니다. 3칸만 채우시면 됩니다.')}
+      <div class="muted" style="font-size:12px;margin-top:14px;line-height:1.6">
+        셋 다 항목별 <b>예제 양식</b>을 받아 쓰시면 되고, 잘못 올리셨으면 <b>되돌리기</b>가 됩니다.
+      </div>
+    </div></div>`;
+  document.body.appendChild(m);
+  el('deClose').addEventListener('click', closeDataEntry);
+  m.addEventListener('click', (ev) => { if (ev.target === m) closeDataEntry(); });
+  el('dePromo').addEventListener('click', () => { closeDataEntry(); openPromoUpload(); });
+  el('deTarget').addEventListener('click', () => { closeDataEntry(); openFunnelUpload('targets'); });
+  el('deFunnel').addEventListener('click', () => { closeDataEntry(); openFunnelUpload('funnel'); });
+}
+function openDataEntry() { buildDataEntryUi(); el('dataEntryModal').style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+function closeDataEntry() { if (el('dataEntryModal')) el('dataEntryModal').style.display = 'none'; document.body.style.overflow = ''; }
+
 // ── 일일 퍼널 입력(엑셀 업로드) ─────────────────────────────────────────────
 //   MD가 이프두에서만 얻을 수 있는 3단계(상품조회·장바구니조회·주문서작성)를 올린다.
 //   방문시작·주문완료·순매출·스토어 유입/매출은 시스템이 매일 자동으로 갖고 있어 입력 대상이 아니다.
@@ -2667,18 +2725,14 @@ function buildFunnelUploadUi() {
   m.id = 'fnUpModal'; m.className = 'modal'; m.style.display = 'none';
   m.innerHTML = `<div class="modal-box" style="max-width:880px">
     <div class="modal-head">
-      <div><strong>일일 퍼널 데이터 등록</strong>
-        <div class="modal-sub" style="font-size:12px;color:var(--muted)">이프두 3단계만 올리면 됩니다 · 나머지는 매일 자동으로 채워집니다</div></div>
+      <div><strong id="fnTitle">일일 퍼널 데이터 등록</strong>
+        <div id="fnSub" class="modal-sub" style="font-size:12px;color:var(--muted)">이프두 3단계만 올리면 됩니다 · 나머지는 매일 자동으로 채워집니다</div></div>
       <button id="fnClose" class="btn ghost mini" type="button">닫기 ✕</button>
     </div>
     <div class="modal-body">
-      <div id="fnStatus" class="muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
+      <div id="fnStatusWrap"><div id="fnStatus" class="muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div></div>
 
-      <div class="insightline" style="font-size:12px;margin-bottom:12px">
-        <b>입력하실 것은 3개뿐입니다</b> — 상품조회 · 장바구니조회 · 주문서작성<br>
-        <span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 유입수/매출은 시스템이 자동으로 가져옵니다.
-        이프두 표를 컬럼 지우지 말고 그대로 붙여넣으셔도 됩니다 — 겹치는 값은 대조만 하고 저장하지 않습니다.</span>
-      </div>
+      <div id="fnGuide" class="insightline" style="font-size:12px;margin-bottom:12px"></div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <a id="fnTpl" class="btn ghost" href="/api/funnel/template" download>⤓ 예제 양식 받기</a>
@@ -2706,12 +2760,30 @@ function buildFunnelUploadUi() {
   drop.addEventListener('drop', (ev) => { const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) pickFunnelFile(f); });
 }
 
-function openFunnelUpload() {
+// mode: 'funnel'(기본) | 'targets' — 같은 업로드 경로를 쓰되 제목·양식·안내만 바꾼다.
+//   목표만 올리는 사람에게 퍼널 3단계 설명을 보여주면 헷갈린다.
+let _funnelMode = 'funnel';
+function openFunnelUpload(mode) {
+  _funnelMode = mode === 'targets' ? 'targets' : 'funnel';
   buildFunnelUploadUi();
+  const tg = _funnelMode === 'targets';
+  el('fnTitle').textContent = tg ? '전사 월 목표 등록' : '일일 퍼널 데이터 등록';
+  el('fnSub').textContent = tg
+    ? '채널 × 연월 × 순매출목표 · 매출보고·퍼널 목표가 이 값으로 계산됩니다'
+    : '이프두 3단계만 올리면 됩니다 · 나머지는 매일 자동으로 채워집니다';
+  el('fnTpl').setAttribute('href', tg ? '/api/funnel/template?only=targets' : '/api/funnel/template');
+  el('fnGuide').innerHTML = tg
+    ? '<b>채널 · 연월 · 순매출목표</b> 세 칸이면 됩니다<br>'
+      + '<span class="muted">여기 넣은 값이 <b>매출보고의 월 목표</b>가 되고, 퍼널 단계별 목표(유입·상품조회·장바구니·주문서·주문완료)도 여기서 역산합니다. '
+      + '적지 않은 달은 그대로 남습니다. 반기 단위로 미리 넣어두셔도 됩니다.</span>'
+    : '<b>입력하실 것은 3개뿐입니다</b> — 상품조회 · 장바구니조회 · 주문서작성<br>'
+      + '<span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 유입수/매출은 시스템이 자동으로 가져옵니다. '
+      + '이프두 표를 컬럼 지우지 말고 그대로 붙여넣으셔도 됩니다 — 겹치는 값은 대조만 하고 저장하지 않습니다.</span>';
+  el('fnStatusWrap').style.display = tg ? 'none' : '';
   el('fnUpModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   el('fnResult').innerHTML = ''; el('fnFileName').textContent = ''; _funnelFile = null;
-  loadFunnelStatus();
+  if (!tg) loadFunnelStatus();
 }
 function closeFunnelUpload() { if (el('fnUpModal')) el('fnUpModal').style.display = 'none'; document.body.style.overflow = ''; }
 
@@ -2754,9 +2826,12 @@ async function uploadFunnelExcel(apply) {
 
     if (j.applied) {
       const sv = j.saved || {};
+      const done = _funnelMode === 'targets'
+        ? `월 목표 ${num(sv.월목표 || 0)}건`
+        : `자사몰 ${num(sv.자사몰퍼널 || 0)}일 · 스마트스토어 ${num(sv.스마트스토어 || 0)}일${sv.월목표 ? ` · 월목표 ${num(sv.월목표)}건` : ''}`;
       box.innerHTML = `<div class="insightline" style="border-left-color:var(--green,#66BB6A)">
-        <b>✅ 반영 완료</b> — 자사몰 ${num(sv.자사몰퍼널 || 0)}일 · 스마트스토어 ${num(sv.스마트스토어 || 0)}일${sv.월목표 ? ` · 월목표 ${num(sv.월목표)}건` : ''}<br>
-        <span class="muted" style="font-size:12px">퍼널 점검 탭에서 바로 확인하실 수 있습니다.</span>
+        <b>✅ 반영 완료</b> — ${done}<br>
+        <span class="muted" style="font-size:12px">${_funnelMode === 'targets' ? '매출보고의 월 목표와 퍼널 단계 목표에 바로 반영됩니다.' : '퍼널 점검 탭에서 바로 확인하실 수 있습니다.'}</span>
         <div style="margin-top:8px"><button id="fnUndo" class="btn ghost mini" type="button">↺ 직전 업로드 되돌리기</button></div></div>`;
       el('fnUndo').addEventListener('click', rollbackFunnel);
       loadFunnelStatus();
@@ -2832,9 +2907,12 @@ async function rollbackPromoDefs() {
   showChannelAdmin('자사몰', el('view-cafe24')); // Cafe24 화면 하단 인라인 관리(목표·프로모션)
   buildAiUi(); // AI 분석 모달
   buildPromoUploadUi(); // 프로모션 등록(엑셀 업로드) 모달
-  { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); }
+  { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); } // (구) 단독 버튼 호환
   buildFunnelUploadUi(); // 일일 퍼널 입력(엑셀 업로드) 모달
-  { const fnBtn = el('btnFunnelUpload'); if (fnBtn) fnBtn.addEventListener('click', openFunnelUpload); }
+  { const fnBtn = el('btnFunnelUpload'); if (fnBtn) fnBtn.addEventListener('click', () => openFunnelUpload('funnel')); }
+  { const tgBtn = el('btnTargetUpload'); if (tgBtn) tgBtn.addEventListener('click', () => openFunnelUpload('targets')); }
+  buildDataEntryUi();   // 데이터 등록 — 프로모션/퍼널 선택 입구
+  { const deBtn = el('btnDataEntry'); if (deBtn) deBtn.addEventListener('click', openDataEntry); }
   // ⑨ 퍼널 탭 — iframe 높이를 자식이 postMessage로 알려준다(고정 높이면 여백/이중 스크롤이 생김)
   window.addEventListener('message', (ev) => {
     const d = ev.data;
@@ -2842,6 +2920,18 @@ async function rollbackPromoDefs() {
     const f = el('funnelFrame');
     if (f) f.style.height = Math.min(Math.max(d.height + 24, 600), 20000) + 'px';
   });
-  if (/[?&]openpt=1/.test(location.search)) { try { openPromoUpload(); } catch (_) {} } // (구) 리포트 '목표 설정' 링크 호환
-  if (/[?&]openfn=1/.test(location.search)) { try { openFunnelUpload(); } catch (_) {} } // 리포트 '퍼널 입력' 링크
+  // 리포트에서 넘어온 링크로 모달 자동 오픈. 연 뒤에는 주소에서 파라미터를 지운다 —
+  //   안 지우면 새로고침할 때마다 모달이 다시 떠서 화면을 가린다.
+  {
+    const q = location.search;
+    const open = { openpt: openPromoUpload, opentg: () => openFunnelUpload('targets'), openfn: () => openFunnelUpload('funnel'), opende: openDataEntry };
+    let hit = false;
+    for (const [k, fn] of Object.entries(open)) {
+      if (new RegExp('[?&]' + k + '=1').test(q)) { try { fn(); hit = true; } catch (_) {} break; }
+    }
+    if (hit && window.history && history.replaceState) {
+      const clean = q.replace(/[?&](openpt|opentg|openfn|opende)=1/g, '').replace(/^&/, '?') || '';
+      history.replaceState(null, '', location.pathname + (clean === '?' ? '' : clean) + location.hash);
+    }
+  }
 })();

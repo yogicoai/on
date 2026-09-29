@@ -32,6 +32,7 @@
       <button id="refresh7d" class="btn warn" title="최근 7일 전체(Cafe24 + 스마트스토어 + 트래픽)를 cloudtype에서 재동기화합니다. 모든 채널 공통 (자동: 매일 오전 9시)">⟳ 최근 7일 재동기화</button>
       <button id="btnCompare" data-ch="compare" class="btn cmp" type="button" title="Yogibo 일일 매출 대시보드 — 자사몰·스마트스토어·외부채널 통합 일일 매출 리포트">📊 Yogibo 일일 매출 대시보드</button>
       <button id="btnPromoUpload" class="btn" type="button" title="MD가 정리한 엑셀로 전사 프로모션 정의 + 목표매출을 한 번에 등록">📄 프로모션 등록</button>
+      <button id="btnFunnelUpload" class="btn" type="button" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록 · 나머지는 자동">📊 퍼널 입력</button>
       <a id="btnAdBoard" href="https://mkt-sage.vercel.app/" target="_blank" rel="noopener" class="btn" title="광고 효율(ROAS·매체별) 대시보드 새 탭으로 열기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 광고 대시보드</a>
       <button id="btnAi" class="btn ai" type="button" hidden title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
     </div>
@@ -67,6 +68,7 @@
       <button class="tab" data-tab="groupbuy">⑥ 공동구매</button>
       <button class="tab" data-tab="product">⑦ 상품 분석</button>
       <button class="tab" data-tab="bizpromote">⑧ 비즈 유도 고객</button>
+      <button class="tab" data-tab="funnel">⑨ 일일 퍼널 점검</button>
     </nav>
 
     <main>
@@ -78,6 +80,12 @@
       <section class="panel" id="tab-groupbuy"></section>
       <section class="panel" id="tab-product"></section>
       <section class="panel" id="tab-bizpromote"></section>
+      <!-- ⑨ 일일 퍼널 점검 — 독립 문서를 iframe으로. 직접 병합하면 전역 CSS 변수(--ink 등)와
+           클래스명(.card/.stage)이 겹쳐 양쪽 스타일이 깨진다. 높이는 자식이 postMessage로 알려준다. -->
+      <section class="panel" id="tab-funnel">
+        <iframe id="funnelFrame" src="/dashboards/funnel_daily.html" title="일일 퍼널 점검"
+                style="width:100%;border:0;display:block;height:1400px" loading="lazy"></iframe>
+      </section>
     </main>
   </div>
 

@@ -49,6 +49,9 @@ const dataExport = require('./lib/dataExport'); // 외부 제공용 export(매�
 const promoDefs = require('./lib/promoDefs');   // 전사 프로모션 정의(MD 엑셀 적재분) — 성과 계산 기준
 const promoIngest = require('./lib/promoIngest'); // 정의 검증·미리보기·적재(엑셀/JSON 공통)
 const promoExcel = require('./lib/promoExcel');  // 엑셀 → 표준구조 파싱 + 예제 양식 생성
+const funnelDaily = require('./lib/funnelDaily');   // 일일 퍼널 — 화면 데이터 조립(우리 DB + MD 입력분)
+const funnelExcel = require('./lib/funnelExcel');   // 퍼널 엑셀 양식·파싱
+const funnelIngest = require('./lib/funnelIngest'); // 퍼널 검증·미리보기·적재·되돌리기
 const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -588,6 +591,49 @@ async function handle(req, res) {
     try { const b = await readBody(req); await mallPromos.deletePromotion(b.id); return sendJson(res, 200, { ok: true }); }
     catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
+  // ── 일일 퍼널 점검 ────────────────────────────────────────────────────────
+  //   화면 데이터는 우리 DB(방문·주문·순매출·스토어 유입/매출)에 MD 입력분(상품조회·장바구니·주문서)을 얹어 만든다.
+  //   업로드는 **날짜 단위 덮어쓰기**(전체 교체 아님) — 이번 주치만 올려도 지난 데이터가 남는다.
+  if (u.pathname === '/api/funnel/data') {
+    try {
+      const r = await funnelDaily.buildDb({ from: u.searchParams.get('from') || undefined, to: u.searchParams.get('to') || undefined });
+      return sendJson(res, 200, { ok: true, ...r });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/status') {
+    try { return sendJson(res, 200, { ok: true, ...(await funnelDaily.status()) }); }
+    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/template') {
+    try {
+      const buf = await funnelExcel.template();
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="funnel-template.xlsx"',
+      });
+      return res.end(buf);
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/upload' && req.method === 'POST') {
+    try {
+      const buf = await readRawBody(req, 20e6);
+      if (!buf || !buf.length) throw new Error('업로드된 파일이 비어 있습니다');
+      const parsed = await funnelExcel.parse(buf);
+      const v = funnelIngest.validate(parsed);
+      if (!v.ok) return sendJson(res, 400, { ok: false, errors: v.errors.slice(0, 30), warnings: v.warnings.slice(0, 20), counts: v.counts, 안내: '오류를 고쳐 다시 올려주세요 — 반영되지 않았습니다.' });
+      const preview = await funnelIngest.diff(parsed);
+      if (u.searchParams.get('apply') !== '1') {
+        return sendJson(res, 200, { ok: true, applied: false, counts: v.counts, warnings: v.warnings.slice(0, 20), preview, 안내: '미리보기입니다. 확인 후 적용하세요.' });
+      }
+      const r = await funnelIngest.ingest(parsed, { source: 'excel-upload' });
+      return sendJson(res, 200, { ok: true, applied: true, ...r, preview });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/rollback' && req.method === 'POST') {
+    try { return sendJson(res, 200, await funnelIngest.rollback()); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+
   // 전사 프로모션 목표는 promo_defs.target_sales(MD 엑셀 업로드)로 이관 — /api/promo-targets/* 폐지.
   //   구 UI가 캐시된 브라우저에서 호출할 수 있으니 안내를 주고 410으로 끊는다.
   if (u.pathname.startsWith('/api/promo-targets/')) {

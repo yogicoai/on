@@ -146,7 +146,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="brand-sub">요기보코퍼레이션 · 내부 일일 매출 보고용</div>
     </div>
   </div>
-  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><a href="/?openpt=1" class="btn" title="프로모션 목표 추가·수정 (대시보드에서 열림)" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a>
+  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><a href="/?openpt=1" class="btn" title="프로모션 목표 추가·수정 (대시보드에서 열림)" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a><a href="/?openfn=1" class="btn" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성) 엑셀 등록 · 나머지는 자동" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</a>
     <label>기준일</label>
     <select id="selDate"></select>
     <label style="margin-left:8px">채널</label>
@@ -202,6 +202,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <button class="tab" data-tab="t2">전년/전월/전주 비교</button>
   <button class="tab" data-tab="t5">프로모션 매출</button>
   <button class="tab" data-tab="t8">트래픽 현황</button>
+  <button class="tab" data-tab="t11">일일 퍼널 점검</button>
   <button class="tab" data-tab="t4">베스트 상품</button>
   <button class="tab" data-tab="t9">상품별 판매량 분석</button>
   <button class="tab" data-tab="t10">충전재별 판매량</button>
@@ -3559,7 +3560,25 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   </div>
 </div>
 
+<!-- 일일 퍼널 점검 — 독립 문서를 iframe으로. 직접 병합하면 전역 CSS 변수·클래스명(.card/.stage)이
+     겹쳐 양쪽 스타일이 깨진다. 높이는 자식이 postMessage('funnel:height')로 알려준다.
+     데이터는 자식이 /api/funnel/data 에서 직접 받으므로 이 리포트의 placeholder 주입과 무관하다. -->
+<div class="tab-panel" id="t11" style="display: none;">
+  <iframe id="funnelFrame" src="/dashboards/funnel_daily.html" title="일일 퍼널 점검"
+          style="width:100%;border:0;display:block;height:1400px"></iframe>
 </div>
+
+</div>
+
+<script>
+// 퍼널 iframe 높이 동기화 — 고정 높이로 두면 여백이나 이중 스크롤이 생긴다
+window.addEventListener('message', function (ev) {
+  var d = ev.data;
+  if (!d || d.type !== 'funnel:height' || !(d.height > 0)) return;
+  var f = document.getElementById('funnelFrame');
+  if (f) f.style.height = Math.min(Math.max(d.height + 24, 600), 20000) + 'px';
+});
+</script>
 
 <!-- DATA SECTION -->
 <script id="ds-main" type="application/json">__DS_MAIN__</script>

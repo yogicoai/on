@@ -2655,6 +2655,161 @@ async function uploadPromoExcel(apply) {
   }
 }
 
+// ── 일일 퍼널 입력(엑셀 업로드) ─────────────────────────────────────────────
+//   MD가 이프두에서만 얻을 수 있는 3단계(상품조회·장바구니조회·주문서작성)를 올린다.
+//   방문시작·주문완료·순매출·스토어 유입/매출은 시스템이 매일 자동으로 갖고 있어 입력 대상이 아니다.
+//   저장은 **파일에 있는 날짜만 덮어쓰기** — 이번 주치만 올려도 지난 데이터가 남는다.
+let _funnelFile = null;
+
+function buildFunnelUploadUi() {
+  if (el('fnUpModal')) return;
+  const m = document.createElement('div');
+  m.id = 'fnUpModal'; m.className = 'modal'; m.style.display = 'none';
+  m.innerHTML = `<div class="modal-box" style="max-width:880px">
+    <div class="modal-head">
+      <div><strong>일일 퍼널 데이터 등록</strong>
+        <div class="modal-sub" style="font-size:12px;color:var(--muted)">이프두 3단계만 올리면 됩니다 · 나머지는 매일 자동으로 채워집니다</div></div>
+      <button id="fnClose" class="btn ghost mini" type="button">닫기 ✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="fnStatus" class="muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
+
+      <div class="insightline" style="font-size:12px;margin-bottom:12px">
+        <b>입력하실 것은 3개뿐입니다</b> — 상품조회 · 장바구니조회 · 주문서작성<br>
+        <span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 유입수/매출은 시스템이 자동으로 가져옵니다.
+        이프두 표를 컬럼 지우지 말고 그대로 붙여넣으셔도 됩니다 — 겹치는 값은 대조만 하고 저장하지 않습니다.</span>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <a id="fnTpl" class="btn ghost" href="/api/funnel/template" download>⤓ 예제 양식 받기</a>
+        <label class="btn" style="cursor:pointer;margin:0">
+          📄 엑셀 선택<input id="fnFile" type="file" accept=".xlsx" style="display:none">
+        </label>
+        <span id="fnFileName" class="muted" style="font-size:12px"></span>
+      </div>
+
+      <div id="fnDrop" style="border:2px dashed var(--line,#3a3a3a);border-radius:10px;padding:22px;text-align:center;color:var(--muted);font-size:13px;margin-bottom:12px">
+        여기에 엑셀 파일을 끌어다 놓으셔도 됩니다
+      </div>
+
+      <div id="fnResult"></div>
+    </div></div>`;
+  document.body.appendChild(m);
+
+  el('fnClose').addEventListener('click', closeFunnelUpload);
+  m.addEventListener('click', (ev) => { if (ev.target === m) closeFunnelUpload(); });
+  el('fnFile').addEventListener('change', (ev) => { const f = ev.target.files && ev.target.files[0]; if (f) pickFunnelFile(f); });
+
+  const drop = el('fnDrop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.style.borderColor = 'var(--accent,#7E57C2)'; }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.style.borderColor = ''; }));
+  drop.addEventListener('drop', (ev) => { const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) pickFunnelFile(f); });
+}
+
+function openFunnelUpload() {
+  buildFunnelUploadUi();
+  el('fnUpModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  el('fnResult').innerHTML = ''; el('fnFileName').textContent = ''; _funnelFile = null;
+  loadFunnelStatus();
+}
+function closeFunnelUpload() { if (el('fnUpModal')) el('fnUpModal').style.display = 'none'; document.body.style.overflow = ''; }
+
+async function loadFunnelStatus() {
+  const box = el('fnStatus'); if (!box) return;
+  try {
+    const j = await (await fetch('/api/funnel/status')).json();
+    const f = j.자사몰퍼널 || {};
+    if (!f.적재) { box.innerHTML = '<b>등록된 퍼널 데이터가 없습니다</b> — 예제 양식을 받아 작성 후 올려주세요.'; return; }
+    const miss = (j.최근7일_미입력 || []);
+    const warn = miss.length
+      ? `<span style="color:var(--warn,#e6c86a)">최근 7일 중 <b>${miss.length}일 미입력</b> (${miss.slice(0, 3).join(', ')}${miss.length > 3 ? ' 외' : ''})</span>`
+      : '<span style="color:var(--green,#66BB6A)">최근 7일 모두 입력됨</span>';
+    box.innerHTML = `현재 <b>${num(f.적재)}일</b> 등록됨 · 기간 ${f.기간 || '-'} · 최종 갱신 ${String(f.갱신 || '').slice(0, 16).replace('T', ' ')}<br>${warn}`;
+  } catch (e) { box.textContent = '현황 조회 오류: ' + e.message; }
+}
+
+function pickFunnelFile(file) {
+  _funnelFile = file;
+  el('fnFileName').textContent = file.name;
+  uploadFunnelExcel(false); // 먼저 미리보기
+}
+
+async function uploadFunnelExcel(apply) {
+  const box = el('fnResult'); if (!_funnelFile) return;
+  box.innerHTML = `<div class="muted">${apply ? '반영 중…' : '파일 확인 중…'}</div>`;
+  try {
+    const buf = await _funnelFile.arrayBuffer();
+    const r = await fetch('/api/funnel/upload' + (apply ? '?apply=1' : ''), {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf,
+    });
+    const j = await r.json();
+
+    if (!j.ok) {
+      box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">
+        <b>오류 ${j.errors ? j.errors.length : 1}건 — 반영되지 않았습니다.</b> 고쳐서 다시 올려주세요.
+        <ul style="margin:8px 0 0 16px;font-size:12px">${(j.errors || [j.error]).slice(0, 12).map((e) => `<li>${ae(e)}</li>`).join('')}</ul></div>`;
+      return;
+    }
+
+    if (j.applied) {
+      const sv = j.saved || {};
+      box.innerHTML = `<div class="insightline" style="border-left-color:var(--green,#66BB6A)">
+        <b>✅ 반영 완료</b> — 자사몰 ${num(sv.자사몰퍼널 || 0)}일 · 스마트스토어 ${num(sv.스마트스토어 || 0)}일${sv.월목표 ? ` · 월목표 ${num(sv.월목표)}건` : ''}<br>
+        <span class="muted" style="font-size:12px">퍼널 점검 탭에서 바로 확인하실 수 있습니다.</span>
+        <div style="margin-top:8px"><button id="fnUndo" class="btn ghost mini" type="button">↺ 직전 업로드 되돌리기</button></div></div>`;
+      el('fnUndo').addEventListener('click', rollbackFunnel);
+      loadFunnelStatus();
+      return;
+    }
+
+    const p = j.preview || {};
+    const chip = (label, n, color) => `<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:${color};color:#111;font-weight:700;font-size:12px;margin-right:6px">${label} ${num(n)}</span>`;
+    const warn = (j.warnings || []).length ? `<div class="muted" style="font-size:12px;margin-top:8px">⚠️ ${(j.warnings || []).slice(0, 5).map(ae).join('<br>⚠️ ')}</div>` : '';
+    const cmp = (p.대조 || []).length
+      ? `<div style="margin-top:10px;font-size:12px"><b>시스템 값과 대조</b> <span class="muted">(저장되지 않습니다 — 정의 차이 확인용)</span>
+          <ul style="margin:4px 0 0 16px">${(p.대조 || []).slice(0, 6).map((x) => `<li>${ae(x.date)} ${ae(x.항목 || x.비고 || '')} — 이프두 ${num(x.이프두 || 0)} vs 시스템 ${num(x.시스템 || 0)} <b>(${x.차이_pct > 0 ? '+' : ''}${x.차이_pct}%)</b></li>`).join('')}</ul>
+          <div class="muted" style="margin-top:4px">${ae(p.대조요약 || '')}</div></div>`
+      : `<div class="muted" style="font-size:12px;margin-top:8px">시스템 값과 대조: ${ae(p.대조요약 || '이상 없음')}</div>`;
+    const tgt = (p.월목표변경 || []).length
+      ? `<div style="margin-top:10px;font-size:12px"><b>월 목표 변경</b> <span class="muted">(매출보고 목표도 함께 바뀝니다)</span>
+          <ul style="margin:4px 0 0 16px">${p.월목표변경.map((x) => `<li>${ae(x.연월)} ${ae(x.채널)} — ${num(x.이전)} → <b>${num(x.변경)}</b></li>`).join('')}</ul></div>`
+      : '';
+    const chg = (p.수정상세 || []).length
+      ? `<div style="margin-top:8px;font-size:12px"><b>수정되는 날짜</b> <span class="muted">(상품조회/장바구니/주문서)</span>
+          <ul style="margin:4px 0 0 16px">${p.수정상세.slice(0, 8).map((x) => `<li>${ae(x.date)} — ${ae(x.이전)} → <b>${ae(x.변경)}</b></li>`).join('')}</ul></div>`
+      : '';
+
+    box.innerHTML = `<div class="insightline">
+      <b>변경 내용 미리보기</b> <span class="muted" style="font-size:12px">— 아직 반영되지 않았습니다</span><br>
+      <div style="margin:10px 0">
+        ${chip('신규', p.신규 || 0, '#A5D6A7')}${chip('수정', p.수정 || 0, '#FFE082')}${chip('변동없음', p.변동없음 || 0, '#CFD8DC')}
+      </div>
+      <div style="font-size:12px;color:var(--muted)">${ae(p.기간 || '')} · 자사몰 ${num(j.counts.자사몰퍼널 || 0)}행 · 스마트스토어 ${num(j.counts.스마트스토어 || 0)}행</div>
+      ${chg}${tgt}${cmp}${warn}
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="fnApply" class="btn" type="button">이대로 반영하기</button>
+        <button id="fnCancel" class="btn ghost" type="button">취소</button>
+      </div></div>`;
+    el('fnApply').addEventListener('click', () => uploadFunnelExcel(true));
+    el('fnCancel').addEventListener('click', () => { box.innerHTML = ''; _funnelFile = null; el('fnFileName').textContent = ''; });
+  } catch (e) {
+    box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">오류: ${ae(e.message)}</div>`;
+  }
+}
+
+async function rollbackFunnel() {
+  if (!confirm('직전 업로드 상태로 되돌릴까요?\n(그때 올린 날짜만 이전 값으로 복구됩니다)')) return;
+  try {
+    const j = await (await fetch('/api/funnel/rollback', { method: 'POST' })).json();
+    const box = el('fnResult');
+    if (!j.ok) { box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">${ae(j.error || '되돌리기 실패')}</div>`; return; }
+    const r = j.restored || {};
+    box.innerHTML = `<div class="insightline">↺ 되돌렸습니다 — 자사몰 ${num(r.자사몰퍼널 || 0)}일 · 스마트스토어 ${num(r.스마트스토어 || 0)}일${r.월목표 ? ` · 월목표 ${num(r.월목표)}건` : ''}</div>`;
+    loadFunnelStatus();
+  } catch (e) { alert('되돌리기 오류: ' + e.message); }
+}
+
 async function rollbackPromoDefs() {
   if (!confirm('직전 업로드 상태로 되돌릴까요?')) return;
   try {
@@ -2678,5 +2833,15 @@ async function rollbackPromoDefs() {
   buildAiUi(); // AI 분석 모달
   buildPromoUploadUi(); // 프로모션 등록(엑셀 업로드) 모달
   { const upBtn = el('btnPromoUpload'); if (upBtn) upBtn.addEventListener('click', openPromoUpload); }
+  buildFunnelUploadUi(); // 일일 퍼널 입력(엑셀 업로드) 모달
+  { const fnBtn = el('btnFunnelUpload'); if (fnBtn) fnBtn.addEventListener('click', openFunnelUpload); }
+  // ⑨ 퍼널 탭 — iframe 높이를 자식이 postMessage로 알려준다(고정 높이면 여백/이중 스크롤이 생김)
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || d.type !== 'funnel:height' || !(d.height > 0)) return;
+    const f = el('funnelFrame');
+    if (f) f.style.height = Math.min(Math.max(d.height + 24, 600), 20000) + 'px';
+  });
   if (/[?&]openpt=1/.test(location.search)) { try { openPromoUpload(); } catch (_) {} } // (구) 리포트 '목표 설정' 링크 호환
+  if (/[?&]openfn=1/.test(location.search)) { try { openFunnelUpload(); } catch (_) {} } // 리포트 '퍼널 입력' 링크
 })();

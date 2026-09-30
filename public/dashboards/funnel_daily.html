@@ -573,7 +573,7 @@ function shiftRange(dir){
 }
 function renderAll(){
   document.getElementById('fresh').innerHTML='데이터 기준일 — 자사몰(이프두): <b>'+lastDate('mall').replace(/-/g,'.')+'</b> · 스마트스토어: <b>'+lastDate('ss').replace(/-/g,'.')+'</b>'+(ch==='ss'?' <span class="chip warn">파일 4일 지연</span>':'');
-  renderPace(); setRange('last'); renderAI(); renderBasis();
+  renderPace(); setRange('mtd'); renderAI(); renderBasis(); // 처음 열 때·채널 바꿀 때 기본 기간 = 이번 달(1일 ~ 최신일)
 }
 document.querySelectorAll('.seg [role="tab"]').forEach(function(b){
   b.onclick=function(){ document.querySelectorAll('.seg [role="tab"]').forEach(function(x){x.setAttribute('aria-selected','false');});

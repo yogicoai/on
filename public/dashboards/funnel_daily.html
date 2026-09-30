@@ -38,6 +38,9 @@
   .seg{display:inline-flex; background:var(--card-2); border:1px solid var(--line); border-radius:11px; padding:3px;}
   .seg button{appearance:none; border:none; background:transparent; color:var(--ink-2); font:inherit; font-size:13px; font-weight:600; padding:8px 18px; border-radius:8px; cursor:pointer;}
   .seg button[aria-selected="true"]{background:var(--pill); color:var(--pill-ink);}
+  .acts{display:inline-flex; gap:8px; flex-wrap:wrap;}
+  .acts button{appearance:none; border:1px solid var(--line); background:var(--card-2); color:var(--ink-2); font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:10px; cursor:pointer;}
+  .acts button:hover{border-color:var(--ink-2); color:inherit;}
   .grid{display:flex; flex-direction:column; gap:14px;}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px 22px; box-shadow:var(--shadow);}
   .card-head{margin-bottom:14px;}
@@ -142,29 +145,35 @@
       <h1>일일 퍼널 점검 · <b>자사몰 / 스마트스토어</b></h1>
       <p class="fresh" id="fresh"></p>
     </div>
+    <!-- 입력 버튼 — 입력 창은 판매분석 대시보드에 있다(openInput 참고) -->
+    <div class="acts">
+      <button type="button" onclick="openInput('fn')" title="이프두 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록">📊 퍼널 입력</button>
+      <button type="button" onclick="openInput('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 반영">📈 스토어 유입 입력</button>
+    </div>
     <div class="seg" role="tablist"><button role="tab" aria-selected="true" data-ch="mall">자사몰</button><button role="tab" aria-selected="false" data-ch="ss">스마트스토어</button></div>
   </div>
 
   <!-- 사용 안내 — 이 화면이 어디서 값을 받는지, MD가 무엇을 해야 하는지. 접었다 펼 수 있게 details 사용 -->
   <details id="howto" style="margin:0 0 16px;border:1px solid var(--line,#dfe4ec);border-radius:10px;background:var(--surface,#fff);overflow:hidden">
     <summary style="cursor:pointer;padding:12px 16px;font-weight:600;font-size:13.5px;list-style:none;display:flex;justify-content:space-between;align-items:center">
-      <span>📌 이 화면은 어떻게 갱신되나요? — 입력이 필요한 건 3개뿐입니다</span>
+      <span>📌 이 화면은 어떻게 갱신되나요? — MD 입력은 이프두 3개 + 스토어 유입수</span>
       <span style="font-size:11px;opacity:.6;font-weight:500">펼쳐보기</span>
     </summary>
     <div style="padding:0 16px 16px;font-size:13px;line-height:1.7;border-top:1px solid var(--line,#dfe4ec)">
       <p style="margin:12px 0 8px"><b>자동으로 채워지는 것</b> — 손대실 필요 없습니다. 매일 갱신됩니다.</p>
       <ul style="margin:0 0 14px 18px;padding:0">
         <li>자사몰 <b>방문시작 · 주문완료 · 순매출</b></li>
-        <li>스마트스토어 <b>유입수 · 매출</b></li>
+        <li>스마트스토어 <b>매출</b></li>
         <li><b>월 목표</b> — 매출보고와 같은 값을 씁니다</li>
       </ul>
-      <p style="margin:0 0 8px"><b>MD가 올려주셔야 하는 것</b> — 이프두에서만 얻을 수 있는 3개입니다.</p>
+      <p style="margin:0 0 8px"><b>MD가 넣어주셔야 하는 것</b></p>
       <ul style="margin:0 0 14px 18px;padding:0">
-        <li><b>상품조회 · 장바구니조회 · 주문서작성</b></li>
+        <li>이프두의 <b>상품조회 · 장바구니조회 · 주문서작성</b> → 이 화면 위 <b>[📊 퍼널 입력]</b></li>
+        <li>스마트스토어 <b>유입수</b>(비즈어드바이저) → 이 화면 위 <b>[📈 스토어 유입 입력]</b> — 비즈어드바이저 화면에서 복사한 cURL을 붙여넣으면 일별 × 채널 유입수를 가져옵니다</li>
       </ul>
-      <p style="margin:0 0 8px"><b>올리는 방법</b></p>
+      <p style="margin:0 0 8px"><b>퍼널 입력 올리는 방법</b></p>
       <ol style="margin:0 0 14px 18px;padding:0">
-        <li>판매분석 대시보드 상단 <b>[📊 퍼널 입력]</b> → <b>⤓ 예제 양식 받기</b></li>
+        <li>이 화면 위 <b>[📊 퍼널 입력]</b>(또는 판매분석 대시보드 상단) → <b>⤓ 예제 양식 받기</b></li>
         <li>이프두에서 받은 표를 <b>컬럼 지우지 말고 그대로 붙여넣기</b> (방문시작·주문완료 칸도 그대로 두셔도 됩니다)</li>
         <li>업로드 → <b>신규/수정/변동없음</b>과 시스템 값 대조 결과를 먼저 확인 → <b>[이대로 반영하기]</b></li>
       </ol>
@@ -594,6 +603,19 @@ function showLoadError(msg){
 
 // ── 부모(대시보드)에 내 높이를 알린다 — iframe 안에서 스크롤바가 생기거나 여백이 남지 않게.
 //   탭 전환·기간 변경·안내 접기/펴기로 길이가 바뀌므로 ResizeObserver 로 계속 통보한다.
+// 입력 버튼 — 입력 창은 판매분석 대시보드(app.js)에 있다. 대시보드 안(iframe)이면 부모 창의 함수를 바로 부르고,
+//   매출보고 등 다른 곳에서 열렸으면 대시보드로 이동하면서 창을 연다(/?openfn=1 · /?openbiz=1 — 연 뒤 주소는 정리됨).
+window.openInput = function(kind){
+  try {
+    var p = window.parent;
+    if (p && p !== window) {
+      if (kind === 'fn' && typeof p.openFunnelUpload === 'function') { p.openFunnelUpload('funnel'); return; }
+      if (kind === 'biz' && typeof p.openBizInflow === 'function') { p.openBizInflow(); return; }
+    }
+  } catch (e) {}
+  window.top.location.href = kind === 'fn' ? '/?openfn=1' : '/?openbiz=1';
+};
+
 (function reportHeight(){
   if (window.parent === window) return; // 단독으로 열었을 땐 필요 없음
   var last = 0;

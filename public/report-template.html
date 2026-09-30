@@ -146,7 +146,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="brand-sub">요기보코퍼레이션 · 내부 일일 매출 보고용</div>
     </div>
   </div>
-  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><a href="/?openpt=1" class="btn" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📄 프로모션 등록</a><a href="/?opentg=1" class="btn" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a><a href="/?openfn=1" class="btn" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</a>
+  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><a href="/?openpt=1" class="btn" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📄 프로모션 등록</a><a href="/?opentg=1" class="btn" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a><a href="/?openfn=1" class="btn" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</a><a href="/?openbiz=1" class="btn" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 퍼널 점검에 반영" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📈 스토어 유입 입력</a>
     <label>기준일</label>
     <select id="selDate"></select>
     <label style="margin-left:8px">채널</label>
@@ -197,12 +197,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 <!-- Tabs -->
 <div class="tabs">
-  <button class="tab active" data-tab="t1">일일 매출 리포트</button>
+  <button class="tab active" data-tab="t11">일일 퍼널 점검</button>
+  <button class="tab" data-tab="t1">일일 매출 리포트</button>
   <button class="tab" data-tab="t3">채널 분석</button>
   <button class="tab" data-tab="t2">전년/전월/전주 비교</button>
   <button class="tab" data-tab="t5">프로모션 매출</button>
   <button class="tab" data-tab="t8">트래픽 현황</button>
-  <button class="tab" data-tab="t11">일일 퍼널 점검</button>
   <button class="tab" data-tab="t4">베스트 상품</button>
   <button class="tab" data-tab="t9">상품별 판매량 분석</button>
   <button class="tab" data-tab="t10">충전재별 판매량</button>
@@ -210,7 +210,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 
 <!-- TAB 1: Daily Report -->
-<div class="tab-panel active" id="t1" style="display: block;">
+<div class="tab-panel" id="t1" style="display: none;">
   <!-- KPI Row -->
   <div class="grid grid-4" id="kpiRow1"></div>
   <div class="grid grid-4" style="margin-top:16px" id="kpiRow2"></div>
@@ -3563,7 +3563,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <!-- 일일 퍼널 점검 — 독립 문서를 iframe으로. 직접 병합하면 전역 CSS 변수·클래스명(.card/.stage)이
      겹쳐 양쪽 스타일이 깨진다. 높이는 자식이 postMessage('funnel:height')로 알려준다.
      데이터는 자식이 /api/funnel/data 에서 직접 받으므로 이 리포트의 placeholder 주입과 무관하다. -->
-<div class="tab-panel" id="t11" style="display: none;">
+<!-- 시작 탭 — 매출보고를 열면 퍼널 점검이 먼저 보인다(다른 탭 차트는 탭 클릭 시 resize 로 크기를 맞춘다) -->
+<div class="tab-panel active" id="t11" style="display: block;">
   <iframe id="funnelFrame" src="/dashboards/funnel_daily.html" title="일일 퍼널 점검"
           style="width:100%;border:0;display:block;height:1400px"></iframe>
 </div>

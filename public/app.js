@@ -2665,7 +2665,8 @@ async function uploadPromoExcel(apply) {
 
 // ── 일일 퍼널 입력(엑셀 업로드) ─────────────────────────────────────────────
 //   MD가 이프두에서만 얻을 수 있는 3단계(상품조회·장바구니조회·주문서작성)를 올린다.
-//   방문시작·주문완료·순매출·스토어 유입/매출은 시스템이 매일 자동으로 갖고 있어 입력 대상이 아니다.
+//   방문시작·주문완료·순매출·스토어 매출은 시스템이 매일 자동으로 갖고 있어 입력 대상이 아니다.
+//   스토어 유입수(비즈어드바이저)는 MD가 [📈 스토어 유입 입력]으로 직접 가져온다(아래 buildBizInflowUi).
 //   저장은 **파일에 있는 날짜만 덮어쓰기** — 이번 주치만 올려도 지난 데이터가 남는다.
 let _funnelFile = null;
 
@@ -2727,7 +2728,7 @@ function openFunnelUpload(mode) {
       + '<span class="muted">여기 넣은 값이 <b>매출보고의 월 목표</b>가 되고, 퍼널 단계별 목표(유입·상품조회·장바구니·주문서·주문완료)도 여기서 역산합니다. '
       + '적지 않은 달은 그대로 남습니다. 반기 단위로 미리 넣어두셔도 됩니다.</span>'
     : '<b>입력하실 것은 3개뿐입니다</b> — 상품조회 · 장바구니조회 · 주문서작성<br>'
-      + '<span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 유입수/매출은 시스템이 자동으로 가져옵니다. '
+      + '<span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 매출은 시스템이 자동으로 가져옵니다(스토어 유입수는 📈 스토어 유입 입력). '
       + '이프두 표를 컬럼 지우지 말고 그대로 붙여넣으셔도 됩니다 — 겹치는 값은 대조만 하고 저장하지 않습니다.</span>';
   el('fnStatusWrap').style.display = tg ? 'none' : '';
   el('fnUpModal').style.display = 'flex';
@@ -2846,6 +2847,114 @@ async function rollbackPromoDefs() {
   } catch (e) { el('puResult').innerHTML = `<div class="insightline">오류: ${ae(e.message)}</div>`; }
 }
 
+// ── 스마트스토어 유입 입력(비즈어드바이저) ──────────────────────────────────
+//   MD가 비즈어드바이저에서 "Copy as cURL" 한 텍스트를 붙여넣으면 서버(/api/bizadvisor/refresh)가 그 로그인 토큰으로
+//   일별 × 채널 유입수를 가져와 on.bizInflow 에 반영한다 → 퍼널 점검의 스토어 유입·마케팅 분석에 쓰인다.
+//   cURL 에는 네이버 로그인 토큰이 들어 있다 — 브라우저·서버 어디에도 저장하지 않고, 보내자마자 입력칸을 비운다.
+//   다 쓰면 비즈어드바이저 로그아웃 → 재로그인으로 토큰을 폐기하도록 안내한다.
+function buildBizInflowUi() {
+  if (el('bizInModal')) return;
+  const m = document.createElement('div');
+  m.id = 'bizInModal'; m.className = 'modal'; m.style.display = 'none';
+  const kst = new Date(Date.now() + 9 * 3600e3);
+  const opt = (back, label) => {
+    const d = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() - back, 1));
+    const y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1;
+    return `<option value="${y}-${mo}"${back === 1 ? ' selected' : ''}>${label} (${y}년 ${mo}월부터)</option>`;
+  };
+  m.innerHTML = `<div class="modal-box" style="max-width:760px">
+    <div class="modal-head">
+      <div><strong>스마트스토어 유입 입력</strong>
+        <div class="modal-sub" style="font-size:12px;color:var(--muted)">비즈어드바이저 유입수(일별 × 채널)를 가져옵니다 · 퍼널 점검의 스토어 유입에 바로 반영</div></div>
+      <button id="biClose" class="btn ghost mini" type="button">닫기 ✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="biStatus" class="muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
+      <div class="insightline" style="font-size:12.5px;line-height:1.75;margin-bottom:12px">
+        <b>가져오는 방법</b> (1~2분)<br>
+        ① 크롬에서 <b>비즈어드바이저</b>에 로그인하고, 채널별 유입수가 보이는 <b>마케팅 분석</b> 화면을 엽니다<br>
+        ② <b>F12</b> → <b>Network</b> 탭 → 필터 칸에 <b>report</b> 입력 → 화면을 한 번 새로고침<br>
+        ③ 목록의 <b>report?…</b> 요청을 오른쪽 클릭 → <b>Copy → Copy as cURL (bash)</b> → 아래 칸에 붙여넣고 <b>가져오기</b><br>
+        <span style="color:var(--warn,#e6c86a)">붙여넣는 내용에는 로그인 정보가 들어 있습니다. 저장하지 않고 바로 지우며, 끝나면 비즈어드바이저에서 <b>로그아웃 → 다시 로그인</b>해 주세요.</span>
+      </div>
+      <textarea id="biCurl" rows="5" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:11.5px;border:1px solid var(--line2);border-radius:8px;padding:8px;resize:vertical" placeholder="curl 'https://bizadvisor.naver.com/api/v3/sites/s_…/report?…' -H 'authorization: Bearer …' …"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 12px">
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">가져올 기간
+          <select id="biFrom" style="font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px">
+            ${opt(0, '이번 달')}${opt(1, '지난달부터')}${opt(3, '최근 3개월')}<option value="2025-1">전체 (2025년 1월부터 · 1분 정도)</option>
+          </select></label>
+        <button id="biGo" class="btn" type="button">가져오기</button>
+      </div>
+      <div id="biResult"></div>
+    </div></div>`;
+  document.body.appendChild(m);
+  el('biClose').addEventListener('click', closeBizInflow);
+  m.addEventListener('click', (ev) => { if (ev.target === m) closeBizInflow(); });
+  el('biGo').addEventListener('click', runBizInflow);
+}
+function openBizInflow() {
+  buildBizInflowUi();
+  el('bizInModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  el('biResult').innerHTML = ''; el('biCurl').value = '';
+  loadBizInflowStatus();
+}
+function closeBizInflow() {
+  if (el('bizInModal')) el('bizInModal').style.display = 'none';
+  if (el('biCurl')) el('biCurl').value = '';
+  document.body.style.overflow = '';
+}
+
+async function loadBizInflowStatus() {
+  const box = el('biStatus'); if (!box) return;
+  try {
+    const from = new Date(Date.now() + 9 * 3600e3 - 45 * 86400e3).toISOString().slice(0, 10);
+    const j = await (await fetch('/api/bizadvisor/inflow?start=' + from)).json();
+    if (!j.ok) throw new Error(j.error || '조회 실패');
+    if (!j.latestDate) { box.innerHTML = '최근 45일 안에 들어온 유입수가 없습니다 — 아래 방법으로 가져와 주세요.'; return; }
+    const yst = new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+    const gap = Math.round((new Date(yst) - new Date(j.latestDate)) / 86400e3);
+    const state = gap > 0
+      ? `<span style="color:var(--warn,#e6c86a)">어제까지 <b>${gap}일</b> 비어 있습니다</span>`
+      : '<span style="color:var(--green,#66BB6A)">어제까지 모두 들어와 있습니다</span>';
+    box.innerHTML = `현재 반영된 마지막 날짜 <b>${ae(j.latestDate)}</b> · ${state}`;
+  } catch (e) { box.textContent = '현황 조회 오류: ' + e.message; }
+}
+
+async function runBizInflow() {
+  const ta = el('biCurl'), box = el('biResult'), btn = el('biGo');
+  const curl = ta.value.trim();
+  if (!/bizadvisor/i.test(curl) || !/bearer/i.test(curl)) {
+    box.innerHTML = '<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">비즈어드바이저 요청의 cURL이 아닌 것 같습니다 — <b>Copy as cURL (bash)</b>로 복사한 전체 텍스트를 붙여넣어 주세요.</div>';
+    return;
+  }
+  const [fy, fm] = el('biFrom').value.split('-').map(Number);
+  ta.value = ''; // 로그인 정보가 화면에 남지 않게 바로 지운다
+  btn.disabled = true;
+  box.innerHTML = '<div class="muted">가져오는 중… (기간에 따라 몇 초~1분)</div>';
+  try {
+    const r = await fetch('/api/bizadvisor/refresh', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ curl, fromYear: fy, fromMonth: fm }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) {
+      const msg = j.error || `HTTP ${r.status}`;
+      const hint = /인증 실패|토큰|Bearer|사이트ID/.test(msg) ? ' — 비즈어드바이저 화면을 새로고침한 뒤 cURL을 다시 복사해 주세요.' : '';
+      box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">가져오지 못했습니다: ${ae(msg)}${hint}</div>`;
+      return;
+    }
+    const months = (j.months || []).map((x) => (x.error ? `${x.ym} 오류` : `${x.ym} ${num(x.rows)}건`)).join(' · ');
+    box.innerHTML = `<div class="insightline">✅ 가져왔습니다 — ${num(j.totalRows)}건 반영 (${ae(months)})<br>`
+      + '<span class="muted" style="font-size:12px">이제 비즈어드바이저에서 <b>로그아웃 → 다시 로그인</b>해 주세요(붙여넣은 로그인 정보 폐기).</span></div>';
+    loadBizInflowStatus();
+    const f = el('funnelFrame'); // 퍼널 점검 탭이 열려 있으면 새 유입수로 다시 그린다
+    if (f && f.contentWindow) { try { f.contentWindow.location.reload(); } catch (_) {} }
+  } catch (e) {
+    box.innerHTML = `<div class="insightline" style="border-left-color:var(--warn,#e6c86a)">오류: ${ae(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
 // ── 랜딩: 오늘 데이터 ──
 (function init() {
   const [s, e] = rangeFor('today');
@@ -2861,6 +2970,8 @@ async function rollbackPromoDefs() {
   buildFunnelUploadUi(); // 일일 퍼널 입력(엑셀 업로드) 모달
   { const fnBtn = el('btnFunnelUpload'); if (fnBtn) fnBtn.addEventListener('click', () => openFunnelUpload('funnel')); }
   { const tgBtn = el('btnTargetUpload'); if (tgBtn) tgBtn.addEventListener('click', () => openFunnelUpload('targets')); }
+  buildBizInflowUi();   // 스마트스토어 유입 입력(비즈어드바이저 cURL) 모달
+  { const biBtn = el('btnBizInflow'); if (biBtn) biBtn.addEventListener('click', openBizInflow); }
   // ⑨ 퍼널 탭 — iframe 높이를 자식이 postMessage로 알려준다(고정 높이면 여백/이중 스크롤이 생김)
   window.addEventListener('message', (ev) => {
     const d = ev.data;
@@ -2872,13 +2983,13 @@ async function rollbackPromoDefs() {
   //   안 지우면 새로고침할 때마다 모달이 다시 떠서 화면을 가린다.
   {
     const q = location.search;
-    const open = { openpt: openPromoUpload, opentg: () => openFunnelUpload('targets'), openfn: () => openFunnelUpload('funnel') };
+    const open = { openpt: openPromoUpload, opentg: () => openFunnelUpload('targets'), openfn: () => openFunnelUpload('funnel'), openbiz: openBizInflow };
     let hit = false;
     for (const [k, fn] of Object.entries(open)) {
       if (new RegExp('[?&]' + k + '=1').test(q)) { try { fn(); hit = true; } catch (_) {} break; }
     }
     if (hit && window.history && history.replaceState) {
-      const clean = q.replace(/[?&](openpt|opentg|openfn)=1/g, '').replace(/^&/, '?') || '';
+      const clean = q.replace(/[?&](openpt|opentg|openfn|openbiz)=1/g, '').replace(/^&/, '?') || '';
       history.replaceState(null, '', location.pathname + (clean === '?' ? '' : clean) + location.hash);
     }
   }

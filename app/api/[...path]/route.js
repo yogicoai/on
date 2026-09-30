@@ -11,13 +11,15 @@ async function adapt(request) {
   const url = new URL(request.url);
   const method = request.method;
 
-  let bodyStr = '';
+  // 본문은 바이트 그대로 넘긴다 — request.text() 로 읽으면 UTF-8 디코드 과정에서 엑셀 같은 바이너리 업로드가
+  //   깨진다("Corrupted zip"). JSON 본문은 server.js readBody 가 바이트를 모아 UTF-8 로 디코드한다.
+  let bodyBuf = null;
   if (method !== 'GET' && method !== 'HEAD') {
-    try { bodyStr = await request.text(); } catch (_) { bodyStr = ''; }
+    try { bodyBuf = Buffer.from(await request.arrayBuffer()); } catch (_) { bodyBuf = null; }
   }
 
-  // readBody(req)가 req.on('data'/'end')를 쓰므로 Readable 스트림으로 흉내
-  const req = Readable.from(bodyStr ? [bodyStr] : []);
+  // readBody/readRawBody 가 req.on('data'/'end')를 쓰므로 Readable 스트림으로 흉내
+  const req = Readable.from(bodyBuf && bodyBuf.length ? [bodyBuf] : []);
   req.url = url.pathname + url.search;
   req.method = method;
   // 들어온 헤더를 전부 전달(authorization·content-type 등) — Node http와 동일하게 키는 소문자

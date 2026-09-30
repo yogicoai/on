@@ -32,6 +32,7 @@ const SHELL = `
       <button id="btnPromoUpload" class="btn ghost" type="button" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록">📄 프로모션 등록</button>
       <button id="btnTargetUpload" class="btn ghost" type="button" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록">🎯 목표 설정</button>
       <button id="btnFunnelUpload" class="btn ghost" type="button" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록">📊 퍼널 입력</button>
+      <button id="btnBizInflow" class="btn ghost" type="button" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 퍼널 점검에 반영">📈 스토어 유입 입력</button>
       <span class="ctl-div" aria-hidden="true"></span>
       <a id="btnAdBoard" href="https://mkt-sage.vercel.app/" target="_blank" rel="noopener" class="btn" title="광고 효율(ROAS·매체별) 대시보드 새 탭으로 열기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 광고 대시보드</a>
       <button id="btnAi" class="btn ai" type="button" hidden title="현재 조회 구간 데이터를 기준으로 Claude AI에게 질문">AI 분석</button>
@@ -153,7 +154,7 @@ export default function Page() {
   return (
     <>
       <div dangerouslySetInnerHTML={{ __html: SHELL }} />
-      <Script src="/app.js?v=20260929b" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260930a" strategy="afterInteractive" />
     </>
   );
 }

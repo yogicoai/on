@@ -52,6 +52,7 @@ const promoExcel = require('./lib/promoExcel');  // 엑셀 → 표준구조 파�
 const funnelDaily = require('./lib/funnelDaily');   // 일일 퍼널 — 화면 데이터 조립(우리 DB + MD 입력분)
 const funnelExcel = require('./lib/funnelExcel');   // 퍼널 엑셀 양식·파싱
 const funnelIngest = require('./lib/funnelIngest'); // 퍼널 검증·미리보기·적재·되돌리기
+const funnelAi = require('./lib/funnelAi');         // 퍼널 일일 AI 분석(Claude) — 날짜별 DB 저장, 저장본 재사용
 const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -614,6 +615,18 @@ async function handle(req, res) {
       });
       return res.end(buf);
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
+  // 일일 퍼널 AI 분석 — GET=저장본 조회만(Claude 호출 없음), POST=분석 요청(저장본 있으면 그대로, 없을 때만 Claude).
+  //   조회와 생성을 나눈 이유: 페이지 열람·링크 미리보기 같은 GET 만으로 토큰이 나가지 않게.
+  if (u.pathname === '/api/funnel/ai' && req.method === 'GET') {
+    try { return sendJson(res, 200, { ok: true, ...(await funnelAi.get(u.searchParams.get('date') || '')) }); }
+    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/ai' && req.method === 'POST') {
+    try {
+      const b = await readBody(req);
+      return sendJson(res, 200, { ok: true, ...(await funnelAi.analyze(String(b.date || ''), { regenerate: !!b.regenerate })) });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
   if (u.pathname === '/api/funnel/upload' && req.method === 'POST') {
     try {

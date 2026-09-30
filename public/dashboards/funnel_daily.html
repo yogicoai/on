@@ -41,6 +41,7 @@
   .acts{display:inline-flex; gap:8px; flex-wrap:wrap;}
   .acts button{appearance:none; border:1px solid var(--line); background:var(--card-2); color:var(--ink-2); font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:10px; cursor:pointer;}
   .acts button:hover{border-color:var(--ink-2); color:inherit;}
+  .acts button.primary{background:var(--pill); color:var(--pill-ink); border-color:var(--pill);}
   .grid{display:flex; flex-direction:column; gap:14px;}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px 22px; box-shadow:var(--shadow);}
   .card-head{margin-bottom:14px;}
@@ -147,6 +148,7 @@
     </div>
     <!-- 입력 버튼 — 입력 창은 판매분석 대시보드에 있다(openInput 참고) -->
     <div class="acts">
+      <button type="button" class="primary" onclick="runAiAnalysis(false)" title="보고 있는 날(기간이면 마지막 날)의 자사몰·스마트스토어 퍼널을 Claude가 분석 — 한 번 분석한 날은 저장돼 다시 열어도 비용이 들지 않습니다">🤖 AI 분석</button>
       <button type="button" onclick="openInput('fn')" title="이프두 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록">📊 퍼널 입력</button>
       <button type="button" onclick="openInput('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 반영">📈 스토어 유입 입력</button>
     </div>
@@ -170,6 +172,11 @@
       <ul style="margin:0 0 14px 18px;padding:0">
         <li>이프두의 <b>상품조회 · 장바구니조회 · 주문서작성</b> → 이 화면 위 <b>[📊 퍼널 입력]</b></li>
         <li>스마트스토어 <b>유입수</b>(비즈어드바이저) → 이 화면 위 <b>[📈 스토어 유입 입력]</b> — 비즈어드바이저 화면에서 복사한 cURL을 붙여넣으면 일별 × 채널 유입수를 가져옵니다</li>
+      </ul>
+      <p style="margin:0 0 8px"><b>그날 분석이 필요할 때</b> — 이 화면 위 <b>[🤖 AI 분석]</b></p>
+      <ul style="margin:0 0 14px 18px;padding:0">
+        <li>보고 있는 날(기간을 골랐으면 마지막 날)의 자사몰·스마트스토어를 <b>Claude가 분석</b>해 아래 <b>④ 일일 효율 분석</b>에 보여줍니다 — 그날 실적·목표, 최근 7일 흐름, 이번 달 누적을 함께 봅니다.</li>
+        <li>한 번 분석한 날은 <b>저장</b>되어 다시 눌러도 바로 나오고 <b>비용이 들지 않습니다.</b> 그날 데이터가 나중에 바뀌면(예: 이프두 입력) "다시 분석" 버튼이 나타납니다.</li>
       </ul>
       <p style="margin:0 0 8px"><b>퍼널 입력 올리는 방법</b></p>
       <ol style="margin:0 0 14px 18px;padding:0">
@@ -207,10 +214,11 @@
     </div>
     <div class="card" id="sec-pace"></div>
     <div class="card">
-      <div class="card-head"><p class="eyebrow">AI Daily Analysis</p><h2>일일 효율 분석 <span class="chip bench" style="vertical-align:2px">Claude · yogibo-sales MCP</span></h2>
-      <p class="sub">매일 아침 Claude 정기 실행이 전일 데이터를 MCP로 분석해 이 섹션을 갱신하는 구조입니다. 아래는 실제 관측 데이터로 작성한 샘플 2건 — 자동 갱신 연결은 다음 단계입니다.</p></div>
+      <div class="card-head"><p class="eyebrow">AI Daily Analysis</p><h2>일일 효율 분석 <span class="chip bench" style="vertical-align:2px">Claude · 날짜별 저장</span></h2>
+      <p class="sub">위 <b>[🤖 AI 분석]</b>을 누르면 보고 있는 날의 퍼널을 Claude가 분석합니다. 한 번 분석한 날은 DB에 저장되어 다시 열어도 비용이 들지 않습니다. 최근 분석이 날짜순으로 쌓입니다.</p></div>
+      <div id="sec-ai-state"></div>
       <div id="sec-ai"></div>
-      <div class="note b"><b>대시보드가 MCP를 직접 호출하지는 못합니다.</b> 웹페이지는 MCP에 접근할 수 없어, Claude가 정기 실행으로 분석을 생성해 이 파일의 DB에 기록하는 방식입니다. 수동 파일이 못 주는 상품별 퍼널·시간대·유입경로·순매출이 여기서 보충됩니다.</div>
+      <div class="note b"><b>분석 근거</b> — 그날 실적과 일 목표(월 목표 ÷ 일수), 유입 대비 비율과 기준값, 최근 7일 흐름, 이번 달 누적 달성률. 자사몰 이프두 3단계가 입력되지 않은 날은 해당 단계 판단을 보류합니다.</div>
     </div>
     <div class="card" id="sec-basis"></div>
   </div>
@@ -511,13 +519,19 @@ function renderPace(){
 
 // ── ③ 기간 선택
 // ── ④ AI 분석
+// AI 문장은 그대로 innerHTML 에 넣지 않는다 — 이스케이프 후 **굵게** 만 <b> 로 살린다
+function aiText(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
+var AI_LEVEL={good:['좋음','var(--good,#1e8e5a)'],warn:['주의','var(--warn,#c77d0a)'],bad:['미달','var(--bad,#c0392b)']};
 function renderAI(){
   var el=document.getElementById('sec-ai');
-  var list=CFG.analyses.filter(function(a){return a.ch===ch;});
-  if(!list.length){ el.innerHTML='<div class="note">이 채널의 분석이 아직 없습니다.</div>'; return; }
+  var list=CFG.analyses.filter(function(a){return a.ch===ch;}).sort(function(a,b){return a.date<b.date?1:-1;}).slice(0,7);
+  if(!list.length){ el.innerHTML='<div class="note">이 채널의 분석이 아직 없습니다 — 위 <b>[🤖 AI 분석]</b>을 누르면 보고 있는 날의 분석을 만듭니다.</div>'; return; }
   el.innerHTML=list.map(function(a){
-    return '<div class="ai-card"><div class="ah"><span class="ttl">'+a.date.replace(/-/g,'.')+' — '+a.headline+'</span><span class="meta">생성: Claude · 데이터: yogibo-sales MCP + 일별 파일</span></div>'+
-      '<ul>'+a.points.map(function(p){return '<li>'+p+'</li>';}).join('')+'</ul></div>';
+    var lv=AI_LEVEL[a.level]||AI_LEVEL.warn;
+    var when=a.createdAt?new Date(new Date(a.createdAt).getTime()+9*3600e3).toISOString().slice(0,16).replace('T',' '):'';
+    return '<div class="ai-card"><div class="ah"><span class="ttl"><span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;color:#fff;background:'+lv[1]+';margin-right:6px;vertical-align:1px">'+lv[0]+'</span>'+
+      a.date.replace(/-/g,'.')+' — '+aiText(a.headline)+'</span><span class="meta">Claude'+(a.model?' · '+aiText(a.model):'')+(when?' · '+when+' 저장':'')+'</span></div>'+
+      '<ul>'+(a.points||[]).map(function(p){return '<li>'+aiText(p)+'</li>';}).join('')+'</ul></div>';
   }).join('');
 }
 
@@ -605,6 +619,28 @@ function showLoadError(msg){
 //   탭 전환·기간 변경·안내 접기/펴기로 길이가 바뀌므로 ResizeObserver 로 계속 통보한다.
 // 입력 버튼 — 입력 창은 판매분석 대시보드(app.js)에 있다. 대시보드 안(iframe)이면 부모 창의 함수를 바로 부르고,
 //   매출보고 등 다른 곳에서 열렸으면 대시보드로 이동하면서 창을 연다(/?openfn=1 · /?openbiz=1 — 연 뒤 주소는 정리됨).
+// AI 분석 — 보고 있는 날(단일 날짜면 그날, 기간이면 마지막 날). 서버가 저장본이 있으면 그대로 주고(무료),
+//   없을 때만 Claude 로 만들어 DB에 저장한다. regenerate=true 는 "데이터가 바뀐 날"에만 새로 만든다.
+window.runAiAnalysis = function(regenerate){
+  var date = document.getElementById('d2').value || document.getElementById('d1').value;
+  var st = document.getElementById('sec-ai-state');
+  if (!date) { st.innerHTML = '<div class="note">날짜를 먼저 선택하세요.</div>'; return; }
+  st.innerHTML = '<div class="note">'+date+' 분석을 불러오는 중… (새로 만들 때는 20~40초)</div>';
+  try { st.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+  fetch('/api/funnel/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: date, regenerate: !!regenerate }) })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (!j.ok) { st.innerHTML = '<div class="note">분석을 만들지 못했습니다 — '+aiText(j.error||'알 수 없는 오류')+'</div>'; return; }
+      var it = j.item;
+      CFG.analyses = (CFG.analyses||[]).filter(function(a){ return a.date !== it.date; });
+      ['mall','ss'].forEach(function(k){ var a = it[k]; if (a && a.headline) CFG.analyses.push({ ch: k, date: it.date, level: a.level, headline: a.headline, points: a.points||[], model: it.model, createdAt: it.createdAt }); });
+      renderAI();
+      st.innerHTML = '<div class="note" style="border-left-color:var(--ink-3)">'+it.date+' 분석 — '+(j.cached ? '<b>저장된 분석</b>을 불러왔습니다(추가 비용 없음).' : '<b>새로 만들어 저장</b>했습니다.')+
+        (j.stale ? ' 그날 데이터가 분석 이후 바뀌었습니다. <button type="button" onclick="runAiAnalysis(true)" style="margin-left:6px;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card-2);cursor:pointer">↻ 바뀐 데이터로 다시 분석</button>' : '')+'</div>';
+    })
+    .catch(function(e){ st.innerHTML = '<div class="note">오류 — '+aiText(e.message)+'</div>'; });
+};
+
 window.openInput = function(kind){
   try {
     var p = window.parent;

@@ -61,6 +61,13 @@ const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.mess
 const wrap = (fn) => async (args) => { try { return ok(await fn(args)); } catch (e) { return fail(e); } };
 const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
 
+// 재고 도구의 수요 기준 표기 — 계산은 그대로 두고 응답에 기준만 밝힌다(오프라인 제외 사실을 모르면 부족 발주를 알아채기 어렵다).
+//   기준 변경(오프라인 포함 등)은 MD 결정 사항 — 요청이 올 때만 바꾼다.
+const FORECAST_BASIS = '온라인 판매만(자사몰·스마트스토어·외부채널, 이카운트 출고일) · 상품명×색상 그대로 · 오프라인 판매 제외. '
+  + '전 채널(오프라인 포함) 품번별 판매는 sku_sales 로 확인.';
+const REORDER_BASIS = '월평균 수요 = 온라인 판매만(자사몰·스마트스토어·외부채널, 최근 완료월) · 커버·이너는 같은 색 본품 판매 포함(등급·EPP 통합) · 오프라인 판매 제외. '
+  + '오프라인 포함 수요는 sku_sales(family=true, 커버 소진 환산)로 확인 — 기준 변경은 MD 결정 사항.';
+
 // ── 기간 입력 처리 (period 자연어 → start/end) ──────────────────────────────
 // period가 있으면 파서로 풀고, 없으면 start/end 그대로. 순수 날짜 도구는 wrapR, mode 도구는 withPeriod 사용.
 const hasPeriod = (a) => a && a.period != null && String(a.period).trim() !== '';
@@ -543,7 +550,7 @@ function build() {
       const r = await forecast.salesForecast({ months: m });
       let items = r.items || [];
       if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
-      return { mode: 'forecast', months: m, total: r.count, count: items.length, items: items.slice(0, 30).map((x) => ({ 품목: x.name, 색상: x.color, 월평균: x.monthlyAvg, 누적: x.total })) };
+      return { mode: 'forecast', months: m, 기준: FORECAST_BASIS, total: r.count, count: items.length, items: items.slice(0, 30).map((x) => ({ 품목: x.name, 색상: x.color, 월평균: x.monthlyAvg, 누적: x.total })) };
     }
     if (mode === 'reorder') {
       const m = num(months, 3), tg = num(target, 1);
@@ -553,7 +560,7 @@ function build() {
       if (search) items = items.filter((x) => (x.name || '').includes(search) || (x.color || '').includes(search));
       else if (!all) items = items.filter((x) => x.needOrder);
       items = [...items].sort((a, b) => (a.monthsLeft == null ? 999 : a.monthsLeft) - (b.monthsLeft == null ? 999 : b.monthsLeft));
-      return { mode: 'reorder', months: m, targetMonths: tg, 발주필요_품목수: allItems.filter((x) => x.needOrder).length, count: items.length, items: items.slice(0, 40) };
+      return { mode: 'reorder', months: m, targetMonths: tg, 기준: REORDER_BASIS, 발주필요_품목수: allItems.filter((x) => x.needOrder).length, count: items.length, items: items.slice(0, 40) };
     }
     // current (기본)
     const [rows, updatedAt] = await Promise.all([forecast.stockList(), forecast.stockUpdatedAt().catch(() => null)]);

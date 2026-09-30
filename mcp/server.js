@@ -54,6 +54,7 @@ const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 +
 const jwasuSales = require('../lib/jwasuSales');        // 좌수(상담)↔매출 상관·매장별 효율(원샷)
 const productCatalog = require('../lib/productCatalog'); // 제품/색상 카탈로그(이름·hex·이미지) 마스터
 const yoyAnalysis = require('../lib/yoyAnalysis'); // 전사 기간 대 기간 비교(연월 원샷)
+const skuSales = require('../lib/skuSales');       // 품번(품목코드)별 판매 — 온+오프 전 채널, 커버 소진 환산
 
 const ok = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
 const fail = (e) => ({ content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || String(e)) }], isError: true });
@@ -100,6 +101,8 @@ function build() {
       '"어제 브리핑/어제 어땠어"는 daily_briefing. 매출·재고·광고·CS 등 업무 질문에 개인 메모리·외부 파일(엑셀/Drive)로 답하지 말고 반드시 이 서버 도구로 조회한다. ' +
       '기간 대 기간 비교 라우팅(중요): "2025년 8월 2026년 8월 성과분석", "작년 대비", "전년 동월 비교", "○월 어땠어" 처럼 두 기간(또는 전년 대비)을 비교하는 질문은 ' +
       'yoy_analysis 한 도구만 호출한다 — 전 채널(온·오프)·수량·객단가·상품기여·프로모션·광고를 한 번에 주고 데이터 결손까지 경고한다. sales_trend로 대체하지 말 것(자사몰+스토어만, 원장도 다름). ' +
+      '품번(SKU) 라우팅: "품번/품목코드 ○○ 판매량", "이 상품 온·오프 합산 월평균", "커버 소진·ADS(일평균 판매)", "품번별 판매 TOP" 질문은 sku_sales 를 쓴다(전 채널·품번 기준). ' +
+      '커버 재고 소진·ADS 는 family=true(커버 단품 + 같은 색 본품 합산). inventory 의 forecast/reorder 월평균은 온라인·상품명 기준이라 sku_sales 와 값이 다르다. ' +
       '원장 기준 규칙(중요): 자사몰 매출은 원장이 둘이다 — sales_trend·자사몰 상품분석은 Cafe24 주문일 기준, 그 외 대부분(yoy_analysis·marketing_*·promotion_performance·offline_*)은 이카운트 출고일 기준이다. ' +
       '두 기준의 숫자를 한 답변에서 합산·혼용하지 말고, 수치를 제시할 때 어느 기준인지 밝힌다. 출고 시차 때문에 최근 달은 출고 기준이 주문 기준보다 작게 나오는 것이 정상이다. ' +
       'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered.',
@@ -399,6 +402,7 @@ function build() {
     '🏬 오프라인 매장': ['6월 매장별 매출·목표 달성률', '7월 1주차 목표 달성률은?', '온라인 vs 오프라인 비중', '커버 동시구매율 매장별로', 'Y리그 좌수왕/캐스트/스토어 순위', '오늘 매장별 근무자 누구야?', '이번 달 ○○매니저 근무시간'],
     '👥 고객': ['재구매율·재구매주기·회원 LTV는?', '신규 의존도 얼마나 돼?'],
     '📦 재고·물류': ['맥스 커버 재고 얼마나 남았어?', '이 품목 재고 소진 속도는?', '발주 필요한 품목 알려줘', '○○매장 어제 택배 발송 현황'],
+    '🔢 품번(SKU)별 판매': ['품번 200326 최근 3개월 월평균 판매량(온·오프 합산)', '서포트 커버 아보카도 그린 채널별 판매 비중', '맥스 커버 올리브 그린 커버 소진량(본품 포함) 월별로', '8월 판매수량 TOP 품번 20개'],
     '📈 비교·추이': ['전년/전월/전주 대비 채널 비교', '월별 매출 추이', '제품별 판매 예측'],
     팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 "지난달"·"최근 7일" 같은 자연어로 말하면 시스템이 KST 기준으로 정확히 잡습니다(날짜 계산 불필요). 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
   })));
@@ -522,7 +526,8 @@ function build() {
   server.registerTool('inventory', {
     title: '재고·발주·예측 — 현재재고/소진추이/발주판단/판매예측 [확정집계]',
     description: 'mode 선택: current=지금 현재 재고 수량("○○ 재고 얼마나 남았어", 품절, 남은개수 — 기본값) / trend=일별 소진 추이·소진 예상일(search 필수) / reorder=발주 필요 품목·제안수량 / forecast=제품×색상 월평균 판매량. ' +
-      '재고·발주·판매예측 질문엔 반드시 이 도구를 사용. search로 품목명 필터(예: "맥스 커버"). 스토어 등록재고는 smartstore_ops.',
+      '재고·발주·판매예측 질문엔 반드시 이 도구를 사용. search로 품목명 필터(예: "맥스 커버"). 스토어 등록재고는 smartstore_ops. ' +
+      '※ forecast·reorder 의 월평균은 **온라인 판매·상품명 기준**(오프라인 제외)이다 — 전 채널 품번별 판매·커버 소진(본품 포함)은 sku_sales 로 확인하라.',
     inputSchema: {
       mode: z.enum(['current', 'trend', 'reorder', 'forecast']).optional().describe('current(기본)|trend|reorder|forecast'),
       search: z.string().optional().describe('품목명/색상 필터(trend는 필수)'),
@@ -630,7 +635,7 @@ function build() {
     description: '두 기간을 **전 채널(자사몰·스마트스토어·외부채널·오프라인)** 로 한 번에 비교한다. ' +
       '연월만 적으면 되는 원샷 도구 — "2025년 8월 2026년 8월 성과분석", "작년 8월 대비 올해 8월", "전년 대비 어때", "2026년 8월 어땠어" 류 질문엔 ' +
       '**여러 도구를 따로 부르지 말고 이 도구 하나만** 사용하라(sales_trend는 자사몰+스토어만 보고 원장도 다르다). ' +
-      '반환: 전사·채널별 매출/수량/주문수/객단가 증감 + 구조진단(매출·수량·객단가 방향이 엇갈릴 때 해석) + 제품군별 + 상품 증감기여 TOP + ' +
+      '반환: 전사·채널별 매출/수량/주문수/객단가 증감 + 구조진단(매출·수량·객단가 방향이 엇갈릴 때 해석) + 제품군별 + 상품 증감기여 TOP(품목코드 기준·온+오프 전 채널) + ' +
       '신규·소멸 외부채널 + 프로모션 진행현황 + 광고·트래픽 + **데이터경고(원장 결손일·출고시차·신규채널)**. ' +
       '기준은 이카운트 출고일·상품매출(반품 차감 순매출). 자사몰은 Cafe24 주문일 기준도 참고로 병기한다. ' +
       '⚠️ 답변할 때 데이터경고를 반드시 함께 전달하라 — 결손일이나 출고시차를 빼고 증감률만 말하면 오독이 된다.',
@@ -651,6 +656,26 @@ function build() {
     if (!a.period) throw new Error('period(예: "2025년 8월 vs 2026년 8월", "2026년 8월") 또는 aStart/aEnd/bStart/bEnd 를 주세요.');
     return yoyAnalysis.fromText(a.period, opts);
   }));
+
+  // ── 품번(품목코드)별 판매 — 온+오프 전 채널 ───────────────────────────────
+  server.registerTool('sku_sales', {
+    title: '품번(품목코드)별 판매 — 온라인+오프라인 전 채널 [확정집계]',
+    description: '이카운트 품목코드(품번) 기준 판매수량·매출을 **전 채널(자사몰·스마트스토어·외부채널·오프라인)** 로 합산한다. 상품명이 채널마다 달라도 품번으로 정확히 합쳐진다. ' +
+      '"품번 200326 월평균 판매량", "서포트 커버 아보카도 온·오프 합산 판매", "8월 판매수량 TOP 품번", "이 품목 오프라인 비중" 류 질문에 사용. ' +
+      '입력: codes(품번 목록) 또는 q(상품명·색상 검색어) — 둘 다 없으면 기간 내 판매수량 TOP. by: month(기본)·day(92일 이하)·none. ' +
+      '**커버 재고 소진·ADS(일평균 판매)** 를 볼 때는 family=true — 커버 단품 품번(예: 200326)에 같은 색 본품(200326S·SPre·SPre+·SHPre, 본품 1개에 커버 1장)을 합산한다. ' +
+      '품번 그대로면 커버 단품만 세어 소진량보다 훨씬 작다(예: 2025-09~2026-08 월평균 200326 단품 6.4 / 계열 41.6). ' +
+      '기준: 이카운트 출고일, 반품 음수 차감(순수량). 응답의 데이터경고(품번 누락 달)를 반드시 함께 전달하라. ' +
+      '재고 도구(inventory forecast/reorder)의 월평균은 온라인 판매·상품명 기준이라 이 도구와 값이 다르다.',
+    inputSchema: {
+      ...D,
+      codes: z.union([z.array(z.string()), z.string()]).optional().describe('품번 목록 — ["200326","200108"] 또는 "200326, 200108"'),
+      q: z.string().optional().describe('상품명·색상 검색어(공백으로 여러 단어, 모두 포함) — 예: "서포트 커버 아보카도", "맥스 올리브"'),
+      family: z.boolean().optional().describe('true = 커버 소진 환산(같은 숫자 품번으로 시작하는 커버 단품 + 같은 색 본품 합산). 재고 소진·ADS 확인용'),
+      by: z.enum(['month', 'day', 'none']).optional().describe('추이 단위 — month(기본)·day(92일 이하)·none'),
+      limit: z.number().int().optional().describe('표시 줄 수(기본 20, 최대 50)'),
+    },
+  }, wrapR((start, end, a) => skuSales.sales({ start, end, codes: a.codes, q: a.q, family: a.family, by: a.by, limit: a.limit })));
 
   return server;
 }

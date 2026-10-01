@@ -75,6 +75,8 @@
   .ch h3{margin:0 0 8px; font-size:14px; font-weight:800; display:flex; align-items:center; gap:8px;}
   .pace{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px;}
   .pace .k .kv{font-size:16px;}
+  .pace-h{margin:16px 0 8px; font-size:12.5px; font-weight:700; color:var(--ink-3);} /* 어제 표 아래 "이번 달 누적 진척" */
+  .ch h3 .note-in{font-size:12px; font-weight:600;}
   .bar{position:relative; height:9px; border-radius:5px; background:var(--line); overflow:hidden; margin:2px 0 10px;}
   .bar i{position:absolute; left:0; top:0; height:100%; border-radius:5px; display:block;}
   .bar .mk{position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink-2);}
@@ -93,6 +95,9 @@
   .range-tools input,.range-tools button{font:inherit; font-size:12px; padding:3px 7px; border:1px solid var(--line-2); border-radius:7px; background:var(--card); color:var(--ink);}
   .range-tools button{cursor:pointer; font-weight:600;}
   .range-tools #r-go{background:var(--pill); color:var(--pill-ink); border-color:var(--pill);}
+  /* 지금 보는 기간 — 버튼이면 꽉 찬 파랑, 직접 넣은 기간이면 날짜 칸에 파란 테두리 */
+  .range-tools button.on{background:var(--pill) !important; color:#fff !important; font-weight:700;}
+  .range-tools input.on{background:#e8f3ff !important; color:var(--c-vol) !important; box-shadow:inset 0 0 0 1.5px var(--c-vol); font-weight:600;}
   body.capture .range-tools{display:none;}
   .tiles-span{margin:0 0 8px; font-size:12.5px; color:var(--ink-2);}
   sup.fb{color:var(--warn); font-weight:800; margin-left:1px;}
@@ -145,7 +150,8 @@
   h1{font-size:23px; font-weight:700; letter-spacing:-.03em;}
   .fresh{color:var(--ink-3);}
   .tools input,.tools select,.tools button,.range-tools input,.range-tools button{border:0; background:#e9ecef; color:var(--ink-2); border-radius:10px;}
-  .tools button.primary,.range-tools #r-go{background:var(--pill); color:#fff;}
+  .tools button.primary{background:var(--pill); color:#fff;}
+  .range-tools #r-go{background:#e9ecef; color:var(--ink); font-weight:700;} /* 적용은 회색 — 파랑은 지금 보는 기간 표시에만 */
   .card{border:0; border-radius:20px; padding:22px 24px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,27,55,.05);}
   .card-head{margin-bottom:14px;}
   .card-head h2{font-size:17px; font-weight:700; letter-spacing:-.02em;}
@@ -181,6 +187,21 @@
   sup.fb{color:var(--warn);}
   .tiles-span{color:var(--ink-3);}
   .inner-tag{color:var(--ink-3);}
+
+  /* 불러오는 중 — 기간을 바꾸거나 다시 계산할 때 가운데에 띄운다(캡처에는 안 나옴) */
+  #tiles,#root{position:relative;}
+  #root.is-loading{min-height:60vh;}
+  html.embed #root.is-loading{min-height:360px;}
+  .loading{position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.72); border-radius:14px;}
+  .loading.page{align-items:flex-start; background:rgba(242,244,246,.72); border-radius:0;}
+  .loading.page .ld-box{position:sticky; top:calc(50vh - 60px); margin-top:min(22vh,200px);}
+  html.embed .loading.page .ld-box{position:static; margin-top:80px;} /* dash 안에서는 iframe 높이가 길어 위쪽에 */
+  .ld-box{display:flex; flex-direction:column; align-items:center; gap:8px; padding:18px 26px; background:#fff; border-radius:16px; box-shadow:0 4px 20px rgba(0,27,55,.10); text-align:center;}
+  .spinner{width:28px; height:28px; border-radius:50%; border:3px solid #e8f3ff; border-top-color:var(--c-vol); animation:dm-spin .8s linear infinite;}
+  @keyframes dm-spin{to{transform:rotate(360deg);}}
+  .ld-t{font-size:14px; font-weight:700; color:var(--ink);}
+  .ld-s{font-size:12px; color:var(--ink-3);}
+  body.capture .loading{display:none;}
 
   @media (max-width:760px){ .two{grid-template-columns:1fr;} .sales{grid-template-columns:1fr 1fr;} }
 </style>
@@ -274,24 +295,48 @@
       '</div>';
   }
   // 기간 보기 — 타일만 다시 불러온다(아래 표·경보는 기준일 그대로)
+  var rangeBase = null; // 기준일 — bindRange 가 채운다
+  // 지금 보는 기간과 같은 버튼만 켠다(직접 넣은 기간이 버튼과 같아도 켜짐, 다르면 모두 꺼짐)
+  function markPreset(s, e){
+    if (!rangeBase) return;
+    var minus = function(iso, n){ var x = new Date(iso + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
+    var on = { 'r-reset': s === rangeBase && e === rangeBase, 'r-7': s === minus(rangeBase, 6) && e === rangeBase, 'r-m': s === rangeBase.slice(0, 8) + '01' && e === rangeBase };
+    Object.keys(on).forEach(function(id){ var b = document.getElementById(id); if (b) { b.classList.toggle('on', on[id]); b.setAttribute('aria-pressed', on[id] ? 'true' : 'false'); } });
+    var custom = !on['r-reset'] && !on['r-7'] && !on['r-m'];
+    ['r-s', 'r-e'].forEach(function(id){ var x = document.getElementById(id); if (x) x.classList.toggle('on', custom); });
+  }
+  // 가운데 "불러오는 중" — 다 불러오면 innerHTML 을 바꾸면서 저절로 사라진다
+  function showLoading(el, title, sub, page){
+    var old = el.querySelector(':scope > .loading'); if (old) old.remove();
+    var d = document.createElement('div');
+    d.className = 'loading' + (page ? ' page' : '');
+    d.setAttribute('role', 'status'); d.setAttribute('aria-live', 'polite');
+    d.innerHTML = '<div class="ld-box"><span class="spinner" aria-hidden="true"></span><b class="ld-t">' + esc(title) + '</b>' + (sub ? '<span class="ld-s">' + esc(sub) + '</span>' : '') + '</div>';
+    el.appendChild(d);
+  }
+  function mdTxt(iso){ return +iso.slice(5, 7) + '/' + +iso.slice(8, 10); }
+  var tilesSeq = 0; // 연달아 누르면 마지막에 누른 기간만 그린다
   function yday(){ return new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10); } // 한국 기준 어제
   function loadTiles(s, e){
     var box = document.getElementById('tiles'); if (!box) return;
     if (!s || !e) return;
     if (e < s) { var t = s; s = e; e = t; }
     var y = yday(); if (e > y) e = y; if (s > y) s = y; // 오늘·미래는 어제로
+    markPreset(s, e);
     document.getElementById('r-s').value = s; document.getElementById('r-e').value = e;
-    box.style.opacity = '.5';
+    var my = ++tilesSeq;
+    showLoading(box, '불러오는 중…', (s === e ? mdTxt(s) + ' 하루' : mdTxt(s) + ' ~ ' + mdTxt(e)) + ' 매출을 모으고 있어요');
     fetch('/api/daily-mail/tiles?start=' + s + '&end=' + e, { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(j){
-      box.style.opacity = '';
+      if (my !== tilesSeq) return;
       box.innerHTML = j.ok ? renderTiles(j) : '<div class="err">' + esc(j.error || '기간 합계를 불러오지 못했습니다') + '</div>';
       postHeight();
-    }).catch(function(err){ box.style.opacity = ''; box.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
+    }).catch(function(err){ if (my !== tilesSeq) return; box.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; postHeight(); });
   }
   function bindRange(d){
     var g = function(id){ return document.getElementById(id); };
     if (!g('r-go')) return;
     var base = d.기준일, ymd = function(dt){ return dt.toISOString().slice(0, 10); };
+    rangeBase = base; markPreset(base, base); // 처음엔 기준일(하루) — "기준일로"가 켜져 있다
     var minus = function(iso, n){ var x = new Date(iso + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - n); return ymd(x); };
     g('r-go').onclick = function(){ loadTiles(g('r-s').value, g('r-e').value); };
     g('r-7').onclick = function(){ loadTiles(minus(base, 6), base); };
@@ -448,11 +493,16 @@
     if (!sec.ok) return h + errBox(sec) + renderAds(adSec, onSales) + '</div>'; // KPI 가 실패해도 광고 표는 따로 보인다
     // 온라인팀이 올릴 값이 비면 표 칸에만 "온라인팀 업데이트 전"으로 표시한다(위쪽 안내 상자는 두지 않음 — 사용자 요청 2026-10-01)
     var k = sec.data;
+    // 전날(어제) 실적을 먼저, 이번 달 진척은 그 아래 — 회사는 매일 전날 숫자부터 본다(사용자 요청 2026-10-01)
+    var day = baseDate ? dayLabel(baseDate) : '어제';
+    var kpiHead = '<table class="t"><thead><tr><th>지표</th><th class="r">어제 실적</th><th class="r">일 목표</th><th class="r">달성률</th></tr></thead><tbody>';
     h += '<div class="two">' +
-      '<div class="ch"><h3>자사몰</h3>' + paceBlock(k.mall.월진척) +
-        '<table class="t"><thead><tr><th>지표</th><th class="r">어제 실적</th><th class="r">일 목표</th><th class="r">달성률</th></tr></thead><tbody>' + kpiRows(k.mall.지표, ['상품조회', '장바구니', '주문서작성']) + '</tbody></table></div>' +
-      '<div class="ch"><h3>스마트스토어</h3>' + paceBlock(k.ss.월진척) +
-        '<table class="t"><thead><tr><th>지표</th><th class="r">어제 실적</th><th class="r">일 목표</th><th class="r">달성률</th></tr></thead><tbody>' + kpiRows(k.ss.지표, ['유입', '구매율']) + '</tbody></table></div>' +
+      '<div class="ch"><h3>자사몰 <span class="note-in">' + esc(day) + ' 실적</span></h3>' +
+        kpiHead + kpiRows(k.mall.지표, ['상품조회', '장바구니', '주문서작성']) + '</tbody></table>' +
+        '<p class="pace-h">이번 달 누적 진척</p>' + paceBlock(k.mall.월진척) + '</div>' +
+      '<div class="ch"><h3>스마트스토어 <span class="note-in">' + esc(day) + ' 실적</span></h3>' +
+        kpiHead + kpiRows(k.ss.지표, ['유입', '구매율']) + '</tbody></table>' +
+        '<p class="pace-h">이번 달 누적 진척</p>' + paceBlock(k.ss.월진척) + '</div>' +
       '</div>';
     h += renderAds(adSec, onSales);
     h += '<p class="note">구매전환율·구매율·객단가·건당 매출의 목표는 기준월 벤치마크입니다. 순매출: 자사몰 = Cafe24 통계, 스토어 = 이카운트 원장(반품 차감). ' +
@@ -566,6 +616,10 @@
     if (fresh || qs.get('fresh') === '1') p.set('fresh', '1');
     document.body.removeAttribute('data-ready');
     document.getElementById('hd-fresh').textContent = '불러오는 중…';
+    var root = document.getElementById('root');
+    root.classList.add('is-loading');
+    showLoading(root, fresh ? '지금 데이터로 다시 계산하는 중…' : '불러오는 중…', '매출 · KPI · 좌수 · 재고를 모으고 있어요', true);
+    postHeight();
     return fetch('/api/daily-mail?' + p.toString(), { cache:'no-store' })
       .then(function(r){ return r.json(); })
       .then(function(j){
@@ -577,7 +631,7 @@
         document.getElementById('hd-fresh').textContent = '불러오기 실패';
         document.body.setAttribute('data-error', '1');
       })
-      .then(function(){ return document.fonts && document.fonts.ready; })
+      .then(function(){ root.classList.remove('is-loading'); return document.fonts && document.fonts.ready; })
       .then(function(){ document.body.setAttribute('data-ready', '1'); postHeight(); setTimeout(postHeight, 300); });
   }
 

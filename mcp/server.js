@@ -53,6 +53,7 @@ const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 �
 const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
 const jwasuSales = require('../lib/jwasuSales');        // 좌수(상담)↔매출 상관·매장별 효율(원샷)
 const productCatalog = require('../lib/productCatalog'); // 제품/색상 카탈로그(이름·hex·이미지) 마스터
+const imageAssets = require('../lib/imageAssets');       // 이미지 자료 — imgCreate DB 읽기 전용("이미지" 키워드 전용, 정보·링크만)
 const yoyAnalysis = require('../lib/yoyAnalysis'); // 전사 기간 대 기간 비교(연월 원샷)
 const skuSales = require('../lib/skuSales');       // 품번(품목코드)별 판매 — 온+오프 전 채널, 커버 소진 환산
 
@@ -112,7 +113,9 @@ function build() {
       '커버 재고 소진·ADS 는 family=true(커버 단품 + 같은 색 본품 합산). inventory 의 forecast/reorder 월평균은 온라인·상품명 기준이라 sku_sales 와 값이 다르다. ' +
       '원장 기준 규칙(중요): 자사몰 매출은 원장이 둘이다 — sales_trend·자사몰 상품분석은 Cafe24 주문일 기준, 그 외 대부분(yoy_analysis·marketing_*·promotion_performance·offline_*)은 이카운트 출고일 기준이다. ' +
       '두 기준의 숫자를 한 답변에서 합산·혼용하지 말고, 수치를 제시할 때 어느 기준인지 밝힌다. 출고 시차 때문에 최근 달은 출고 기준이 주문 기준보다 작게 나오는 것이 정상이다. ' +
-      'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered.',
+      'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered. ' +
+      '이미지 자료 라우팅: 요청이 "이미지"로 시작하면("이미지: W_B 모델 자료", "이미지 맥스 색상" 등) image_reference 를 쓴다 — 이미지 생성이 아니라 등록된 전속 모델·제품 색상·실촬영 이미지의 정보와 링크 조회다. ' +
+      '"이미지" 키워드가 없는 질문에는 image_reference 를 쓰지 않는다.',
   });
   // 순수 날짜 도구 스키마 — period(자연어) 우선, 없으면 start/end. 핸들러는 wrapR로 감쌀 것.
   const D = RANGE_SCHEMA;
@@ -388,13 +391,37 @@ function build() {
     title: '전속 모델 정보 — 여성/남성/아동 AI 모델·등록상태 [모델 마스터]',
     description: '요기보 전속 AI 모델(영상·상세페이지 제작용): 카테고리(여성/남성/아동)·코드(A/B/C/D)·이름·키(제품 비례)·외모 설명·**등록상태**(시트 완성도·착석 제품 등 제작 진행). ' +
       'category(여성/남성/아동)·search(이름·외모) 필터. "여성 전속모델 목록", "모델 B 정보", "아동 모델 몇 명", "영상 테스트한 모델" 질문에 사용. ' +
-      'withImages=true면 대표/시트 이미지 URL 포함. 매출 아님 — 콘텐츠 제작용 모델 마스터.',
+      'withImages=true면 대표/시트 이미지 URL 포함. 매출 아님 — 콘텐츠 제작용 모델 마스터. ' +
+      '표정·얼굴 각도·의상까지 담긴 최신 자료는 "이미지"로 시작하는 요청에서 image_reference 로 조회.',
     inputSchema: {
       category: z.string().optional().describe('여성 | 남성 | 아동'),
       search: z.string().optional().describe('이름·외모 부분일치'),
       withImages: z.boolean().optional().describe('true면 대표/시트 이미지 URL 포함'),
     },
   }, wrap((a) => productCatalog.models(a || {})));
+
+  // ── 이미지 자료 (imgCreate) — "이미지" 키워드 전용. 생성 없음, 등록된 정보·FTP 이미지 링크 조회만 ──
+  server.registerTool('image_reference', {
+    title: '이미지 자료 — 전속 모델·제품 색상·실촬영 이미지 링크 ["이미지" 키워드 전용]',
+    description: '사용자 요청이 "이미지"로 시작할 때만 호출한다(예: "이미지: W_B 모델 자료", "이미지 맥스 아쿠아블루 각도별", "이미지: 라운저 실촬영 10장"). ' +
+      '"이미지" 키워드가 없는 매출·재고·광고·CS 질문에는 쓰지 않는다. ' +
+      '이미지를 생성하지 않는다 — 이미지 제작 앱(imgCreate)에 등록된 기준 정보와 회사 서버(cafe24 FTP)의 이미지 링크만 돌려준다. ' +
+      'mode: products=제품 목록(치수·색상) / product=제품 하나의 색상·hex·각도별 이미지(line 필수, color 로 한 색만) / ' +
+      'talents=전속 모델 목록(category 여성·남성·아동, search) / talent=모델 한 명의 대표컷·시트·표정 8종·얼굴 각도 5종·의상(code 필수: W_B 등) / ' +
+      'photos=드롭박스 실촬영 아카이브(약 11,000장) 검색(product 라벨·keyword·limit·skip). models_info·product_catalog 보다 최신(imgCreate 실시간).',
+    inputSchema: {
+      mode: z.enum(['products', 'product', 'talents', 'talent', 'photos']).describe('products|product|talents|talent|photos'),
+      line: z.string().optional().describe('제품명(mode=product) — 맥스·팟·서포트 또는 Max·Pod'),
+      color: z.string().optional().describe('색상명(mode=product, 선택) — 아쿠아블루·네이비 등'),
+      code: z.string().optional().describe('모델 코드(mode=talent) — W_B·M_A·K_C 또는 여성B'),
+      category: z.string().optional().describe('모델 분류(mode=talents) — 여성|남성|아동'),
+      search: z.string().optional().describe('부분일치 검색(mode=products·talents)'),
+      product: z.string().optional().describe('실촬영 제품 라벨(mode=photos) — 맥스·더블·드롭·팟·라운저·서포트 등'),
+      keyword: z.string().optional().describe('실촬영 파일명·폴더명 검색어(mode=photos) — 예: 2022, 가족'),
+      limit: z.number().int().optional().describe('실촬영 장수(기본 20, 최대 100)'),
+      skip: z.number().int().optional().describe('건너뛸 장수 — 다음 페이지'),
+    },
+  }, wrap((a) => imageAssets.query(a || {})));
 
   server.registerTool('usage_guide', {
     title: '사용 가이드 — 무엇을 물어볼 수 있나요? [도움말]',
@@ -411,6 +438,7 @@ function build() {
     '📦 재고·물류': ['맥스 커버 재고 얼마나 남았어?', '이 품목 재고 소진 속도는?', '발주 필요한 품목 알려줘', '○○매장 어제 택배 발송 현황'],
     '🔢 품번(SKU)별 판매': ['품번 200326 최근 3개월 월평균 판매량(온·오프 합산)', '서포트 커버 아보카도 그린 채널별 판매 비중', '맥스 커버 올리브 그린 커버 소진량(본품 포함) 월별로', '8월 판매수량 TOP 품번 20개'],
     '📈 비교·추이': ['전년/전월/전주 대비 채널 비교', '월별 매출 추이', '제품별 판매 예측'],
+    '🖼 이미지 자료 ("이미지"로 시작)': ['이미지: 여성 모델 목록', '이미지: W_B 대표컷·표정·얼굴 각도', '이미지: 맥스 아쿠아블루 각도별 이미지', '이미지: 라운저 실촬영 10장'],
     팁: '특정 도구를 콕 집을 필요 없이 평소 말로 질문하세요. 기간은 "지난달"·"최근 7일" 같은 자연어로 말하면 시스템이 KST 기준으로 정확히 잡습니다(날짜 계산 불필요). 데이터는 매일 오전 9시(매출)·9시반(광고) 자동 갱신됩니다. 모든 금액은 원(KRW)입니다.',
   })));
 

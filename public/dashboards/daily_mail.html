@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>일일 모니터링 · 요기보</title>
+<!--
+  일일 모니터링 메일 페이지 — 매일 이 페이지를 통째로 캡처해 메일로 보낸다.
+    ① 어제 한눈에(매출·목표 대비 온라인 몰별/오프라인 매장별·경보) · ② 자사몰/스마트스토어 KPI · ③ 오프라인 좌수 · ④ 재고 주의(품번 기준, MD 양식)
+    ① 온오프 매출·샐리필은 기존 메일(photo.js) 그대로.
+  데이터: /api/daily-mail (lib/dailyMail.js). 주소 파라미터:
+    ?date=YYYY-MM-DD  기준일(기본 어제)   ?basis=online  재고 예상판매를 온라인만으로(기본 온+오프)
+    ?fresh=1          캐시 없이 새로 계산   ?capture=1     캡처용(상단 조작줄 숨김·폭 고정)
+  렌더가 끝나면 <body data-ready="1"> — 캡처 스크립트는 이것을 기다린다.
+  메일 이미지라 라이트 테마로 고정한다(받는 쪽 다크 모드와 무관하게 같은 그림).
+-->
+<style>
+  :root{
+    color-scheme:light;
+    --page:#f4f2ed; --card:#fbfaf7; --card-2:#f6f4ef; --ink:#211e19; --ink-2:#615c53; --ink-3:#98938a;
+    --line:#e7e3da; --line-2:#d8d3c8; --pill:#211e19; --pill-ink:#fbfaf7;
+    --c-vol:#2a78d6; --c-rev:#d1622a; --seq-3:#3987e5;
+    --good:#0a6b0a; --good-bg:rgba(10,138,10,.11); --bad:#c23421; --bad-bg:rgba(194,52,33,.10);
+    --warn:#b47600; --warn-bg:rgba(214,155,20,.14);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--page); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1080px; margin:0 auto; padding:22px 20px 40px;}
+  body.capture .wrap{width:1040px; max-width:none; padding:20px 20px 24px;}
+  body.capture .tools{display:none;}
+  .tnum{font-variant-numeric:tabular-nums;}
+
+  .top{display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .eyebrow{font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin:0 0 4px;}
+  h1{margin:0; font-size:20px; font-weight:800; letter-spacing:-.01em;}
+  h1 b{color:var(--c-vol);}
+  .fresh{margin:5px 0 0; font-size:12px; color:var(--ink-2);}
+  .tools{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .tools input,.tools select,.tools button{font:inherit; font-size:12.5px; padding:6px 10px; border:1px solid var(--line-2); border-radius:9px; background:var(--card); color:var(--ink);}
+  .tools button{cursor:pointer; font-weight:600;}
+  .tools button.primary{background:var(--pill); color:var(--pill-ink); border-color:var(--pill);}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px;}
+  .card-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  .card-head h2{margin:0; font-size:15px; font-weight:800;}
+  .card-head .no{display:inline-flex; width:20px; height:20px; border-radius:6px; background:var(--pill); color:var(--pill-ink); font-size:11.5px; font-weight:800; align-items:center; justify-content:center; margin-right:2px; vertical-align:1px;}
+  .card-head .sub{font-size:12px; color:var(--ink-2);}
+  .chip{display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:1px 8px; border-radius:20px; white-space:nowrap;}
+  .chip.up{color:var(--good); background:var(--good-bg);}
+  .chip.dn{color:var(--bad); background:var(--bad-bg);}
+  .chip.warn{color:var(--warn); background:var(--warn-bg);}
+  .chip.na{color:var(--ink-3); background:var(--card-2); border:1px dashed var(--line-2);}
+  .note{font-size:11.5px; color:var(--ink-3); margin:8px 0 0; line-height:1.6;}
+  .err{font-size:12.5px; color:var(--bad); background:var(--bad-bg); border-radius:10px; padding:10px 12px;}
+
+  /* 어제 매출 + 경보 */
+  .sales{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px;}
+  .k{background:var(--card-2); border:1px solid var(--line); border-radius:11px; padding:10px 12px;}
+  .k .kl{font-size:11.5px; color:var(--ink-2); margin:0 0 3px;}
+  .k .kv{font-size:19px; font-weight:800; letter-spacing:-.02em;}
+  .k .kd{font-size:11.5px; color:var(--ink-2); margin-top:2px;}
+  .alerts{list-style:none; margin:0; padding:0; display:grid; gap:5px;}
+  .alerts li{display:flex; gap:8px; align-items:baseline; font-size:12.5px; padding:7px 10px; border-radius:9px; background:var(--card-2); border-left:3px solid var(--warn);}
+  .alerts li.bad{border-left-color:var(--bad);}
+  .alerts .area{font-weight:800; min-width:34px;}
+  .alerts.ok li{border-left-color:var(--good);}
+
+  /* KPI */
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .ch{border:1px solid var(--line-2); border-radius:12px; padding:12px 14px; background:var(--card);}
+  .ch h3{margin:0 0 8px; font-size:14px; font-weight:800; display:flex; align-items:center; gap:8px;}
+  .pace{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px;}
+  .pace .k .kv{font-size:16px;}
+  .bar{position:relative; height:9px; border-radius:5px; background:var(--line); overflow:hidden; margin:2px 0 10px;}
+  .bar i{position:absolute; left:0; top:0; height:100%; border-radius:5px; display:block;}
+  .bar .mk{position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink-2);}
+  table.t{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.t th{font-size:11px; font-weight:700; color:var(--ink-2); text-align:left; padding:6px 8px; border-bottom:1px solid var(--line-2); background:var(--card-2); white-space:nowrap;}
+  table.t td{padding:5px 8px; border-bottom:1px solid var(--line); white-space:nowrap;}
+  table.t .r{text-align:right;}
+  table.t .c{text-align:center;}
+  table.t tr.sum td{font-weight:800; background:var(--card-2); border-top:1px solid var(--line-2);}
+  table.t td.neg{color:var(--bad); font-weight:700;}
+  table.t tr.sub td{color:var(--ink-2); font-size:12px; padding-top:3px; padding-bottom:3px;}
+  table.t tr.sub td:first-child{padding-left:16px;}
+  .note-in{font-size:10.5px; color:var(--ink-3);}
+  sup.fb{color:var(--warn); font-weight:800; margin-left:1px;}
+  .two.tgt{margin-bottom:6px;}
+  /* 두 칸을 정확히 반씩 — 긴 몰 이름이 한쪽 칸을 키워 옆 칸이 카드 밖으로 밀려나지 않게(2026-10-01 캡처에서 13px 넘침) */
+  .two{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+  .two.tgt table.t td:first-child{white-space:normal; word-break:keep-all;}
+  .sub-h{margin:16px 0 8px; font-size:13.5px; font-weight:800;}
+  /* 샐리필 "+ 일별 보기" — 메일 캡처에는 버튼이 나오지 않는다 */
+  .sally-h{margin:16px 0 8px; display:flex; align-items:center; gap:8px;}
+  .plus-btn{font:inherit; font-size:11.5px; font-weight:700; padding:3px 9px; border:1px solid var(--line-2); border-radius:8px; background:var(--card-2); color:var(--c-vol); cursor:pointer;}
+  .plus-btn:hover{border-color:var(--c-vol);}
+  body.capture .plus-btn{display:none;}
+  .pop{position:fixed; inset:0; background:rgba(33,30,25,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:16px;}
+  .pop-card{background:var(--card); border-radius:14px; width:min(860px,100%); max-height:86vh; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,.25);}
+  .pop-head{display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line);}
+  .pop-head b{font-size:15px;}
+  .pop-head button{font:inherit; font-size:18px; border:none; background:none; cursor:pointer; color:var(--ink-2);}
+  .pop-body{padding:12px 18px 18px; overflow:auto;}
+  .pop-body h4{margin:12px 0 6px; font-size:13px;}
+  .two.staff table.t td{padding-top:4px; padding-bottom:4px;}
+  .twrap{overflow-x:auto;}
+
+  /* 재고 — MD 양식 표 */
+  table.stock th{background:#fff; color:var(--ink); border:1px solid #9a958b; text-align:center; font-size:12px;}
+  table.stock td{border:1px solid #c9c4b9; text-align:center;}
+  table.stock td.l{text-align:left;}
+  .judge{font-weight:800; color:var(--bad);}
+  .inner-tag{font-size:10.5px; color:var(--ink-3); margin-left:4px;}
+  .soldout{margin-top:10px; font-size:12.5px; background:var(--card-2); border-radius:10px; padding:9px 12px; line-height:1.7;}
+
+  @media (max-width:760px){ .two{grid-template-columns:1fr;} .sales{grid-template-columns:1fr 1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <p class="eyebrow">Yogibo Daily Monitoring</p>
+      <h1>일일 모니터링 <b id="hd-date">—</b></h1>
+      <p class="fresh" id="hd-fresh">불러오는 중…</p>
+    </div>
+    <div class="tools">
+      <input type="date" id="f-date" aria-label="기준일">
+      <select id="f-basis" aria-label="재고 판매 기준">
+        <option value="">재고: 온+오프 판매 기준</option>
+        <option value="online">재고: 온라인 판매만</option>
+      </select>
+      <button type="button" id="f-go">조회</button>
+      <button type="button" class="primary" id="f-fresh" title="캐시 없이 지금 데이터로 다시 계산">↻ 새로 계산</button>
+    </div>
+  </div>
+  <div id="root"></div>
+</div>
+<div class="pop" id="sallyPop" onclick="if(event.target===this)closeSally()">
+  <div class="pop-card" role="dialog" aria-label="샐리필 일별 매출">
+    <div class="pop-head"><b>샐리필 — 이번 달 일별 매출</b><button type="button" onclick="closeSally()" aria-label="닫기">✕</button></div>
+    <div class="pop-body"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var qs = new URLSearchParams(location.search);
+  if (qs.get('capture') === '1') document.body.classList.add('capture');
+
+  // ── 포맷 ──
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function comma(n){ return n == null ? '—' : Math.round(n).toLocaleString('ko-KR'); }
+  function won(n){ return n == null ? '—' : comma(n) + '원'; }
+  function man(n){ if (n == null) return '—'; var v = Math.round(n / 10000); return v >= 10000 ? (v / 10000).toFixed(2) + '억' : v.toLocaleString('ko-KR') + '만'; }
+  function signed(v){ return v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%'; }
+  var DOW = ['일','월','화','수','목','금','토'];
+  function dayLabel(iso){ var p = String(iso).split('-').map(Number); return p[1] + '/' + p[2] + '(' + DOW[new Date(Date.UTC(p[0], p[1]-1, p[2])).getUTCDay()] + ')'; }
+  function timeKST(iso){ return new Date(iso).toLocaleString('ko-KR', { timeZone:'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }); }
+  // 달성률 칩 — 기준(ref, 보통 100 또는 월 경과율) 대비: 이상 정상 · 85% 이상 주의 · 그 아래 미달
+  function rateChip(v, ref){
+    if (v == null) return '<span class="chip na">—</span>';
+    ref = ref || 100;
+    var cls = v >= ref ? 'up' : v >= ref * 0.85 ? 'warn' : 'dn';
+    return '<span class="chip ' + cls + ' tnum">' + v.toFixed(1) + '%</span>';
+  }
+  function bar(v, mark, color){
+    var w = Math.max(0, Math.min(100, v || 0));
+    return '<div class="bar"><i style="width:' + w + '%;background:' + color + '"></i>' + (mark != null ? '<span class="mk" style="left:' + Math.min(100, mark) + '%"></span>' : '') + '</div>';
+  }
+  function errBox(sec){ return '<div class="err">이 섹션을 불러오지 못했습니다 — ' + esc(sec && sec.error) + '</div>'; }
+
+  // ── ① 어제 한눈에 — 어제 매출 타일 · 목표 대비(온라인 몰별/오프라인 매장별) · 경보 ──
+  //   경보(타일 포함)는 어제 기준이라 과거 날짜를 조회하면 빠진다 — 목표 대비 표는 날짜와 무관하게 나온다.
+  function renderTop(d){
+    var al = d.경보 && !d.경보.error ? d.경보 : null;
+    var h = '<div class="card"><div class="card-head"><h2><span class="no">1</span> 어제 한눈에</h2><span class="sub">매출은 이카운트 기준(확정)' + (al ? ' · 경보는 9개 항목 자동 점검' : '') + '</span></div>';
+    if (al) h += renderTiles(al);
+    h += renderTarget(d.매출);
+    if (d.경보 && d.경보.error) h += errBox(d.경보);
+    else if (al) h += renderAlerts(al);
+    return h + '</div>';
+  }
+  function renderTiles(al){
+    var s = (al.어제실적 || {}).매출 || {};
+    var y = al.어제실적 || {};
+    return '<div class="sales">' +
+      '<div class="k"><p class="kl">전사 매출</p><div class="kv tnum">' + man(s.전사) + '</div><div class="kd">전주 동요일 대비 <b>' + signed(s.전주동요일比_pct) + '</b></div></div>' +
+      '<div class="k"><p class="kl">온라인</p><div class="kv tnum">' + man(s.온라인) + '</div><div class="kd">자사몰·스마트스토어·외부채널</div></div>' +
+      '<div class="k"><p class="kl">오프라인</p><div class="kv tnum">' + man(s.오프라인) + '</div><div class="kd">매장 주문서</div></div>' +
+      '<div class="k"><p class="kl">자사몰 방문 · 광고비</p><div class="kv tnum">' + comma(y.트래픽 && y.트래픽.방문) + '명</div><div class="kd">광고비 ' + man(y.광고 && y.광고.광고비) + (y.광고 && s.온라인 ? ' · 온라인 매출의 ' + (y.광고.광고비 / s.온라인 * 100).toFixed(1) + '%' : '') + '</div></div>' +
+      '</div>';
+  }
+  function renderAlerts(al){
+    var list = al.경보 || [];
+    if (!list.length) return '<ul class="alerts ok"><li><span class="area">정상</span><span>이상 신호 없음 — 점검 항목이 모두 정상 범위입니다</span></li></ul>';
+    return '<ul class="alerts">' + list.map(function(a){
+      var bad = a.심각도 === '🔴';
+      return '<li class="' + (bad ? 'bad' : '') + '"><span class="chip ' + (bad ? 'dn' : 'warn') + '">' + (bad ? '심각' : '주의') + '</span><span class="area">' + esc(a.분야) + '</span><span>' + esc(a.내용) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  // 목표 출처 표시 — 등록값은 표시 없음, * = 시스템 미등록이라 MD 공유 목표표 값, † = 예전 기본값(config)
+  function srcMark(r){ return r.목표출처 === '예비' ? '<sup class="fb">*</sup>' : r.목표출처 === '기본값' ? '<sup class="fb">†</sup>' : ''; }
+  function usesSrc(m, s){
+    var all = [].concat(m.온라인.채널, m.온라인.채널[2].몰 || [], [m.온라인.합계], m.오프라인.매장, m.샐리필 ? [m.샐리필.합계] : []);
+    return all.some(function(r){ return r && r.목표출처 === s; });
+  }
+
+  // ── ① 목표 대비 매출 — 온라인 몰별 · 오프라인 매장별 (어제 한눈에 안) ──
+  function renderTarget(sec){
+    if (!sec) return '';
+    if (!sec.ok) return errBox(sec);
+    var m = sec.data, el = m.월경과율;
+    var tr = function(r, cls, label){
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + (label || esc(r.이름)) + '</td><td class="r tnum">' + man(r.어제) + '</td><td class="r tnum">' + man(r.누적) + '</td>' +
+        '<td class="r tnum">' + (r.목표 != null ? man(r.목표) + srcMark(r) : '<span class="chip na">미등록</span>') + '</td><td class="r">' + rateChip(r.달성률, el) + '</td></tr>';
+    };
+    var head = function(first){ return '<thead><tr><th>' + first + '</th><th class="r">어제</th><th class="r">월 누적</th><th class="r">월 목표</th><th class="r">달성률</th></tr></thead>'; };
+    var on = m.온라인, rows = '';
+    on.채널.forEach(function(c){
+      rows += tr(c);
+      // 외부 몰은 전부 한 줄씩(월 누적 큰 순) — "그 외 N곳"으로 묶지 않는다(사용자 요청 2026-10-01)
+      if (c.몰 && c.몰.length) c.몰.forEach(function(x){ rows += tr(x, 'sub', '└ ' + esc(x.이름)); });
+    });
+    if (on.공동구매) rows += tr(on.공동구매, 'sub', '공동구매 <span class="note-in">(합계 제외)</span>');
+    rows += tr(on.합계, 'sum');
+    var off = m.오프라인;
+    var offRows = off.매장.map(function(s){ return tr(s); }).join('') + tr(off.합계, 'sum');
+    // 월 목표 없는 매장은 서버에서 뺐다 — 매출이 있으면 금액을 적어 위 오프라인 타일과의 차이를 설명
+    var offNote = off.목표미등록 ? '<p class="note">' + esc(off.목표미등록) + '</p>'
+      : off.제외 ? '<p class="note">월 목표 미등록 매장 ' + off.제외.매장수 + '곳 제외' +
+          (off.제외.매출있음.length ? ' — 매출 있는 곳: ' + off.제외.매출있음.map(function(s){ return esc(s.이름) + ' 월 누적 ' + won(s.누적) + (s.어제 ? '(어제 ' + won(s.어제) + ')' : ''); }).join(', ') : '') + '</p>' : '';
+    return '<div class="two tgt">' +
+      '<div class="ch"><h3>온라인 — 몰별 목표 대비</h3><table class="t">' + head('채널 / 몰') + '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="ch"><h3>오프라인 — 매장별 목표 대비</h3><table class="t">' + head('매장') + '<tbody>' + offRows + '</tbody></table>' + offNote +
+        renderSally(m.샐리필, head, el) + '</div>' +
+      '</div><p class="note" style="margin:0 0 10px">월 경과 ' + el.toFixed(0) + '% — 달성률이 경과율 이상이면 초록, 85% 이상이면 노랑, 그 아래는 빨강. ' + esc(m.기준) +
+      (usesSrc(m, '예비') ? '<br><sup class="fb">*</sup> 시스템에 목표가 등록되지 않아 MD 공유 목표표 값으로 채웠습니다(🎯 목표 설정에 등록하면 등록값으로 바뀝니다).' : '') +
+      (usesSrc(m, '기본값') ? '<br><sup class="fb">†</sup> 등록값이 없어 예전 기본값을 썼습니다 — 🎯 목표 설정에서 확인이 필요합니다.' : '') + '</p>';
+  }
+
+  // 샐리필 — 오프라인 표 아래(왼쪽 온라인 표가 길어 비는 자리). 거래처별 어제·월 누적, 목표는 아직 없음.
+  function renderSally(sf, head, el){
+    if (!sf) return '';
+    // 목표는 통합 하나 — 거래처 줄은 "—", 합계 줄에만 목표·달성률
+    var tr = function(r, cls, label){
+      var tgt = r.목표 != null ? man(r.목표) + srcMark(r) : (cls === 'sum' ? '<span class="chip na">미등록</span>' : '—');
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + (label || esc(r.이름)) + '</td><td class="r tnum">' + man(r.어제) + '</td><td class="r tnum">' + man(r.누적) + '</td>' +
+        '<td class="r tnum">' + tgt + '</td><td class="r">' + (r.목표 != null ? rateChip(r.달성률, el) : '') + '</td></tr>';
+    };
+    // 매출이 아직 없어도 합계 줄(목표)은 보인다 — 월초에 목표가 사라져 보이지 않게
+    var body = (sf.거래처.length
+      ? sf.거래처.map(function(x){ return tr(x, 'sub', '└ ' + esc(x.이름)); }).join('')
+      : '<tr><td colspan="5" class="note-in">이번 달 샐리필 매출이 아직 없습니다</td></tr>') + tr(sf.합계, 'sum');
+    _sally = sf; // "+ 일별" 팝업이 쓴다
+    return '<h3 class="sally-h">샐리필 <button type="button" class="plus-btn" onclick="openSally()" title="이번 달 일별 매출과 주문 내역 보기">+ 일별 보기</button></h3>' +
+      '<table class="t">' + head('거래처') + '<tbody>' + body + '</tbody></table>';
+  }
+
+  // 샐리필 일별 팝업 — 이번 달 1일 ~ 기준일. 일별 합계(거래처별 칸) + 주문 내역. 메일 캡처(?capture=1)에서는 버튼째 숨는다.
+  var _sally = null;
+  window.openSally = function(){
+    var sf = _sally; if (!sf) return;
+    var names = sf.거래처.map(function(x){ return x.이름; });
+    var dayHead = '<tr><th>날짜</th>' + names.map(function(n){ return '<th class="r">' + esc(n) + '</th>'; }).join('') + '<th class="r">수량</th><th class="r">합계</th></tr>';
+    var dayRows = sf.일별.length ? sf.일별.map(function(d){
+      return '<tr><td>' + esc(dayLabel(d.날짜)) + '</td>' + names.map(function(n){ return '<td class="r tnum">' + (d.거래처[n] ? won(d.거래처[n]) : '—') + '</td>'; }).join('') +
+        '<td class="r tnum">' + comma(d.수량) + '</td><td class="r tnum"><b>' + won(d.합계) + '</b></td></tr>';
+    }).join('') + '<tr class="sum"><td>합계</td>' + sf.거래처.map(function(x){ return '<td class="r tnum">' + won(x.누적) + '</td>'; }).join('') +
+      '<td class="r tnum">' + comma(sf.일별.reduce(function(a, d){ return a + d.수량; }, 0)) + '</td><td class="r tnum">' + won(sf.합계.누적) + '</td></tr>'
+      : '<tr><td colspan="' + (names.length + 3) + '" class="note-in">이번 달 매출이 아직 없습니다</td></tr>';
+    var itemRows = sf.내역.map(function(o){
+      // 상품명이 비고 색상 칸에만 이름이 들어온 품목(예: 하루명상 마인드 필로우)은 그 값을 상품명으로 보인다
+      var nm = o.상품명 || o.색상, col = o.상품명 ? o.색상 : '';
+      return '<tr><td>' + esc(dayLabel(o.날짜)) + '</td><td>' + esc(o.거래처) + '</td><td class="tnum">' + esc(o.품목코드) + '</td><td>' + esc(nm) + (col ? ' <span class="note-in">' + esc(col) + '</span>' : '') + '</td>' +
+        '<td class="r tnum">' + comma(o.수량) + '</td><td class="r tnum' + (o.금액 < 0 ? ' neg' : '') + '">' + won(o.금액) + '</td></tr>';
+    }).join('');
+    var box = document.getElementById('sallyPop');
+    box.querySelector('.pop-body').innerHTML =
+      '<h4>일별 매출</h4><div class="twrap"><table class="t">' + '<thead>' + dayHead + '</thead><tbody>' + dayRows + '</tbody></table></div>' +
+      (sf.내역.length ? '<h4>주문 내역 <span class="note-in">' + sf.내역.length + '건 · 반품은 음수</span></h4><div class="twrap"><table class="t"><thead><tr><th>날짜</th><th>거래처</th><th>품목코드</th><th>상품명</th><th class="r">수량</th><th class="r">금액</th></tr></thead><tbody>' + itemRows + '</tbody></table></div>' : '');
+    box.style.display = 'flex';
+  };
+  window.closeSally = function(){ document.getElementById('sallyPop').style.display = 'none'; };
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.closeSally(); });
+
+  // ── ② KPI ──
+  function kpiRows(list){
+    return list.map(function(x){
+      var unit = x.단위 === '%' ? '%' : x.단위 === '원' ? '원' : '';
+      var fmt = function(v){ return v == null ? null : unit === '%' ? v.toFixed(2) + '%' : unit === '원' ? won(v) : comma(v); };
+      var act = fmt(x.실적);
+      return '<tr><td>' + esc(x.지표) + '</td><td class="r tnum">' + (act == null ? '<span class="chip na">미입력</span>' : '<b>' + act + '</b>') + '</td>' +
+        '<td class="r tnum">' + (fmt(x.목표) || '—') + '</td><td class="r">' + rateChip(x.달성률) + '</td></tr>';
+    }).join('');
+  }
+  function paceBlock(p){
+    if (!p || !p.월목표) return '<p class="note">이번 달 목표가 등록되지 않아 진척을 낼 수 없습니다.</p>';
+    var sig = p.월말예상_달성률 >= 100 ? ['정상','up'] : p.월말예상_달성률 >= 90 ? ['주의','warn'] : ['위험','dn'];
+    var elapsed = p.집계일수 / p.월일수 * 100;
+    return '<div class="pace">' +
+      '<div class="k"><p class="kl">누적 순매출 / 월 목표</p><div class="kv tnum">' + man(p.누적순매출) + '</div><div class="kd tnum">목표 ' + man(p.월목표) + ' · ' + rateChip(p.달성률) + '</div></div>' +
+      '<div class="k"><p class="kl">페이스 대비 (' + p.집계일수 + '/' + p.월일수 + '일)</p><div class="kv tnum">' + (p.페이스대비 != null ? p.페이스대비.toFixed(1) + '%' : '—') + '</div><div class="kd tnum">기대 ' + man(p.페이스기대) + '</div></div>' +
+      '<div class="k"><p class="kl">월말 예상 착지</p><div class="kv tnum">' + man(p.월말예상) + '</div><div class="kd">목표의 ' + (p.월말예상_달성률 != null ? p.월말예상_달성률.toFixed(1) : '—') + '% <span class="chip ' + sig[1] + '">' + sig[0] + '</span></div></div>' +
+      '</div>' + bar(p.달성률, elapsed, p.달성률 >= elapsed ? 'var(--good)' : 'var(--bad)');
+  }
+  // 광고 — 매체별 어제·월 누적. 효율은 광고비 ÷ 온라인 매출(이카운트)로 보인다(매체 전환매출은 중복 포함이라 참고).
+  function renderAds(sec, onSales){
+    if (!sec) return '';
+    if (!sec.ok) return '<h3 class="sub-h">광고</h3>' + errBox(sec);
+    var a = sec.data;
+    if (!a.매체.length) return '<h3 class="sub-h">광고</h3><p class="note">어제·이번 달 광고 집계가 없습니다.</p>';
+    var tr = function(r, sum){
+      return '<tr' + (sum ? ' class="sum"' : '') + '><td>' + esc(r.매체) + '</td><td class="r tnum">' + won(r.어제광고비) + '</td><td class="r tnum">' + comma(r.클릭) + '</td>' +
+        '<td class="r tnum">' + (r.CPC != null ? won(r.CPC) : '—') + '</td><td class="r tnum">' + comma(r.전환) + '</td><td class="r tnum">' + man(r.전환매출) + '</td>' +
+        '<td class="r tnum">' + man(r.누적광고비) + '</td></tr>';
+    };
+    var ratio = function(spend, sales){ return sales > 0 ? (spend / sales * 100).toFixed(1) + '%' : '—'; };
+    var t = a.합계;
+    return '<h3 class="sub-h">광고 — 매체별 <span class="note-in">광고비 ÷ 온라인 매출: 어제 <b>' + ratio(t.어제광고비, onSales && onSales.어제) + '</b> · 월 누적 <b>' + ratio(t.누적광고비, onSales && onSales.누적) + '</b></span></h3>' +
+      '<div class="twrap"><table class="t"><thead><tr><th>매체</th><th class="r">어제 광고비</th><th class="r">클릭</th><th class="r">CPC</th><th class="r">전환</th><th class="r">전환매출(매체 집계)</th><th class="r">월 누적 광고비</th></tr></thead><tbody>' +
+      a.매체.map(function(r){ return tr(r, false); }).join('') + tr(t, true) + '</tbody></table></div>' +
+      '<p class="note">' + esc(a.기준) + ' · 광고비 비중의 매출은 이카운트 온라인 합계(공동구매 제외)입니다.</p>';
+  }
+
+  var adSec = null, onSales = null; // render() 가 채운다 — KPI 카드 안에 광고 표를 그릴 때 쓴다
+  function renderKpi(sec){
+    var h = '<div class="card"><div class="card-head"><h2><span class="no">2</span> 자사몰 / 스마트스토어 KPI · 광고</h2><span class="sub">어제 실적 vs 일 목표(월 목표 ÷ 일수) · 일일 퍼널 점검 화면과 같은 계산</span></div>';
+    if (!sec.ok) return h + errBox(sec) + renderAds(adSec, onSales) + '</div>'; // KPI 가 실패해도 광고 표는 따로 보인다
+    var k = sec.data, warn = [];
+    if (!k.mall.입력.이프두) warn.push('자사몰 상품조회·장바구니·주문서작성(이프두) 미입력');
+    if (!k.ss.입력.유입) warn.push('스마트스토어 유입(비즈어드바이저) 미입력');
+    h += '<div class="two">' +
+      '<div class="ch"><h3>자사몰</h3>' + paceBlock(k.mall.월진척) +
+        '<table class="t"><thead><tr><th>지표</th><th class="r">어제 실적</th><th class="r">일 목표</th><th class="r">달성률</th></tr></thead><tbody>' + kpiRows(k.mall.지표) + '</tbody></table></div>' +
+      '<div class="ch"><h3>스마트스토어</h3>' + paceBlock(k.ss.월진척) +
+        '<table class="t"><thead><tr><th>지표</th><th class="r">어제 실적</th><th class="r">일 목표</th><th class="r">달성률</th></tr></thead><tbody>' + kpiRows(k.ss.지표) + '</tbody></table></div>' +
+      '</div>';
+    h += renderAds(adSec, onSales);
+    h += '<p class="note">' + (warn.length ? '⚠ ' + esc(warn.join(' · ')) + ' — MD 입력 후 다시 계산하면 채워집니다. ' : '') +
+      '구매전환율·구매율·객단가·건당 매출의 목표는 기준월 벤치마크입니다. 순매출: 자사몰 = Cafe24 통계, 스토어 = 이카운트 원장(반품 차감).</p>';
+    return h + '</div>';
+  }
+
+  // ── ③ 오프라인 좌수 ──
+  function renderJwasu(sec){
+    var h = '<div class="card"><div class="card-head"><h2><span class="no">3</span> 오프라인 좌수 일일 체크</h2>';
+    if (!sec.ok) return h + '</div>' + errBox(sec) + '</div>';
+    var j = sec.data, el = j.월경과율;
+    h += '<span class="sub">월 경과 ' + el.toFixed(0) + '% — 달성률이 경과율보다 낮으면 페이스 미달</span></div>';
+    // 매장 매출·목표는 맨 위 "어제 한눈에"에 있다 — 여기는 좌수(상담 인원)만. 좌수당 매출 = 월 누적 매출 ÷ 월 누적 좌수
+    var row = function(r, sum){
+      var per = r.누적좌수 ? r.누적매출 / r.누적좌수 : null;
+      return '<tr' + (sum ? ' class="sum"' : '') + '><td>' + esc(r.매장) + '</td><td class="r tnum">' + comma(r.인원) + '</td>' +
+        '<td class="r tnum"><b>' + comma(r.어제좌수) + '</b></td><td class="r tnum">' + comma(r.어제주문) + '</td>' +
+        '<td class="r tnum">' + comma(r.누적좌수) + ' / ' + comma(r.목표좌수) + '</td><td class="r">' + rateChip(r.좌수달성률, el) + '</td>' +
+        '<td class="r tnum">' + (per != null ? won(per) : '—') + '</td></tr>';
+    };
+    h += '<div class="twrap"><table class="t"><thead><tr><th>매장</th><th class="r">인원</th><th class="r">어제 좌수</th><th class="r">어제 주문</th>' +
+      '<th class="r">월 누적 좌수 / 목표</th><th class="r">좌수 달성률</th><th class="r">좌수당 매출(월)</th></tr></thead><tbody>' +
+      j.매장.filter(function(r){ return r.인원 > 0; }).map(function(r){ return row(r, false); }).join('') + row(j.합계, true) + '</tbody></table></div>';
+    h += renderStaff(j.직원 || [], el);
+    h += '<p class="note">' + esc(j.기준) + ' · 매장 매출의 목표 대비는 맨 위 "어제 한눈에"에 있습니다.</p>';
+    return h + '</div>';
+  }
+
+  // 직원별 좌수 — 메일 그림이 길어지지 않게 두 칸으로 나눈다(앞 절반 | 뒤 절반, 매장 순서 유지)
+  function renderStaff(list, el){
+    if (!list.length) return '';
+    var head = '<thead><tr><th>매장</th><th>직원</th><th class="r">어제</th><th class="r">월 누적 / 목표</th><th class="r">달성률</th></tr></thead>';
+    var tr = function(r, i, arr){
+      var sameStore = i > 0 && arr[i - 1].매장 === r.매장; // 같은 매장이 이어지면 매장명은 첫 줄에만
+      return '<tr><td>' + (sameStore ? '' : esc(r.매장)) + '</td><td>' + esc(r.직원) + (r.역할 ? ' <span class="note-in">' + esc(r.역할) + '</span>' : '') + '</td>' +
+        '<td class="r tnum"><b>' + comma(r.어제좌수) + '</b></td><td class="r tnum">' + comma(r.누적좌수) + ' / ' + comma(r.목표좌수) + '</td><td class="r">' + rateChip(r.달성률, el) + '</td></tr>';
+    };
+    var half = Math.ceil(list.length / 2), a = list.slice(0, half), b = list.slice(half);
+    var table = function(rows){ return '<table class="t">' + head + '<tbody>' + rows.map(tr).join('') + '</tbody></table>'; };
+    return '<h3 class="sub-h">직원별 좌수 <span class="note-in">' + list.length + '명 · 월 누적 좌수 큰 순(매장 순서는 위 표와 같음)</span></h3>' +
+      '<div class="two staff"><div>' + table(a) + '</div><div>' + (b.length ? table(b) : '') + '</div></div>';
+  }
+
+  // ── ④ 재고 주의 (MD 양식) ──
+  function renderStock(sec){
+    var h = '<div class="card"><div class="card-head"><h2><span class="no">4</span> 재고 현황 — 주의 품목</h2>';
+    if (!sec.ok) return h + '</div>' + errBox(sec) + '</div>';
+    var s = sec.data;
+    h += '<span class="sub">* 주의 상품만 리스트업 · 주의 <b>' + s.주의.length + '</b>품목 · 품절 ' + s.품절.건수 + '품목' +
+      (s.재고갱신 ? ' · 재고 ' + timeKST(s.재고갱신) + ' 기준' : '') + '</span></div>';
+    if (!s.주의.length) h += '<p class="note">3개월 안에 재고가 모자랄 품목이 없습니다.</p>';
+    else h += '<div class="twrap"><table class="t stock"><thead><tr><th>품목코드</th><th>상품명</th><th>색상명</th><th>현재고</th><th>3개월예상판매량</th><th>3개월이후 재고수량</th><th>발주판단</th></tr></thead><tbody>' +
+      s.주의.map(function(x){
+        var inner = x.분류 === '이너';
+        return '<tr><td class="tnum">' + esc(x.품목코드) + '</td><td class="l">' + esc(x.상품명) + (inner ? '<span class="inner-tag">전 등급 합산</span>' : '') + '</td>' +
+          '<td class="l">' + esc(inner ? '' : x.색상명) + '</td><td class="tnum">' + comma(x.현재고) + '</td><td class="tnum">' + comma(x.예상판매_3개월) + '</td>' +
+          '<td class="tnum neg">' + comma(x.재고_3개월후) + '</td><td class="judge">주의</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    if (s.품절.건수) h += '<div class="soldout"><b>품절</b> (현재고 0 이하인데 최근 90일 판매 있음) <b>' + s.품절.건수 + '</b>품목 — 수요 큰 순: ' +
+      s.품절.수요상위.slice(0, 8).map(function(x){ return esc(x.상품명 + (x.색상명 && x.분류 !== '이너' ? ' ' + x.색상명 : '')) + ' <span class="tnum">' + comma(x.예상판매_3개월) + '</span>'; }).join(' · ') +
+      (s.품절.건수 > 8 ? ' 외' : '') + '</div>';
+    h += '<p class="note">' + esc(s.기준.예상) + ' · 판매 기준: ' + esc(s.기준.판매) + ' · ' + esc(s.기준.판매기간) + '<br>' + esc(s.기준.묶음) + ' · 발주 기준 변경은 MD 결정 사항입니다.</p>';
+    return h + '</div>';
+  }
+
+  function render(d){
+    document.getElementById('hd-date').textContent = dayLabel(d.기준일) + ' 기준';
+    document.getElementById('hd-fresh').innerHTML = '생성 ' + esc(timeKST(d.생성시각)) + ' · 어제까지 확정된 데이터' + (d.캐시 ? ' · 10분 캐시' : '');
+    adSec = d.광고 || null;
+    onSales = d.매출 && d.매출.ok ? d.매출.data.온라인.합계 : null;
+    document.getElementById('root').innerHTML = renderTop(d) + renderKpi(d.kpi) + renderJwasu(d.좌수) + renderStock(d.재고);
+    document.getElementById('f-date').value = d.기준일;
+    document.title = '일일 모니터링 ' + d.기준일 + ' · 요기보';
+  }
+
+  function load(fresh){
+    var p = new URLSearchParams();
+    ['date','basis'].forEach(function(k){ if (qs.get(k)) p.set(k, qs.get(k)); });
+    if (fresh || qs.get('fresh') === '1') p.set('fresh', '1');
+    document.body.removeAttribute('data-ready');
+    document.getElementById('hd-fresh').textContent = '불러오는 중…';
+    return fetch('/api/daily-mail?' + p.toString(), { cache:'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (!j.ok) throw new Error(j.error || '데이터를 불러오지 못했습니다');
+        render(j);
+      })
+      .catch(function(e){
+        document.getElementById('root').innerHTML = '<div class="card"><div class="err">' + esc(e.message) + '</div></div>';
+        document.getElementById('hd-fresh').textContent = '불러오기 실패';
+        document.body.setAttribute('data-error', '1');
+      })
+      .then(function(){ document.body.setAttribute('data-ready', '1'); });
+  }
+
+  // 조작줄 — 주소를 바꿔 다시 불러온다(새로 고침해도 같은 화면)
+  document.getElementById('f-basis').value = qs.get('basis') || '';
+  function go(fresh){
+    var d = document.getElementById('f-date').value, b = document.getElementById('f-basis').value;
+    if (d) qs.set('date', d); else qs.delete('date');
+    if (b) qs.set('basis', b); else qs.delete('basis');
+    qs.delete('fresh');
+    history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs.toString() : ''));
+    load(fresh);
+  }
+  document.getElementById('f-go').onclick = function(){ go(false); };
+  document.getElementById('f-fresh').onclick = function(){ go(true); };
+  load(false);
+})();
+</script>
+</body>
+</html>

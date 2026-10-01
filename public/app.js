@@ -2720,13 +2720,15 @@ function openFunnelUpload(mode) {
   const tg = _funnelMode === 'targets';
   el('fnTitle').textContent = tg ? '전사 월 목표 등록' : '일일 퍼널 데이터 등록';
   el('fnSub').textContent = tg
-    ? '채널 × 연월 × 순매출목표 · 매출보고·퍼널 목표가 이 값으로 계산됩니다'
+    ? '자사몰 · 스마트스토어 · 외부 몰별 월 목표 · 매출보고·퍼널·모니터링 메일 목표가 이 값으로 계산됩니다'
     : '이프두 3단계만 올리면 됩니다 · 나머지는 매일 자동으로 채워집니다';
   el('fnTpl').setAttribute('href', tg ? '/api/funnel/template?only=targets' : '/api/funnel/template');
   el('fnGuide').innerHTML = tg
-    ? '<b>채널 · 연월 · 순매출목표</b> 세 칸이면 됩니다<br>'
-      + '<span class="muted">여기 넣은 값이 <b>매출보고의 월 목표</b>가 되고, 퍼널 단계별 목표(유입·상품조회·장바구니·주문서·주문완료)도 여기서 역산합니다. '
-      + '적지 않은 달은 그대로 남습니다. 반기 단위로 미리 넣어두셔도 됩니다.</span>'
+    ? '<b>예제 양식에 노란 칸(순매출목표)만 채워 올리시면 됩니다</b><br>'
+      + '<span class="muted">양식에는 이번 달 기준으로 <b>자사몰 · 스마트스토어 · 지금 운영 중인 외부 몰</b>(최근 3개월 매출 있는 곳)이 미리 들어 있고, '
+      + '이미 등록된 목표와 최근 3개월 월평균 매출이 같이 적혀 있습니다. 목표를 안 정할 몰은 비워 두세요 — 빈 줄은 반영하지 않습니다. '
+      + '자사몰·스마트스토어 값은 <b>매출보고의 월 목표</b>(퍼널 단계별 목표도 여기서 역산), 외부 몰 값은 <b>몰별 목표</b>로 저장됩니다. '
+      + '적지 않은 달·몰은 그대로 남습니다.</span>'
     : '<b>입력하실 것은 3개뿐입니다</b> — 상품조회 · 장바구니조회 · 주문서작성<br>'
       + '<span class="muted">방문시작 · 주문완료 · 순매출 · 스토어 매출은 시스템이 자동으로 가져옵니다(스토어 유입수는 📈 스토어 유입 입력). '
       + '이프두 표를 컬럼 지우지 말고 그대로 붙여넣으셔도 됩니다 — 겹치는 값은 대조만 하고 저장하지 않습니다.</span>';
@@ -2797,9 +2799,11 @@ async function uploadFunnelExcel(apply) {
           <ul style="margin:4px 0 0 16px">${(p.대조 || []).slice(0, 6).map((x) => `<li>${ae(x.date)} ${ae(x.항목 || x.비고 || '')} — 이프두 ${num(x.이프두 || 0)} vs 시스템 ${num(x.시스템 || 0)} <b>(${x.차이_pct > 0 ? '+' : ''}${x.차이_pct}%)</b></li>`).join('')}</ul>
           <div class="muted" style="margin-top:4px">${ae(p.대조요약 || '')}</div></div>`
       : `<div class="muted" style="font-size:12px;margin-top:8px">시스템 값과 대조: ${ae(p.대조요약 || '이상 없음')}</div>`;
-    const tgt = (p.월목표변경 || []).length
+    const tgWarn = (p.월목표경고 || []).length
+      ? `<ul style="margin:4px 0 0 16px;color:#b45309">${p.월목표경고.map((w) => `<li>⚠ ${ae(w)}</li>`).join('')}</ul>` : '';
+    const tgt = (p.월목표변경 || []).length || tgWarn
       ? `<div style="margin-top:10px;font-size:12px"><b>월 목표 변경</b> <span class="muted">(매출보고 목표도 함께 바뀝니다)</span>
-          <ul style="margin:4px 0 0 16px">${p.월목표변경.map((x) => `<li>${ae(x.연월)} ${ae(x.채널)} — ${num(x.이전)} → <b>${num(x.변경)}</b></li>`).join('')}</ul></div>`
+          <ul style="margin:4px 0 0 16px">${(p.월목표변경 || []).map((x) => `<li>${ae(x.연월)} ${ae(x.채널)} — ${num(x.이전)} → <b>${num(x.변경)}</b></li>`).join('')}</ul>${tgWarn}</div>`
       : '';
     const chg = (p.수정상세 || []).length
       ? `<div style="margin-top:8px;font-size:12px"><b>수정되는 날짜</b> <span class="muted">(상품조회/장바구니/주문서)</span>

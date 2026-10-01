@@ -53,6 +53,27 @@ const funnelDaily = require('./lib/funnelDaily');   // 일일 퍼널 — 화면 
 const funnelExcel = require('./lib/funnelExcel');   // 퍼널 엑셀 양식·파싱
 const funnelIngest = require('./lib/funnelIngest'); // 퍼널 검증·미리보기·적재·되돌리기
 const funnelAi = require('./lib/funnelAi');         // 퍼널 일일 AI 분석(Claude) — 날짜별 DB 저장, 저장본 재사용
+const alerts = require('./lib/alerts');             // 경보 스캔("오늘 챙길 것") — dash 홈 카드가 /api/export/alerts 로 받는다
+
+// 경보 스캔 10분 캐시 — 원천 여러 곳(원장·광고·게시판·재고 API)을 도는 무거운 조회라 dash 홈을 열 때마다 돌리지 않는다.
+let _alertsCache = null; // { at, data }
+async function alertsCached(fresh) {
+  if (!fresh && _alertsCache && Date.now() - _alertsCache.at < 10 * 60 * 1000) return { ..._alertsCache.data, 캐시: true };
+  const data = await alerts.scan();
+  _alertsCache = { at: Date.now(), data };
+  return { ...data, 캐시: false };
+}
+const dailyMail = require('./lib/dailyMail');       // 일일 모니터링 메일 페이지(dashboards/daily_mail.html) 데이터 — KPI·좌수·재고
+// 메일 페이지 10분 캐시 — 날짜·판매기준별. 캡처 직전 fresh=1 로 한 번 새로 만든다.
+const _dailyMailCache = new Map(); // key → { at, data }
+async function dailyMailCached(date, basis, fresh) {
+  const key = `${date || ''}|${basis || ''}`;
+  const hit = _dailyMailCache.get(key);
+  if (!fresh && hit && Date.now() - hit.at < 10 * 60 * 1000) return { ...hit.data, 캐시: true };
+  const data = await dailyMail.build({ date, basis });
+  _dailyMailCache.set(key, { at: Date.now(), data });
+  return { ...data, 캐시: false };
+}
 const aiChats = require('./lib/aiChats');
 
 const PORT = Number(process.env.PORT || 5200);
@@ -174,7 +195,7 @@ async function handle(req, res) {
 
   // ── 외부 제공용 데이터 export (오너/외부 분석자) ─────────────────────────────
   //   EXPORT_TOKEN 환경변수 설정 시 Bearer 인증 필수. 개인정보 없는 집계 원장만 제공.
-  if (u.pathname === '/api/export' || u.pathname === '/api/export/catalog') {
+  if (u.pathname === '/api/export' || u.pathname === '/api/export/catalog' || u.pathname === '/api/export/alerts') {
     // 토큰 비교 — 복사 시 붙는 앞뒤 공백/줄바꿈은 양쪽 모두 trim 해서 비교(흔한 설정 실수 방지)
     const tok = String(process.env.EXPORT_TOKEN || '').trim();
     const got = String(req.headers['authorization'] || '').trim().replace(/^Bearer\s+/i, '').trim();
@@ -186,6 +207,11 @@ async function handle(req, res) {
       });
     }
     if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });
+    // 경보 스캔 — dash 홈 "오늘 챙길 것" 카드. fresh=1 이면 캐시를 건너뛰고 다시 스캔.
+    if (u.pathname === '/api/export/alerts') {
+      try { return sendJson(res, 200, { ok: true, ...(await alertsCached(u.searchParams.get('fresh') === '1')) }); }
+      catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+    }
     try {
       const dataset = u.searchParams.get('dataset') || '';
       const data = await dataExport.fetchDataset(dataset, {
@@ -592,6 +618,22 @@ async function handle(req, res) {
     try { const b = await readBody(req); await mallPromos.deletePromotion(b.id); return sendJson(res, 200, { ok: true }); }
     catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
+  // ── 일일 모니터링 메일 페이지 ─────────────────────────────────────────────
+  //   dashboards/daily_mail.html 이 부른다. 기본 = 어제. 어제일 때만 맨 위 경보("오늘 챙길 것")를 붙인다(경보 스캔은 어제 기준).
+  //   ?basis=online 이면 재고 예상판매를 온라인만으로(기본은 온+오프 — stockWatch.DEFAULT_BASIS).
+  if (u.pathname === '/api/daily-mail') {
+    try {
+      const fresh = u.searchParams.get('fresh') === '1';
+      const date = u.searchParams.get('date') || '';
+      const basis = u.searchParams.get('basis') || '';
+      const yday = new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+      const [data, al] = await Promise.all([
+        dailyMailCached(date, basis, fresh),
+        !date || date === yday ? alertsCached(fresh).catch((e) => ({ error: String(e.message) })) : Promise.resolve(null),
+      ]);
+      return sendJson(res, 200, { ok: true, ...data, 경보: al });
+    } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  }
   // ── 일일 퍼널 점검 ────────────────────────────────────────────────────────
   //   화면 데이터는 우리 DB(방문·주문·순매출·스토어 유입/매출)에 MD 입력분(상품조회·장바구니·주문서)을 얹어 만든다.
   //   업로드는 **날짜 단위 덮어쓰기**(전체 교체 아님) — 이번 주치만 올려도 지난 데이터가 남는다.
@@ -608,10 +650,14 @@ async function handle(req, res) {
   if (u.pathname === '/api/funnel/template') {
     try {
       const only = u.searchParams.get('only') || ''; // only=targets → 월 목표만
-      const buf = await funnelExcel.template({ only });
+      // 월 목표 양식은 자사몰·스마트스토어 + 지금 운영 중인 외부 몰을 미리 채워 준다(기본 = 이번 달, ?ym=YYYY-MM 로 다른 달)
+      const ymQ = u.searchParams.get('ym') || '';
+      const ym = /^\d{4}-\d{2}$/.test(ymQ) ? ymQ : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+      const rows = only === 'targets' ? await funnelIngest.templateRows(ym).catch(() => null) : null;
+      const buf = await funnelExcel.template({ only, rows, ym });
       res.writeHead(200, {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${only === 'targets' ? 'target-template' : 'funnel-template'}.xlsx"`,
+        'Content-Disposition': `attachment; filename="${only === 'targets' ? `target-template-${ym}` : 'funnel-template'}.xlsx"`,
       });
       return res.end(buf);
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

@@ -621,6 +621,19 @@ async function handle(req, res) {
   // ── 일일 모니터링 메일 페이지 ─────────────────────────────────────────────
   //   dashboards/daily_mail.html 이 부른다. 기본 = 어제. 어제일 때만 맨 위 경보("오늘 챙길 것")를 붙인다(경보 스캔은 어제 기준).
   //   ?basis=online 이면 재고 예상판매를 온라인만으로(기본은 온+오프 — stockWatch.DEFAULT_BASIS).
+  // 원장별 마지막 적재 시각 — 서버 PC 메일 발송이 "적재 사이 빈 시간"을 고를 때 본다(캐시 없음)
+  if (u.pathname === '/api/daily-mail/status') {
+    try { return sendJson(res, 200, { ok: true, ...(await dailyMail.loadStatus()) }); }
+    catch (err) { return sendJson(res, 500, { ok: false, error: String(err.message) }); }
+  }
+  // 상단 타일만 기간으로 — 화면의 "기간 보기"(시작~종료). 메일 캡처는 기준일 하루라 /api/daily-mail 안의 타일을 쓴다.
+  if (u.pathname === '/api/daily-mail/tiles') {
+    try {
+      const s = u.searchParams.get('start') || '', e = u.searchParams.get('end') || s;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e)) return sendJson(res, 400, { ok: false, error: 'start·end 는 YYYY-MM-DD' });
+      return sendJson(res, 200, { ok: true, ...(await dailyMail.tiles(s, e)) });
+    } catch (err) { return sendJson(res, 400, { ok: false, error: String(err.message) }); }
+  }
   if (u.pathname === '/api/daily-mail') {
     try {
       const fresh = u.searchParams.get('fresh') === '1';

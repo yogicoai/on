@@ -835,7 +835,10 @@ async function handle(req, res) {
 
   // ── AI 판매 분석 (Claude API, mkboard 방식) — GET 으로 두어 읽기전용 배포에서도 동작 ──
   if (u.pathname === '/api/ai/status') {
-    return sendJson(res, 200, { ok: true, enabled: ai.enabled(), model: ai.model() });
+    const out = { ok: true, enabled: ai.enabled(), provider: ai.provider(), model: ai.model() };
+    // ?check=1 — 키가 실제로 유효한지까지(토큰 비용 없음) + AI 분석 카드가 쓰는 모델
+    if (u.searchParams.get('check') === '1') Object.assign(out, await ai.checkKey(), { funnel_models: { advice: funnelAiCard.MODEL(), detail: funnelAiCard.MODEL_DETAIL() } });
+    return sendJson(res, 200, out);
   }
   if (u.pathname === '/api/ai/ask') {
     const q = u.searchParams.get('q') || '';

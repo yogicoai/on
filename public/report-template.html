@@ -146,7 +146,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="brand-sub">요기보코퍼레이션 · 내부 일일 매출 보고용</div>
     </div>
   </div>
-  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><a href="/?openpt=1" class="btn" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📄 프로모션 등록</a><a href="/?opentg=1" class="btn" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</a><a href="/?openfn=1" class="btn" title="이프두 퍼널 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</a><a href="/?openbiz=1" class="btn" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 퍼널 점검에 반영" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">📈 스토어 유입 입력</a>
+  <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><button type="button" class="btn" onclick="openInputModal('promo')" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">📄 프로모션 등록</button><button type="button" class="btn" onclick="openInputModal('targets')" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</button><button type="button" class="btn" onclick="openInputModal('funnel')" title="이프두 퍼널 표(방문시작·상품조회·장바구니·주문서작성·주문완료)를 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</button><button type="button" class="btn" onclick="openInputModal('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 퍼널 점검에 반영" style="display:inline-flex;align-items:center;gap:4px">📈 스토어 유입 입력</button>
     <label>기준일</label>
     <select id="selDate"></select>
     <label style="margin-left:8px">채널</label>
@@ -10525,4 +10525,23 @@ init();
 </script>
 
 
+<script>
+// 입력 창(프로모션 등록 · 목표 설정 · 퍼널 입력 · 스토어 유입) — 판매분석으로 넘어가지 않고 이 페이지 안에서 띄운다(2026-10-02).
+//   창은 /input-modals.js 가 만든다(판매분석과 같은 창). 아래 퍼널 점검 탭(iframe)의 입력 버튼도 이 함수를 찾아 쓴다.
+var INPUT_MODALS_SRC = '/input-modals.js?v=20261002a', _inputModalsLoading = null;
+function loadInputModals(){
+  if (window.InputModals) return Promise.resolve(window.InputModals);
+  if (!_inputModalsLoading) _inputModalsLoading = new Promise(function(ok, fail){
+    var sc = document.createElement('script'); sc.src = INPUT_MODALS_SRC;
+    sc.onload = function(){ window.InputModals ? ok(window.InputModals) : fail(new Error('입력 창을 불러오지 못했습니다')); };
+    sc.onerror = function(){ _inputModalsLoading = null; fail(new Error('입력 창(input-modals.js)을 불러오지 못했습니다')); };
+    document.head.appendChild(sc);
+  });
+  return _inputModalsLoading;
+}
+function openInputModal(kind){
+  loadInputModals().then(function(m){ m.open(kind); }).catch(function(e){ alert(e.message + ' — 새로고침 후 다시 눌러 주세요.'); });
+}
+loadInputModals().catch(function(){});
+</script>
 </body></html>

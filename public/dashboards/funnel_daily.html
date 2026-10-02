@@ -146,10 +146,10 @@
       <h1>일일 퍼널 점검 · <b>자사몰 / 스마트스토어</b></h1>
       <p class="fresh" id="fresh"></p>
     </div>
-    <!-- 입력 버튼 — 입력 창은 판매분석 대시보드에 있다(openInput 참고) -->
+    <!-- 입력 버튼 — 입력 창은 /input-modals.js (openInput 참고) -->
     <div class="acts">
       <button type="button" class="primary" onclick="runAiAnalysis(false)" title="보고 있는 날(기간이면 마지막 날)의 자사몰·스마트스토어 퍼널을 Claude가 분석 — 한 번 분석한 날은 저장돼 다시 열어도 비용이 들지 않습니다">🤖 AI 분석</button>
-      <button type="button" onclick="openInput('fn')" title="이프두 3단계(상품조회·장바구니·주문서작성)를 엑셀로 등록">📊 퍼널 입력</button>
+      <button type="button" onclick="openInput('fn')" title="이프두 퍼널 표(방문시작·상품조회·장바구니·주문서작성·주문완료)를 엑셀로 등록">📊 퍼널 입력</button>
       <button type="button" onclick="openInput('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 반영">📈 스토어 유입 입력</button>
     </div>
     <div class="seg" role="tablist"><button role="tab" aria-selected="true" data-ch="mall">자사몰</button><button role="tab" aria-selected="false" data-ch="ss">스마트스토어</button></div>
@@ -164,13 +164,13 @@
     <div style="padding:0 16px 16px;font-size:13px;line-height:1.7;border-top:1px solid var(--line,#dfe4ec)">
       <p style="margin:12px 0 8px"><b>자동으로 채워지는 것</b> — 손대실 필요 없습니다. 매일 갱신됩니다.</p>
       <ul style="margin:0 0 14px 18px;padding:0">
-        <li>자사몰 <b>방문시작 · 주문완료 · 순매출</b></li>
+        <li>자사몰 <b>순매출</b></li>
         <li>스마트스토어 <b>매출</b></li>
         <li><b>월 목표</b> — 매출보고와 같은 값을 씁니다</li>
       </ul>
       <p style="margin:0 0 8px"><b>MD가 넣어주셔야 하는 것</b></p>
       <ul style="margin:0 0 14px 18px;padding:0">
-        <li>이프두의 <b>상품조회 · 장바구니조회 · 주문서작성</b> → 이 화면 위 <b>[📊 퍼널 입력]</b></li>
+        <li>이프두의 <b>방문시작 · 상품조회 · 장바구니조회 · 주문서작성 · 주문완료</b> → 이 화면 위 <b>[📊 퍼널 입력]</b> — 아직 안 올린 날의 방문시작·주문완료는 Cafe24 값으로 채워 둡니다</li>
         <li>스마트스토어 <b>유입수</b>(비즈어드바이저) → 이 화면 위 <b>[📈 스토어 유입 입력]</b> — 비즈어드바이저 화면에서 복사한 cURL을 붙여넣으면 일별 × 채널 유입수를 가져옵니다</li>
       </ul>
       <p style="margin:0 0 8px"><b>그날 분석이 필요할 때</b> — 이 화면 위 <b>[🤖 AI 분석]</b></p>
@@ -181,14 +181,14 @@
       <p style="margin:0 0 8px"><b>퍼널 입력 올리는 방법</b></p>
       <ol style="margin:0 0 14px 18px;padding:0">
         <li>이 화면 위 <b>[📊 퍼널 입력]</b>(또는 판매분석 대시보드 상단) → <b>⤓ 예제 양식 받기</b></li>
-        <li>이프두에서 받은 표를 <b>컬럼 지우지 말고 그대로 붙여넣기</b> (방문시작·주문완료 칸도 그대로 두셔도 됩니다)</li>
+        <li>이프두에서 받은 표를 <b>컬럼 지우지 말고 그대로 붙여넣기</b> (방문시작·주문완료도 이 값으로 계산합니다)</li>
         <li>업로드 → <b>신규/수정/변동없음</b>과 시스템 값 대조 결과를 먼저 확인 → <b>[이대로 반영하기]</b></li>
       </ol>
       <p style="margin:0 0 8px"><b>알아두실 것</b></p>
       <ul style="margin:0 0 4px 18px;padding:0">
         <li><b>파일에 있는 날짜만 덮어씁니다.</b> 이번 주치만 올리셔도 지난 데이터는 그대로 남습니다. 잘못 올리셨으면 <b>되돌리기</b>가 됩니다.</li>
-        <li>이프두 <b>방문시작</b>과 시스템 방문수는 정의가 달라 값이 다릅니다(실측 약 0.90배, 날에 따라 ±20%).
-            화면 계산은 <b>시스템 값</b>으로 하고, 올려주신 이프두 값은 <b>대조해서 차이만 표시</b>합니다. 차이가 계속 벌어지면 목표 산출 기준을 다시 맞춰야 한다는 신호입니다.</li>
+        <li>이프두 <b>방문시작</b>과 시스템(Cafe24) 방문수는 정의가 달라 값이 다릅니다(실측 약 0.90배, 날에 따라 ±20%).
+            퍼널 목표가 이프두 기준으로 정해져 있어 <b>화면 계산은 이프두 값</b>으로 합니다. 이프두를 아직 안 올린 날만 Cafe24 값으로 채우고, 위쪽에 며칠인지 표시합니다.</li>
         <li><b>장바구니 → 주문서 전환율이 100%를 넘을 수 있습니다.</b> 장바구니를 거치지 않고 바로구매로 주문서에 진입한 경우가 포함되기 때문이며, 오류가 아닙니다.</li>
         <li>순매출은 <b>취소·반품이 빠진 금액</b>이고, 공동구매는 외부채널로 분류되어 자사몰에 포함되지 않습니다.</li>
       </ul>
@@ -461,7 +461,10 @@ function renderMain(){
     }
     diag='<div class="diag"><h4>🔍 병목 진단'+(single?' <span class="chip warn" style="vertical-align:1px">하루 표본 — 참고용</span>':'')+'</h4><p>'+msg+'</p><p><b>액션 방향:</b> '+act2+'</p></div>';
   }
-  out.innerHTML=h+warnNote+diag;
+  // 자사몰 방문시작·주문완료는 이프두 값 — 아직 안 올라온 날만 Cafe24 값으로 채웠다(목표는 이프두 기준이라 알린다)
+  var sysD = ch==='mall' ? (CFG.mallSysDates||[]).filter(function(d){return d>=a&&d<=b;}) : [];
+  var sysNote = sysD.length ? '<div class="note" style="border-left-color:var(--warn)"><b>'+sysD.length+'일</b>은 이프두가 아직 올라오지 않아 방문시작·주문완료를 Cafe24 값으로 채웠습니다'+(sysD.length<=5?' ('+sysD.map(function(d){return d.slice(5).replace('-','.');}).join(', ')+')':'')+' — 이프두보다 10~20% 많게 나옵니다. [📊 퍼널 입력]으로 올리면 바뀝니다.</div>' : '';
+  out.innerHTML=sysNote+h+warnNote+diag;
 }
 
 // ── ② 월 진척 (MTD)
@@ -610,15 +613,16 @@ function showLoadError(msg){
   fetch('/api/funnel/data').then(function(r){return r.json();}).then(function(j){
     if(!j||!j.ok) throw new Error((j&&j.error)||'서버 응답 오류');
     MALL=j.mall||[]; SS=j.ss||[]; CFG=j.cfg||CFG; buildNetmap();
-    if(!MALL.length){ showLoadError('퍼널 데이터가 아직 없습니다. 판매분석 대시보드의 [📊 퍼널 입력]에서 엑셀을 올려주세요.'); return; }
+    if(!MALL.length){ showLoadError('퍼널 데이터가 아직 없습니다. 이 화면 위 [📊 퍼널 입력]에서 엑셀을 올려주세요.'); return; }
     renderAll();
   }).catch(function(e){ showLoadError(e.message+' — 잠시 후 새로고침하시거나 온라인팀에 알려주세요.'); });
 })();
 
 // ── 부모(대시보드)에 내 높이를 알린다 — iframe 안에서 스크롤바가 생기거나 여백이 남지 않게.
 //   탭 전환·기간 변경·안내 접기/펴기로 길이가 바뀌므로 ResizeObserver 로 계속 통보한다.
-// 입력 버튼 — 입력 창은 판매분석 대시보드(app.js)에 있다. 대시보드 안(iframe)이면 부모 창의 함수를 바로 부르고,
-//   매출보고 등 다른 곳에서 열렸으면 대시보드로 이동하면서 창을 연다(/?openfn=1 · /?openbiz=1 — 연 뒤 주소는 정리됨).
+// 입력 버튼 — 입력 창은 /input-modals.js (판매분석·일일매출보고와 같은 창).
+//   판매분석·일일매출보고 안(iframe)이면 부모 창에 띄워 화면 전체 위에 뜨게 하고, 혼자 열렸으면 이 페이지 안에서 띄운다.
+//   예전엔 부모에 창이 없으면 판매분석(/?openfn=1)으로 넘어갔다 — 이제 어디서든 넘어가지 않는다(2026-10-02 사용자 요청).
 // AI 분석 — 보고 있는 날(단일 날짜면 그날, 기간이면 마지막 날). 서버가 저장본이 있으면 그대로 주고(무료),
 //   없을 때만 Claude 로 만들어 DB에 저장한다. regenerate=true 는 "데이터가 바뀐 날"에만 새로 만든다.
 window.runAiAnalysis = function(regenerate){
@@ -642,15 +646,24 @@ window.runAiAnalysis = function(regenerate){
 };
 
 window.openInput = function(kind){
+  var k = kind === 'fn' ? 'funnel' : 'biz';
   try {
     var p = window.parent;
     if (p && p !== window) {
-      if (kind === 'fn' && typeof p.openFunnelUpload === 'function') { p.openFunnelUpload('funnel'); return; }
-      if (kind === 'biz' && typeof p.openBizInflow === 'function') { p.openBizInflow(); return; }
+      if (typeof p.openInputModal === 'function') { p.openInputModal(k); return; }
+      if (p.InputModals) { p.InputModals.open(k); return; }
+      if (k === 'funnel' && typeof p.openFunnelUpload === 'function') { p.openFunnelUpload('funnel'); return; }
+      if (k === 'biz' && typeof p.openBizInflow === 'function') { p.openBizInflow(); return; }
     }
-  } catch (e) {}
-  window.top.location.href = kind === 'fn' ? '/?openfn=1' : '/?openbiz=1';
+  } catch (e) {} // 다른 사이트 안(dash 등)이면 부모에 손댈 수 없다 → 아래에서 이 페이지 안에 띄운다
+  if (window.InputModals) { window.InputModals.open(k); return; }
+  var sc = document.createElement('script'); sc.src = '/input-modals.js?v=20261002a';
+  sc.onload = function(){ if (window.InputModals) window.InputModals.open(k); };
+  sc.onerror = function(){ alert('입력 창을 불러오지 못했습니다 — 새로고침 후 다시 눌러 주세요.'); };
+  document.head.appendChild(sc);
 };
+// 이 페이지 안에서 반영했으면(혼자 열린 경우) 새 값으로 다시 그린다
+window.addEventListener('input-modals:applied', function(ev){ var k = ev.detail && ev.detail.kind; if (k === 'funnel' || k === 'biz' || k === 'targets') location.reload(); });
 
 (function reportHeight(){
   if (window.parent === window) return; // 단독으로 열었을 땐 필요 없음

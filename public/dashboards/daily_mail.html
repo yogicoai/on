@@ -76,6 +76,7 @@
   .pace{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px;}
   .pace .k .kv{font-size:16px;}
   .pace-h{margin:16px 0 8px; font-size:12.5px; font-weight:700; color:var(--ink-3);} /* 어제 표 아래 "이번 달 누적 진척" */
+  .src-tag{display:inline-block; margin-left:6px; padding:1px 6px; border-radius:6px; background:var(--warn-bg); color:var(--warn); font-size:10.5px; font-weight:600; vertical-align:1px;} /* 이프두 업로드 전 → Cafe24 값 */
   .ch h3 .note-in{font-size:12px; font-weight:600;}
   .bar{position:relative; height:9px; border-radius:5px; background:var(--line); overflow:hidden; margin:2px 0 10px;}
   .bar i{position:absolute; left:0; top:0; height:100%; border-radius:5px; display:block;}
@@ -285,12 +286,15 @@
     var cmp = t.비교.이름 + ' 대비';
     var chgLine = function(v){ return cmp + ' <b>' + signed(v) + '</b>'; };
     var m = t.매출, tr = t.트래픽, ad = t.광고;
+    // 방문 = 이프두(MD 퍼널 입력). 아직 안 올라온 날은 Cafe24 값으로 채웠다고 알린다 — 이프두보다 15~20% 많게 나온다
+    var sysNote = tr.cafe24일수 ? (one ? '<span class="src-tag">Cafe24 값 · 이프두 업로드 전</span>' : '<span class="src-tag">' + tr.cafe24일수 + '일은 Cafe24 값</span>')
+      : tr.비교_cafe24일수 ? '<span class="src-tag">비교 기간 ' + tr.비교_cafe24일수 + '일 Cafe24 값</span>' : '';
     return (one ? '' : '<p class="tiles-span">📅 기간 합계 <b>' + esc(span) + '</b> · 비교: ' + esc(t.비교.이름) + '(' + esc(dayLabel(t.비교.시작)) + ' ~ ' + esc(dayLabel(t.비교.종료)) + ')</p>') +
       '<div class="sales">' +
       '<div class="k"><p class="kl">전사 매출' + (one ? '' : ' (기간 합계)') + '</p><div class="kv tnum">' + won(m.전사) + '</div><div class="kd">' + chgLine(m.전사_변화_pct) + '</div></div>' +
       '<div class="k"><p class="kl">온라인</p><div class="kv tnum">' + won(m.온라인) + '</div><div class="kd">' + chgLine(m.온라인_변화_pct) + ' · 공동구매 제외</div></div>' +
       '<div class="k"><p class="kl">오프라인</p><div class="kv tnum">' + won(m.오프라인) + '</div><div class="kd">' + chgLine(m.오프라인_변화_pct) + ' · 매장 주문서</div></div>' +
-      '<div class="k"><p class="kl">자사몰 방문 · 광고비</p><div class="kv tnum">' + comma(tr.방문) + '명</div><div class="kd">' + chgLine(tr.방문_변화_pct) + '<br>광고비 ' + won(ad.광고비) +
+      '<div class="k"><p class="kl">자사몰 방문 · 광고비</p><div class="kv tnum">' + comma(tr.방문) + '명</div><div class="kd">' + chgLine(tr.방문_변화_pct) + sysNote + '<br>광고비 ' + won(ad.광고비) +
         (ad.온라인매출대비_pct != null ? ' · 온라인 매출의 ' + ad.온라인매출대비_pct.toFixed(1) + '%' : '') + '</div></div>' +
       '</div>';
   }
@@ -454,7 +458,8 @@
       var fmt = function(v){ return v == null ? null : unit === '%' ? v.toFixed(2) + '%' : unit === '원' ? won(v) : comma(v); };
       var act = fmt(x.실적);
       var empty = (teamKeys || []).indexOf(x.지표) >= 0 ? '<span class="chip pending">온라인팀 업데이트 전</span>' : '<span class="chip na">수집 전</span>';
-      return '<tr><td>' + esc(x.지표) + '</td><td class="r tnum">' + (act == null ? empty : '<b>' + act + '</b>') + '</td>' +
+      var src = x.출처 ? ' <span class="src-tag" title="이프두 업로드 전이라 Cafe24 값 — 목표는 이프두 기준">' + esc(x.출처) + '</span>' : '';
+      return '<tr><td>' + esc(x.지표) + src + '</td><td class="r tnum">' + (act == null ? empty : '<b>' + act + '</b>') + '</td>' +
         '<td class="r tnum">' + (fmt(x.목표) || '—') + '</td><td class="r">' + rateChip(x.달성률) + '</td></tr>';
     }).join('');
   }
@@ -506,7 +511,7 @@
       '</div>';
     h += renderAds(adSec, onSales);
     h += '<p class="note">구매전환율·구매율·객단가·건당 매출의 목표는 기준월 벤치마크입니다. 순매출: 자사몰 = Cafe24 통계, 스토어 = 이카운트 원장(반품 차감). ' +
-      '상품조회·장바구니·주문서(이프두)와 스토어 유입(비즈어드바이저)은 온라인팀이 올리는 값입니다.</p>';
+      '자사몰 방문·상품조회·장바구니·주문서·주문완료(이프두)와 스토어 유입(비즈어드바이저)은 온라인팀이 올리는 값입니다. 이프두가 아직 안 올라온 날의 방문·주문완료는 Cafe24 값으로 채우고 <span class="src-tag" style="margin-left:0">Cafe24</span>로 표시합니다.</p>';
     return h + '</div>';
   }
 

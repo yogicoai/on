@@ -132,10 +132,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   .grid-2{grid-template-columns:1fr}
   .grid-2-3,.grid-3-2{grid-template-columns:1fr}
 }
+
+/* AI 분석 데이터 확인 버튼 — 제목 옆, 크게(2026-10-02) */
+.ai-cta{margin-left:16px;display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,#1F2937,#1F6F80);color:#fff;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(31,111,128,.28);letter-spacing:-.01em;white-space:nowrap}
+.ai-cta span{font-size:10.5px;font-weight:500;opacity:.82;letter-spacing:0}
+.ai-cta:hover{filter:brightness(1.1)}
+.ai-cta.on{outline:3px solid rgba(31,111,128,.35);outline-offset:2px}
+@media (max-width:760px){.ai-cta{margin:8px 0 0}}
 </style>
 </head>
 <body>
-<div class="container"><div style="background:#FEF3CB;border:1px solid #F0D98A;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#7A5B00;line-height:1.6">📦 매출 데이터는 매일 <b>오전 10:10 이카운트 DB 업로드</b> 기준입니다</div>
+<div class="container"><div style="background:#FEF3CB;border:1px solid #F0D98A;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:13px;color:#7A5B00;line-height:1.6">📦 매출 데이터는 매일 <b>오전 10시 이카운트 DB 업로드</b> 기준입니다</div>
 
 <!-- Header -->
 <div class="header">
@@ -145,6 +152,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <div class="brand-title">Yogibo 온라인 일일 매출 대시보드</div>
       <div class="brand-sub">요기보코퍼레이션 · 내부 일일 매출 보고용</div>
     </div>
+    <!-- AI 분석 데이터 확인 — 퍼널 점검 탭에서 분리한 AI 분석 화면(public/ai-cards.js, MD 설계 카드). 누르면 아래 #t12 만 보인다 -->
+    <button type="button" id="btnAiCards" class="ai-cta" onclick="window.openAiCards ? openAiCards() : alert('잠시 후 다시 눌러 주세요')" title="자사몰·스마트스토어 일일 퍼널 AI 분석 — 기간별·일자별 카드, 한 번 분석한 날은 저장">🤖 AI 분석 데이터 확인<span>자사몰 · 스마트스토어 · 기간별 · 날짜별 저장</span></button>
   </div>
   <div class="controls"><a href="/" class="btn" title="판매 분석 대시보드로 돌아가기" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">← 판매 분석</a><button type="button" class="btn" onclick="openInputModal('promo')" title="전사 프로모션(기간·대상 상품·할인율·목표매출)을 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">📄 프로모션 등록</button><button type="button" class="btn" onclick="openInputModal('targets')" title="전사 월 목표(채널 × 연월 × 순매출목표)를 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">🎯 목표 설정</button><button type="button" class="btn" onclick="openInputModal('funnel')" title="이프두 퍼널 표(방문시작·상품조회·장바구니·주문서작성·주문완료)를 엑셀로 등록" style="display:inline-flex;align-items:center;gap:4px">📊 퍼널 입력</button><button type="button" class="btn" onclick="openInputModal('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 퍼널 점검에 반영" style="display:inline-flex;align-items:center;gap:4px">📈 스토어 유입 입력</button>
     <label>기준일</label>
@@ -3567,6 +3576,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <div class="tab-panel active" id="t11" style="display: block;">
   <iframe id="funnelFrame" src="/dashboards/funnel_daily.html" title="일일 퍼널 점검"
           style="width:100%;border:0;display:block;height:1400px"></iframe>
+</div>
+
+<!-- AI 분석 데이터 확인 — 제목 옆 [🤖 AI 분석 데이터 확인] 이 연다(탭 줄에는 없음). 내용은 public/ai-cards.js 가 그린다 -->
+<div class="tab-panel" id="t12" style="display: none;">
+  <div id="aiCardsRoot"></div>
 </div>
 
 </div>
@@ -10544,4 +10558,5 @@ function openInputModal(kind){
 }
 loadInputModals().catch(function(){});
 </script>
+<script src="/ai-cards.js?v=20261002b"></script>
 </body></html>

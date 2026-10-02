@@ -52,7 +52,8 @@ const promoExcel = require('./lib/promoExcel');  // 엑셀 → 표준구조 파�
 const funnelDaily = require('./lib/funnelDaily');   // 일일 퍼널 — 화면 데이터 조립(우리 DB + MD 입력분)
 const funnelExcel = require('./lib/funnelExcel');   // 퍼널 엑셀 양식·파싱
 const funnelIngest = require('./lib/funnelIngest'); // 퍼널 검증·미리보기·적재·되돌리기
-const funnelAi = require('./lib/funnelAi');         // 퍼널 일일 AI 분석(Claude) — 날짜별 DB 저장, 저장본 재사용
+const funnelAi = require('./lib/funnelAi');         // 퍼널 일일 AI 분석(Claude) — 날짜별 DB 저장, 저장본 재사용(구버전 — 화면은 v2 카드로 옮김)
+const funnelAiCard = require('./lib/funnelAiCard'); // AI 분석 카드 v2(MD 설계) — 숫자는 서버, 문장은 Sonnet · (날짜+채널) 저장 · 기간 종합
 const alerts = require('./lib/alerts');             // 경보 스캔("오늘 챙길 것") — dash 홈 카드가 /api/export/alerts 로 받는다
 
 // 경보 스캔 10분 캐시 — 원천 여러 곳(원장·광고·게시판·재고 API)을 도는 무거운 조회라 dash 홈을 열 때마다 돌리지 않는다.
@@ -685,6 +686,28 @@ async function handle(req, res) {
     try {
       const b = await readBody(req);
       return sendJson(res, 200, { ok: true, ...(await funnelAi.analyze(String(b.date || ''), { regenerate: !!b.regenerate })) });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  // AI 분석 카드 v2 — 일일 매출 대시보드 [🤖 AI 분석 데이터 확인] 화면(public/ai-cards.js).
+  //   GET = 기간의 서버 계산 + 저장된 문장(비용 0) · POST analyze = 하루·한 채널 문장 생성(저장본 있으면 그대로) · POST period = 기간 종합
+  if (u.pathname === '/api/funnel/cards' && req.method === 'GET') {
+    try {
+      const q = (k) => u.searchParams.get(k) || '';
+      return sendJson(res, 200, { ok: true, ...(await funnelAiCard.list(q('start'), q('end') || q('start'), q('ch') || 'mall')) });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/cards/analyze' && req.method === 'POST') {
+    try {
+      const b = await readBody(req);
+      const fn = b.mode === 'detail' ? funnelAiCard.analyzeDetail : funnelAiCard.analyzeDay; // detail = AI 상세 분석(MD 설계서 방식) · 그 외 = 간략 AI 조언
+      return sendJson(res, 200, { ok: true, ...(await fn(String(b.date || ''), String(b.ch || 'mall'), { regenerate: !!b.regenerate })) });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  }
+  if (u.pathname === '/api/funnel/cards/period' && req.method === 'POST') {
+    try {
+      const b = await readBody(req);
+      const fn = b.mode === 'detail' ? funnelAiCard.analyzePeriodDetail : funnelAiCard.analyzePeriod;
+      return sendJson(res, 200, { ok: true, ...(await fn(String(b.start || ''), String(b.end || ''), String(b.ch || 'mall'), { regenerate: !!b.regenerate })) });
     } catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
   }
   if (u.pathname === '/api/funnel/upload' && req.method === 'POST') {

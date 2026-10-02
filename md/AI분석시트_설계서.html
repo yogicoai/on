@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 분석 시트 설계서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#F4F4F2; --surface:#FFFFFF; --surface-alt:#FAFAF8;
+    --ink:#1A1A18; --ink-muted:#6B6B66; --line:#DFDFD9;
+    --accent:#1F6F5C; --accent-soft:#E6F1ED;
+    --crit:#B3342B; --crit-soft:#F8EBEA;
+    --warn:#9A6B12; --warn-soft:#FBF2DF;
+    --code:#2C2C2A; --code-ink:#E8E8E4;
+    --radius:3px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#141413; --surface:#1C1C1A; --surface-alt:#232321;
+      --ink:#EDEDE8; --ink-muted:#9A9A93; --line:#33332F;
+      --accent:#6BBFA5; --accent-soft:#1B2D28;
+      --crit:#E08A82; --crit-soft:#2E1E1C;
+      --warn:#D8AE5C; --warn-soft:#2C2416;
+      --code:#0E0E0D; --code-ink:#DCDCD6;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#141413; --surface:#1C1C1A; --surface-alt:#232321;
+    --ink:#EDEDE8; --ink-muted:#9A9A93; --line:#33332F;
+    --accent:#6BBFA5; --accent-soft:#1B2D28;
+    --crit:#E08A82; --crit-soft:#2E1E1C;
+    --warn:#D8AE5C; --warn-soft:#2C2416;
+    --code:#0E0E0D; --code-ink:#DCDCD6;
+  }
+
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.72; word-break:keep-all;}
+  .wrap{max-width:64rem; margin:0 auto; padding:2.6rem 16px 5rem;
+    display:flex; flex-direction:column; gap:2rem;}
+
+  header{display:flex; flex-direction:column; gap:.7rem;
+    border-bottom:2px solid var(--ink); padding-bottom:1.1rem;}
+  .eyebrow{font-size:.68rem; font-weight:700; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--accent);}
+  h1{margin:0; font-size:1.72rem; font-weight:700; letter-spacing:-.022em; line-height:1.3;}
+  .meta{display:flex; flex-wrap:wrap; gap:.5rem 1.4rem;
+    font-size:.79rem; color:var(--ink-muted);}
+  .meta b{color:var(--ink); font-weight:600;}
+
+  h2{margin:0; font-size:1.2rem; font-weight:700; letter-spacing:-.016em;}
+  h3{margin:0; font-size:1.02rem; font-weight:700; letter-spacing:-.012em;}
+  h4{margin:1.1rem 0 .1rem; font-size:.91rem; font-weight:700; color:var(--accent);}
+  p{margin:0;}
+
+  .part{background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:1.6rem 1.7rem;
+    display:flex; flex-direction:column; gap:1.25rem;}
+  .part-head{display:flex; flex-direction:column; gap:.25rem;
+    border-bottom:2px solid var(--ink); padding-bottom:.65rem;}
+  .part-no{font-size:.64rem; font-weight:800; letter-spacing:.15em;
+    text-transform:uppercase; color:var(--accent);}
+  section{display:flex; flex-direction:column; gap:.95rem;}
+  .sec-head{display:flex; flex-direction:column; gap:.3rem;
+    border-bottom:1px solid var(--line); padding-bottom:.5rem;}
+  .lede{color:var(--ink-muted);}
+
+  .tw{overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface);}
+  table{border-collapse:collapse; width:100%; font-size:.83rem;
+    font-variant-numeric:tabular-nums; min-width:32rem;}
+  th,td{padding:.55rem .72rem; text-align:left; border-bottom:1px solid var(--line); vertical-align:top;}
+  thead th{background:var(--surface-alt); font-weight:700; font-size:.73rem;
+    letter-spacing:.03em; color:var(--ink-muted); white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num,th.num{text-align:right; white-space:nowrap;}
+  tr.hi td{background:var(--accent-soft);}
+  tr.hi td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
+  tr.bad td{background:var(--crit-soft);}
+  tr.bad td:first-child{box-shadow:inset 3px 0 0 var(--crit);}
+  tr.mid td{background:var(--warn-soft);}
+  tr.mid td:first-child{box-shadow:inset 3px 0 0 var(--warn);}
+  tr.dim td{color:var(--ink-muted);}
+  caption{caption-side:bottom; text-align:left; padding:.5rem .1rem 0;
+    font-size:.74rem; color:var(--ink-muted);}
+
+  .chip{font-size:.69rem; font-weight:750; letter-spacing:.03em;
+    padding:.18rem .5rem; border-radius:2px; white-space:nowrap; border:1px solid currentColor;}
+  .chip.ok{color:var(--accent); background:var(--accent-soft);}
+  .chip.no{color:var(--crit); background:var(--crit-soft);}
+  .chip.mid{color:var(--warn); background:var(--warn-soft);}
+
+  .tag{font-size:.62rem; font-weight:750; letter-spacing:.05em; padding:.1rem .38rem;
+    border-radius:2px; white-space:nowrap; vertical-align:.08em; margin-left:.25rem;
+    border:1px solid currentColor;}
+  .t-must{color:var(--crit); background:var(--crit-soft);}
+  .t-should{color:var(--warn); background:var(--warn-soft);}
+  .t-later{color:var(--ink-muted); background:var(--surface-alt);}
+
+  .note{border-left:3px solid var(--warn); background:var(--warn-soft);
+    padding:.85rem 1rem; border-radius:0 2px 2px 0; font-size:.875rem;
+    display:flex; flex-direction:column; gap:.4rem;}
+  .note b{color:var(--warn);}
+  .note.key{border-left-color:var(--accent); background:var(--accent-soft);}
+  .note.key b{color:var(--accent);}
+  .note.crit{border-left-color:var(--crit); background:var(--crit-soft);}
+  .note.crit b{color:var(--crit);}
+
+  .punch{border:1px solid var(--accent); border-left:6px solid var(--accent);
+    background:var(--accent-soft); border-radius:0 4px 4px 0;
+    padding:1.1rem 1.3rem; display:flex; flex-direction:column; gap:.5rem;
+    break-inside:avoid;}
+  .punch .big{font-size:1.14rem; font-weight:800; line-height:1.5;
+    letter-spacing:-.012em; color:var(--ink);}
+  .punch .big em{font-style:normal; color:var(--accent); font-weight:850;}
+  .punch .sub{font-size:.875rem; color:var(--ink-muted); line-height:1.62;}
+  .punch .sub b{color:var(--ink); font-weight:700;}
+  .punch.crit{border-color:var(--crit); border-left-color:var(--crit); background:var(--crit-soft);}
+  .punch.crit .big em{color:var(--crit);}
+  .punch.warn{border-color:var(--warn); border-left-color:var(--warn); background:var(--warn-soft);}
+  .punch.warn .big em{color:var(--warn);}
+  .punch .tagline{font-size:.65rem; font-weight:800; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--accent);}
+  .punch.crit .tagline{color:var(--crit);}
+  .punch.warn .tagline{color:var(--warn);}
+
+  pre{margin:0; background:var(--code); color:var(--code-ink);
+    border-radius:var(--radius); padding:1rem 1.1rem; overflow-x:auto;
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.75rem; line-height:1.66;
+    border:1px solid var(--line);}
+  code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.86em;
+    background:var(--surface-alt); padding:.08rem .3rem; border-radius:2px;
+    border:1px solid var(--line);}
+  pre code{background:none; border:none; padding:0; color:inherit; font-size:1em;}
+
+  ul.plain,ol.plain{margin:0; padding-left:1.15rem; display:flex; flex-direction:column; gap:.5rem;}
+  ul.plain li::marker{color:var(--accent);}
+  ol.steps{margin:0; padding-left:1.3rem; display:flex; flex-direction:column; gap:.62rem;}
+  ol.steps li::marker{font-weight:800; color:var(--accent);}
+
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr)); gap:.8rem;}
+  .card{border:1px solid var(--line); border-radius:var(--radius);
+    padding:.9rem 1rem; background:var(--surface-alt);
+    display:flex; flex-direction:column; gap:.35rem;}
+  .card .h{font-weight:700; font-size:.9rem;}
+  .card .b{font-size:.83rem; color:var(--ink-muted); line-height:1.6;}
+
+  /* ── AI 분석 카드 목업 ── */
+  .mock{border:1px solid var(--line); border-radius:6px; background:var(--surface);
+    overflow:hidden; break-inside:avoid;}
+  .mock.warn-edge{border-left:5px solid var(--warn);}
+  .mock.ok-edge{border-left:5px solid var(--accent);}
+  .mock.crit-edge{border-left:5px solid var(--crit);}
+  .mock-hd{display:flex; flex-wrap:wrap; gap:.5rem .8rem; align-items:center;
+    padding:.75rem 1rem; background:var(--surface-alt); border-bottom:1px solid var(--line);}
+  .mock-hd .badge{font-size:.7rem; font-weight:800; padding:.15rem .5rem;
+    border-radius:2px; border:1px solid currentColor;}
+  .mock-hd .b-ok{color:var(--accent); background:var(--accent-soft);}
+  .mock-hd .b-warn{color:var(--warn); background:var(--warn-soft);}
+  .mock-hd .b-crit{color:var(--crit); background:var(--crit-soft);}
+  .mock-hd .ttl{font-weight:700; font-size:.92rem;}
+  .mock-hd .kpi{margin-left:auto; font-size:.76rem; color:var(--ink-muted);
+    font-variant-numeric:tabular-nums;}
+  .mock-hd .kpi b{color:var(--ink);}
+  .mock-bd{display:flex; flex-direction:column;}
+  .mblk{padding:.8rem 1rem; border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; gap:.3rem;}
+  .mblk:last-child{border-bottom:none;}
+  .mblk .lbl{font-size:.67rem; font-weight:800; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted);}
+  .mblk .one{font-size:1.02rem; font-weight:750; line-height:1.55;}
+  .mblk .tx{font-size:.86rem; line-height:1.65;}
+  .mblk .tx b{font-weight:700;}
+  .mblk.acc{background:var(--accent-soft);}
+  .mblk.acc .lbl{color:var(--accent);}
+  .mblk.wrn{background:var(--warn-soft);}
+  .mblk.wrn .lbl{color:var(--warn);}
+  .mblk.crt{background:var(--crit-soft);}
+  .mblk.crt .lbl{color:var(--crit);}
+  .acts{display:flex; flex-direction:column; gap:.45rem; margin-top:.15rem;}
+  .act{display:flex; gap:.6rem; font-size:.85rem; line-height:1.6;}
+  .act .no{font-weight:800; color:var(--accent); min-width:1.1rem;}
+  .act .tm{font-size:.7rem; font-weight:700; color:var(--ink-muted);
+    border:1px solid var(--line); border-radius:2px; padding:.05rem .35rem;
+    white-space:nowrap; height:fit-content; margin-top:.15rem; background:var(--surface);}
+  .act .why{color:var(--ink-muted); font-size:.79rem;}
+  .mock-ft{padding:.55rem 1rem; font-size:.72rem; color:var(--ink-muted);
+    background:var(--surface-alt); border-top:1px solid var(--line);
+    display:flex; flex-wrap:wrap; gap:.4rem .9rem;}
+
+  .flow{display:flex; flex-wrap:wrap; gap:.45rem; align-items:center;
+    background:var(--surface-alt); border:1px solid var(--line);
+    border-radius:var(--radius); padding:.9rem 1rem;}
+  .flow .n{background:var(--surface); border:1px solid var(--accent);
+    color:var(--accent); border-radius:2px; padding:.35rem .65rem;
+    font-size:.79rem; font-weight:700;}
+  .flow .a{color:var(--ink-muted); font-weight:700;}
+
+  .toc{display:flex; flex-direction:column; gap:.1rem;
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:1rem 1.1rem;}
+  .toc a{display:flex; gap:.7rem; padding:.3rem 0; color:var(--ink);
+    text-decoration:none; font-size:.86rem; border-bottom:1px solid transparent;}
+  .toc a:hover{border-bottom-color:var(--line);}
+  .toc a .n{color:var(--accent); font-weight:700; min-width:4.2rem; font-size:.74rem;
+    letter-spacing:.04em; text-transform:uppercase; padding-top:.15rem;}
+
+  .actions{display:flex; flex-wrap:wrap; gap:.55rem;}
+  .btn{display:inline-flex; align-items:center; gap:.4rem;
+    background:var(--ink); color:var(--ground); border:1px solid var(--ink);
+    border-radius:2px; padding:.52rem .95rem; font-size:.81rem; font-weight:650;
+    cursor:pointer; font-family:inherit;}
+  .btn.ghost{background:transparent; color:var(--ink);}
+  .btn svg{width:1rem; height:1rem; fill:none; stroke:currentColor; stroke-width:1.9;
+    stroke-linecap:round; stroke-linejoin:round;}
+  .hint{font-size:.74rem; color:var(--ink-muted);}
+
+  footer{border-top:1px solid var(--line); padding-top:1rem;
+    font-size:.76rem; color:var(--ink-muted);
+    display:flex; flex-direction:column; gap:.4rem;}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none!important; transition:none!important;}}
+
+  @media print{
+    @page{size:A4; margin:14mm;}
+    body{background:#fff; font-size:10.2pt;}
+    .wrap{max-width:none; padding:0; gap:1rem;}
+    .actions,.hint,.toc{display:none;}
+    .part{break-inside:auto; page-break-inside:auto; border:none; padding:0; box-shadow:none;}
+    .part-head{break-after:avoid;}
+    table,.tw,.note,.punch,.card,pre,.mock{break-inside:avoid; page-break-inside:avoid;}
+    h2,h3,h4{break-after:avoid;}
+    pre{background:#f4f4f2; color:#1a1a18;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Yogibo Korea · 개발 요구사항</div>
+  <h1>일일 퍼널 점검 &mdash; AI 분석 시트 설계서</h1>
+  <div class="meta">
+    <span><b>작성일</b> 2026-09-30</span>
+    <span><b>대상</b> 개발 담당자</span>
+    <span><b>대상 화면</b> 일일 퍼널 점검 &gt; AI DAILY ANALYSIS</span>
+    <span><b>채널</b> 자사몰 · 스마트스토어</span>
+  </div>
+  <div class="punch crit" style="margin-top:.4rem">
+    <span class="tagline">전제 — 목표는 임원진이 설정한 고정 의지치다</span>
+    <span class="big">목표는 <em>변경 대상이 아닙니다.</em> 따라서 AI 분석은 <em>&ldquo;목표를 고치자&rdquo;가 아니라 &ldquo;고정 목표를 어떻게 읽을 것인가&rdquo;</em>를 설계해야 합니다.</span>
+    <span class="sub">자사몰 평상시 하루 달성률은 <b>47.2%</b>(월 실적 59,051,404원 ÷ 30일 = 1,968,380원, 일 목표 4,166,667원)입니다. <b>달성률만으로 판정하면 거의 모든 날이 &ldquo;위험&rdquo;이 되어 경보가 무의미해집니다.</b><br>
+    해법은 두 가지입니다 &mdash; <b>① 일간 이상 판정은 7일평균 대비로</b>(운영 담당자용) <b>② 의지 목표 갭은 금액으로 분해해서</b>(임원 보고용) 보여줍니다. <b>두 독자를 한 화면에서 분리하는 것</b>이 이 설계서의 핵심입니다(§2).</span>
+  </div>
+  <div class="actions">
+    <button class="btn" type="button" onclick="window.print()">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-6h16v6h-2M8 14h8v7H8z"/></svg>
+      PDF로 저장 · 인쇄
+    </button>
+    <button class="btn ghost" type="button" id="dl">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+      HTML 내려받기
+    </button>
+  </div>
+  <span class="hint">단일 HTML 파일 · 인쇄(A4) 지원 · 다크/라이트 자동</span>
+</header>
+
+<nav class="toc">
+  <a href="#s0"><span class="n">0</span> 요약 — 바꿀 것 네 가지</a>
+  <a href="#s1"><span class="n">1</span> 현재 카드의 문제 — 실측으로 증명</a>
+  <a href="#s2"><span class="n">2</span> 판정 로직 — 목표 대비 + 7일평균 대비 2축 <b style="color:var(--crit)">핵심</b></a>
+  <a href="#s3"><span class="n">3</span> 카드 설계 — 8블록 고정 구조 <b style="color:var(--crit)">본체</b></a>
+  <a href="#s4"><span class="n">4</span> 완성 예시 — 실제 9/29 데이터</a>
+  <a href="#s5"><span class="n">5</span> 기간 선택 · 일자별 분석 (주말 이슈)</a>
+  <a href="#s6"><span class="n">6</span> 채널별 차이 — 자사몰 6 / 스토어 4</a>
+  <a href="#s7"><span class="n">7</span> 출력 스키마 · 프롬프트 규격</a>
+  <a href="#s8"><span class="n">8</span> 예외 처리</a>
+  <a href="#s9"><span class="n">9</span> 확인 요청 항목</a>
+</nav>
+
+<!-- ══════════ 0 ══════════ -->
+<div class="part" id="s0">
+  <div class="part-head">
+    <div class="part-no">Section 0</div>
+    <h2>요약 &mdash; 바꿀 것 네 가지</h2>
+  </div>
+
+  <section>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>바꿀 것</th><th>왜</th><th class="num">우선</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">1</td><td><b>판정을 &ldquo;목표 대비&rdquo; 단일축에서<br>&ldquo;목표 대비 + 7일평균 대비&rdquo; 2축으로</b></td><td>목표가 실측의 1.5~1.9배라 <b>매일 미달로만 뜬다.</b> 그날 실제로 뭐가 나빴는지 구분되지 않는다</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="bad"><td class="num">2</td><td><b>카드 구조를 8블록으로 고정</b><br><span style="color:var(--ink-muted)">판정 / 병목 / 잘된 것 / 원인 / 액션 …</span></td><td>지금은 불릿 나열이라 <b>스캔이 안 되고, 위 카드 숫자를 그대로 반복</b>한다</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="bad"><td class="num">3</td><td><b>액션 블록 신설</b><br><span style="color:var(--ink-muted)">소요시간 · 근거 · 행동</span></td><td>담당자 요청 원문이 <b>&ldquo;취해야 할 행동 3가지 이상&rdquo;</b>인데 현재 카드에 없다</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="bad"><td class="num">4</td><td><b>기간 선택 시 일자별 분석 + 기간 종합</b></td><td>월요일에 금·토·일 3일치를 넣는데 <b>버튼이 1개라 전일만 분석</b>된다</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flow">
+      <span class="n">기간 선택</span><span class="a">→</span>
+      <span class="n">미분석 일자 감지</span><span class="a">→</span>
+      <span class="n">일괄 분석 (미분석분만)</span><span class="a">→</span>
+      <span class="n">기간 종합 카드 1개</span><span class="a">+</span>
+      <span class="n">일자별 카드 N개</span>
+    </div>
+
+    <div class="punch">
+      <span class="tagline">설계 원칙 한 줄</span>
+      <span class="big">AI 카드는 <em>위 퍼널 카드에 이미 있는 숫자를 반복하지 않는다.</em> 숫자 사이의 <em>관계와 그래서 뭘 할지</em>만 쓴다.</span>
+      <span class="sub">담당자는 위에서 &ldquo;유입 880명 / 목표 1,070명 / 82%&rdquo;를 이미 봤습니다. AI가 그걸 다시 쓰면 <b>지면만 차지하고 읽을 이유가 없습니다.</b> AI가 써야 할 것은 <b>&ldquo;유입은 7일평균보다 22.7% 많았는데 상품조회 비율은 그대로였다&rdquo;</b> 같은 <b>관계</b>와, <b>&ldquo;그래서 랜딩 경로를 확인하라&rdquo;</b>는 <b>행동</b>입니다.</span>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 1 ══════════ -->
+<div class="part" id="s1">
+  <div class="part-head">
+    <div class="part-no">Section 1</div>
+    <h2>현재 카드의 문제 &mdash; 실측으로 증명</h2>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>1-1. 현재 카드 (가안) 구조</h3></div>
+    <pre><code>[주의] 2026.09.30 — 유입 0으로 집계 이상, 주문 4건 목표 미달
+ · 당일 유입 0, 주문 4건(목표 12건 대비 33.3%), 매출 1,314,170원(목표 1,933,333원의 68.0%)
+ · 유입 0인데 주문·매출은 발생 → 비즈어드바이저 유입 미집계로 추정, 구매율 판단 불가
+ · 최근7일 유입 264~567·주문 9~22건 흐름 대비 당일은 유입 0·주문 4건으로 급락
+ · 주문당매출 328,543원으로 기준 160,661원의 2배, 이번달 누적 매출 59,477,230원·달성률 102.5%
+ · 비즈어드바이저 유입 0 집계가 실제인지 데이터 지연인지 확인하고, 기준일 유입값 재수집</code></pre>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>문제</th><th>근거</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">1</td><td><b>위 퍼널 카드의 숫자를 그대로 반복한다</b></td><td>&ldquo;주문 4건(목표 12건 대비 33.3%)&rdquo;은 이미 위 카드에 표시되어 있다. 화면 중복</td></tr>
+          <tr class="bad"><td class="num">2</td><td><b>불릿 5개가 모두 같은 무게</b></td><td>&ldquo;확인하고 재수집&rdquo;(행동)과 &ldquo;누적 달성률 102.5%&rdquo;(참고)가 <b>같은 크기·같은 위치</b>. 스캔이 안 된다</td></tr>
+          <tr class="bad"><td class="num">3</td><td><b>액션이 없거나 섞여 있다</b></td><td>마지막 불릿 하나가 사실상 유일한 행동. <b>소요시간·우선순위·근거가 분리되지 않음</b></td></tr>
+          <tr class="bad"><td class="num">4</td><td><b>판정 기준이 목표 대비 단일축</b></td><td>&ldquo;목표 12건 대비 33.3%&rdquo; &mdash; 자사몰처럼 <b>목표가 과대 설정된 채널에서는 매일 미달</b>로만 나온다</td></tr>
+          <tr><td class="num">5</td><td>날짜·채널 구분이 약하다</td><td>카드 제목에 채널이 없어 <b>자사몰인지 스토어인지</b> 헤더 토글 상태로만 유추해야 한다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note key">
+      <span><b>잘 되어 있는 것은 유지합니다.</b> ① <b>날짜별 DB 저장 · 재조회 무료</b> ② <b>최신순 누적 표시</b> ③ <b>&ldquo;분석 근거&rdquo; 푸터 명시</b> ④ <b>이프두 3단계 미입력 시 판단 보류</b> &mdash; 이 네 가지는 이미 올바른 설계이므로 그대로 둡니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>1-2. 가장 큰 문제 &mdash; 목표가 실측의 1.5~1.9배다</h3></div>
+    <p class="lede">2026.09.29 자사몰 화면 값으로 <b>목표율 · 당일 실적률 · 7일평균 실적률</b>을 나란히 계산했습니다.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>단계</th><th class="num">당일<br>유입 대비</th><th class="num">목표<br>유입 대비</th><th class="num">7일평균<br>유입 대비</th><th class="num">당일 vs<br>목표</th><th class="num">당일 vs<br>7일평균</th><th>실제 판정</th></tr></thead>
+        <tbody>
+          <tr class="mid"><td><b>상품조회</b></td><td class="num">33.98%</td><td class="num">63.46%</td><td class="num">33.61%</td><td class="num" style="color:var(--crit)"><b>−29.48%p</b></td><td class="num" style="color:var(--accent)"><b>+0.36%p</b></td><td><b>의지 목표 갭</b><br><span style="color:var(--ink-muted)">오늘의 문제가 아님</span></td></tr>
+          <tr class="hi"><td>장바구니</td><td class="num">5.11%</td><td class="num">4.21%</td><td class="num">3.63%</td><td class="num" style="color:var(--accent)">+0.91%p</td><td class="num" style="color:var(--accent)"><b>+1.49%p</b></td><td>정상 &mdash; 평소보다 좋음</td></tr>
+          <tr class="mid"><td>주문서작성</td><td class="num">3.07%</td><td class="num">3.83%</td><td class="num">2.79%</td><td class="num" style="color:var(--crit)">−0.76%p</td><td class="num" style="color:var(--accent)"><b>+0.28%p</b></td><td><b>의지 목표 갭</b></td></tr>
+          <tr class="hi"><td>주문완료</td><td class="num">2.16%</td><td class="num">1.96%</td><td class="num">1.81%</td><td class="num" style="color:var(--accent)">+0.20%p</td><td class="num" style="color:var(--accent)"><b>+0.35%p</b></td><td>정상 &mdash; 평소보다 좋음</td></tr>
+        </tbody>
+        <caption>유입 자체는 당일 880명 · 목표 1,070명(82%) · 7일평균 717명(<b>+22.7%</b>). 목표는 7일평균의 <b>1.49배</b>, 상품조회 목표율 63.46%는 7일평균 실적률 33.61%의 <b>1.89배</b>.</caption>
+      </table>
+    </div>
+
+    <div class="punch crit">
+      <span class="tagline">이 표가 말하는 것</span>
+      <span class="big">2026.09.29 자사몰은 <em>4개 단계 전부 7일평균 이상</em>이었고, 유입도 7일평균보다 <em>22.7% 많았습니다.</em> 사실상 <em>평소보다 좋은 날</em>입니다.</span>
+      <span class="sub">그런데 화면에는 <b>상품조회 44% · 주문서작성 66% · 유입 82%</b>로 표시됩니다. AI가 목표 대비만 보면 <b>&ldquo;상품조회 심각 미달, 즉시 개선 필요&rdquo;</b>라는 결론을 내고, <b>담당자는 있지도 않은 문제를 쫓게 됩니다.</b><br>
+      <b>목표는 임원진이 설정한 고정 의지치이므로 이것 자체가 잘못된 것은 아닙니다.</b> 의지치에는 &ldquo;여기까지 가겠다&rdquo;는 방향이 담겨 있고, 그 갭을 보는 것은 <b>월 단위·임원 보고 관점에서 유효</b>합니다.<br>
+      문제는 <b>그 지표를 일간 운영 판정에 그대로 쓰는 것</b>입니다. 상품조회 목표율 63.46%는 7일평균 실적 33.61%의 <b>1.89배</b>이므로 <b>매일 미달로 표시됩니다.</b> 매일 울리는 경보는 경보가 아닙니다. <b>같은 화면에서 두 지표를 분리해 쓰는 것이 답입니다.</b></span>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>용도</th><th>기준</th><th>독자</th><th>화면 위치</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td><b>오늘 이상이 있었나</b></td><td><b>7일평균 대비</b></td><td>온라인 MD(운영)</td><td>배지 · 병목 · 액션</td></tr>
+          <tr class="mid"><td><b>의지 목표까지 얼마나 남았나</b></td><td><b>목표 대비 · 갭 금액 분해</b></td><td>임원 보고</td><td>의지 목표 갭 블록</td></tr>
+        </tbody>
+        <caption>두 기준은 <b>서로 다른 질문에 답합니다.</b> 섞으면 둘 다 못 씁니다.</caption>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 2 ══════════ -->
+<div class="part" id="s2">
+  <div class="part-head">
+    <div class="part-no">Section 2</div>
+    <h2>판정 로직 &mdash; 2축 판정</h2>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>2-1. 단계별 판정 규칙 <span class="tag t-must">최우선 구현</span></h3></div>
+    <p class="lede">각 단계의 <b>유입 대비 비율</b>을 세 값으로 비교합니다 &mdash; <b>당일 · 목표 · 7일평균</b>. 대시보드에 이미 세 값이 모두 있으므로 추가 데이터가 필요 없습니다.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">케이스</th><th>vs 목표</th><th>vs 7일평균</th><th>판정</th><th>AI가 써야 할 문장</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">A</td><td>미달</td><td><b>미달</b></td><td><b>진짜 병목</b><br><span class="chip no">위험</span></td><td>&ldquo;오늘 이 단계에서 문제가 생겼다&rdquo; &mdash; <b>원인 가설 + 액션 필수</b></td></tr>
+          <tr class="mid"><td class="num">B</td><td>미달</td><td>동등 <span style="color:var(--ink-muted)">(±0.5%p)</span></td><td><b>의지 목표 갭</b><br><span class="chip mid">참고</span></td><td>&ldquo;평소와 같은 수준이며 <b>의지 목표와의 상시 갭 구간</b>이다&rdquo; &mdash; 오늘의 액션 아님</td></tr>
+          <tr class="mid"><td class="num">C</td><td>미달</td><td>초과</td><td><b>의지 목표 갭</b><br><span class="chip mid">참고</span></td><td>&ldquo;<b>평소보다 좋았는데도</b> 의지 목표에는 못 미쳤다&rdquo; &mdash; 갭 축소 여부로 판단</td></tr>
+          <tr class="mid"><td class="num">D</td><td>달성</td><td><b>미달</b></td><td><b>조용한 악화</b><br><span class="chip mid">주의</span></td><td>&ldquo;목표는 넘겼지만 <b>평소보다 나빠졌다</b>&rdquo; &mdash; 놓치기 쉬운 신호</td></tr>
+          <tr class="hi"><td class="num">E</td><td>달성</td><td>달성</td><td><b>정상</b><br><span class="chip ok">좋음</span></td><td>간단히 언급만</td></tr>
+        </tbody>
+        <caption>&ldquo;동등&rdquo; 판정 폭 <b>±0.5%p</b>는 초기값이며 설정 화면에서 조정 가능해야 합니다.</caption>
+      </table>
+    </div>
+
+    <div class="punch warn">
+      <span class="tagline">케이스 D를 반드시 넣어주십시오</span>
+      <span class="big">목표를 넘겼는데 평소보다 나빠진 날은 <em>지금 화면에서 초록색으로 표시</em>됩니다. 이게 가장 위험합니다.</span>
+      <span class="sub">스마트스토어는 목표가 낮게 잡혀 있어(9/29 유입 목표 391명, 실적 567명 = 145%) <b>대부분의 날이 &ldquo;달성&rdquo;으로 뜹니다.</b> 이 상태에서 7일평균 대비 하락이 시작돼도 <b>화면은 계속 초록색</b>입니다. <b>케이스 D가 그 추세를 잡아내는 유일한 장치입니다.</b></span>
+    </div>
+
+    <h4>병목 지정 규칙</h4>
+    <ul class="plain">
+      <li><b>케이스 A만 &ldquo;오늘의 병목&rdquo;으로 지정</b>합니다. B·C는 병목이 아니라 <b>의지 목표 갭</b>으로 별도 표기합니다.</li>
+      <li>케이스 A가 <b>2개 이상</b>이면 <b>퍼널 앞 단계부터 우선</b>(앞이 막히면 뒤는 자동 미달).</li>
+      <li>케이스 A가 <b>0개</b>면 &ldquo;오늘의 병목&rdquo; 블록을 <b>&ldquo;병목 없음 &mdash; 전 단계가 평소 이상&rdquo;</b>으로 채웁니다. <b>빈 블록으로 두지 않습니다.</b></li>
+      <li>유입 단계는 비율이 아니므로 <b>절대값</b>으로 판정합니다 &mdash; 당일 vs 목표, 당일 vs 7일평균.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>2-2. 카드 상태 배지 판정 <span class="tag t-must">기준 변경</span></h3></div>
+    <div class="punch crit">
+      <span class="tagline">배지는 목표 달성률로 판정하면 안 됩니다</span>
+      <span class="big">자사몰 평상시 하루 달성률은 <em>47.2%</em>입니다. 달성률 기준으로 배지를 달면 <em>거의 매일 「위험」</em>이 뜹니다.</span>
+      <span class="sub">월 실적 59,051,404원 ÷ 30일 = 하루 <b>1,968,380원</b>, 일 목표 <b>4,166,667원</b>. 목표가 고정 의지치이므로 이 구조는 앞으로도 유지됩니다. <b>매일 빨간불이 켜지는 화면은 아무도 보지 않습니다.</b> 배지는 <b>7일평균 대비</b>로만 판정하십시오.</span>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>배지</th><th>조건 &mdash; <b>기준은 7일평균 순매출</b></th><th>우선순위</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td><span class="chip no">데이터 이상</span></td><td>필수 단계 값이 <b>0 또는 미입력</b>인데 하위 단계에 값이 있음<br><span style="color:var(--ink-muted)">예: 유입 0인데 주문 4건</span></td><td class="num">1 (최우선)</td></tr>
+          <tr class="bad"><td><span class="chip no">위험</span></td><td>순매출이 7일평균 대비 <b>−30% 이하</b> <b>또는</b> 케이스 A가 <b>2개 이상</b></td><td class="num">2</td></tr>
+          <tr class="mid"><td><span class="chip mid">주의</span></td><td>순매출 7일평균 대비 <b>−10 ~ −30%</b> <b>또는</b> 케이스 A 1개 <b>또는</b> 케이스 D 존재</td><td class="num">3</td></tr>
+          <tr class="hi"><td><span class="chip ok">정상</span></td><td>순매출 7일평균 <b>±10% 이내</b>, 케이스 A·D 없음</td><td class="num">4</td></tr>
+          <tr class="hi"><td><span class="chip ok">좋음</span></td><td>순매출 7일평균 <b>+10% 이상</b> <b>이고</b> 전 단계가 7일평균 이상</td><td class="num">5</td></tr>
+        </tbody>
+        <caption><b>순매출은 취소·반품이 제외된 MCP 실측값</b>이므로 판정의 기준 지표로 사용합니다. 매출(파일)은 참고값이므로 배지 판정에 쓰지 않습니다. <b>목표 달성률은 배지에 쓰지 않고 헤더에 숫자로만 표시</b>합니다.</caption>
+      </table>
+    </div>
+    <div class="note key">
+      <span><b>2026.09.29 자사몰에 적용하면</b> &mdash; 순매출 408만원은 7일평균(약 279만원) 대비 <b>+46%</b>, 케이스 A·D 0개 → <b>「좋음」</b>입니다. 목표 달성률 98%도 헤더에 함께 표시되지만 배지를 좌우하지는 않습니다.<br>
+      반면 <b>평상시 하루(1,968,380원)는 7일평균 대비 −29.5%로 「주의」</b>가 됩니다. <b>이제 배지가 실제로 정보를 담습니다.</b></span>
+    </div>
+    <div class="note">
+      <span><span class="tag t-must">개발 확인</span> <b>7일평균 &ldquo;순매출&rdquo;이 저장되어 있는지 확인이 필요합니다.</b> 화면의 순매출 카드에는 7일평균 줄이 없습니다(다른 카드에는 있음). 없다면 <b>7일평균 주문완료 건수 × 7일평균 객단가</b>로 산출하거나 별도 저장이 필요합니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>2-3. 의지 목표 갭을 생산적으로 쓰는 법 &mdash; 금액 분해 <span class="tag t-must">신규</span></h3></div>
+    <p class="lede">목표가 고정 의지치라면 <b>&ldquo;몇 % 달성&rdquo;은 매일 같은 숫자</b>가 되어 정보가 없습니다. 대신 <b>갭을 금액으로 분해</b>하면 &ldquo;무엇 때문에 못 갔는지&rdquo;가 매일 달라지고, 그것은 곧 <b>임원 보고에 그대로 쓸 수 있는 언어</b>가 됩니다.</p>
+    <pre><code>목표 순매출 = 목표유입 × 목표주문완료율 × 목표객단가
+실제 순매출 = 실제유입 × 실제주문완료율 × 실제객단가
+
+갭 분해 (순차 치환 — 세 항의 합이 정확히 실제−목표와 일치)
+ ① 유입   기여 = (실제유입 − 목표유입) × 목표주문완료율 × 목표객단가
+ ② 전환   기여 =  실제유입 × (실제주문완료율 − 목표주문완료율) × 목표객단가
+ ③ 객단가 기여 =  주문완료.actual × (실제객단가 − 목표객단가)
+
+ ※ 비율은 반올림 표기값(2.16%)이 아니라 건수로 계산한다 — 19 ÷ 880 = 2.1591%.
+   반올림값을 쓰면 합계가 약 1,700원 어긋난다.</code></pre>
+    <div class="tw">
+      <table>
+        <thead><tr><th>2026.09.29 자사몰 · 의지 목표 갭 분해</th><th class="num">금액</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td><b>① 유입</b></td><td class="num"><b>−820,800원</b></td><td>880명 vs 의지 목표 1,070명</td></tr>
+          <tr class="hi"><td><b>② 전환</b></td><td class="num"><b>+473,400원</b></td><td>주문완료율 2.16% vs 목표 1.92% &mdash; <b>목표 초과</b></td></tr>
+          <tr class="mid"><td><b>③ 객단가</b></td><td class="num"><b>−197,011원</b></td><td>214,631원 vs 목표 225,000원</td></tr>
+          <tr class="dim"><td><b>합계</b></td><td class="num"><b>−544,411원</b></td><td>실제 4,077,989원 − 목표 4,622,400원</td></tr>
+        </tbody>
+        <caption>실제 순매출 19 &times; 214,631 = <b>4,077,989원</b>, 목표 순매출 1,070 &times; 1.92% &times; 225,000 = <b>4,622,400원</b>. 세 항의 합이 그 차이와 <b>원 단위까지 일치</b>합니다. 목표 순매출은 <b>퍼널 목표 곱</b> 기준입니다 &mdash; &sect;9-2 참조.</caption>
+      </table>
+    </div>
+    <div class="punch">
+      <span class="tagline">이 분해가 만드는 문장</span>
+      <span class="big">&ldquo;의지 목표에 <em>54만원</em> 못 미쳤습니다. <em>유입에서 82만원 잃고 전환에서 47만원 벌었습니다.</em>&rdquo;</span>
+      <span class="sub">&ldquo;달성률 98%&rdquo;보다 훨씬 많은 것을 말합니다 &mdash; <b>오늘 무엇이 잘됐고 무엇이 부족했는지, 그리고 어디를 건드려야 갭이 줄어드는지</b>가 한 줄에 들어옵니다.<br>
+      <b>그리고 이 분해는 고정 목표를 바꾸지 않고도 매일 다른 답을 줍니다.</b> 같은 −54만원이라도 어떤 날은 유입 때문이고 어떤 날은 객단가 때문입니다. <b>의지치를 일간 실행 언어로 번역하는 유일한 방법입니다.</b></span>
+    </div>
+    <h4>갭 추세 &mdash; 기간 종합 카드에서 사용</h4>
+    <ul class="plain">
+      <li><b>갭 금액의 방향</b>을 봅니다 &mdash; 이번 주 평균 갭이 지난주보다 줄었는가. <b>의지 목표는 고정이므로 &ldquo;갭 축소&rdquo;가 유일하게 의미 있는 진척 지표</b>입니다.</li>
+      <li>항목별 기여도 추세도 함께 봅니다 &mdash; <b>&ldquo;유입 기여 갭은 커지는데 전환 기여는 플러스로 돌아섰다&rdquo;</b>가 실제 의사결정 정보입니다.</li>
+      <li>AI 프롬프트에 <b>&ldquo;목표 수정·재설정을 제안하지 마라. 갭을 줄이는 방법만 제시하라&rdquo;</b>를 넣습니다(§7-2).</li>
+    </ul>
+  </section>
+</div>
+
+<!-- ══════════ 3 ══════════ -->
+<div class="part" id="s3">
+  <div class="part-head">
+    <div class="part-no">Section 3</div>
+    <h2>카드 설계 &mdash; 8블록 고정 구조</h2>
+  </div>
+
+  <section>
+    <p class="lede">모든 카드가 <b>같은 자리에 같은 종류의 정보</b>를 담습니다. 담당자가 매일 같은 위치를 보면 되므로 스캔 속도가 빨라집니다.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>블록</th><th>내용</th><th class="num">분량</th><th>생성</th><th class="num">필수</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td><b>A. 헤더</b></td><td>상태 배지 · 날짜(요일) · <b>채널명</b> · 핵심 2지표(유입 달성률 / 순매출 달성률)</td><td class="num">1줄</td><td>서버</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="hi"><td><b>B. 한 줄 판정</b></td><td>그날을 <b>한 문장</b>으로. 카드에서 가장 큰 글씨</td><td class="num">1~2줄</td><td>AI</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="hi"><td><b>C. 오늘의 병목</b></td><td>케이스 A 단계 + <b>기회손실 환산</b>. 없으면 &ldquo;병목 없음&rdquo; 명시</td><td class="num">2~4줄</td><td>서버+AI</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr><td><b>D. 잘된 것</b></td><td>7일평균 초과 단계. <b>매일 하나는 찾아서</b> 쓴다</td><td class="num">1~2줄</td><td>AI</td><td class="num"><span class="tag t-should">권장</span></td></tr>
+          <tr class="mid"><td><b>E. 의지 목표 갭</b></td><td><b>갭 금액 분해(유입·전환·객단가)</b> + 케이스 B·C 단계 표기</td><td class="num">2~3줄</td><td>서버+AI</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr><td><b>F. 원인 가설</b></td><td>병목이 있을 때만. <b>2~3개</b>, 각각 <b>확인 방법</b> 포함</td><td class="num">2~3줄</td><td>AI</td><td class="num"><span class="tag t-should">권장</span></td></tr>
+          <tr class="mid"><td><b>H. 상품 신호</b></td><td>그날 트리거된 상품 신호 <b>최대 3개</b>. 0개면 블록 생략</td><td class="num">1~3줄</td><td>서버+AI</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="hi"><td><b>G. 액션</b></td><td><b>3~5개.</b> 각각 <b>[소요시간] · 행동 · 근거</b></td><td class="num">3~5줄</td><td>AI</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+          <tr class="dim"><td>푸터</td><td>데이터 상태 · 분석 시각 · 모델명</td><td class="num">1줄</td><td>서버</td><td class="num"><span class="tag t-must">필수</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>블록별 작성 규칙</h4>
+    <div class="grid2">
+      <div class="card"><span class="h">B. 한 줄 판정</span><span class="b"><b>대조 구조</b>로 쓴다 &mdash; &ldquo;A는 ~했는데 B는 ~했다&rdquo;. 숫자는 <b>최대 2개</b>만. 예: <i>&ldquo;유입은 목표의 82%였지만 순매출은 98%를 지켰다.&rdquo;</i></span></div>
+      <div class="card"><span class="h">C. 오늘의 병목</span><span class="b"><b>기회손실 금액</b>을 반드시 환산한다(§3-2). &ldquo;몇 %p 낮다&rdquo;보다 <b>&ldquo;약 N만원&rdquo;</b>이 담당자를 움직인다.</span></div>
+      <div class="card"><span class="h">D. 잘된 것</span><span class="b">나쁜 날에도 <b>반드시 하나는</b> 찾는다. 무엇이 정상인지 알아야 <b>문제 범위가 좁혀진다.</b></span></div>
+      <div class="card"><span class="h">E. 의지 목표 갭</span><span class="b">갭을 <b>금액으로 분해</b>해 표시(§2-3). <b>목표 수정을 제안하지 않고</b> &ldquo;어디서 잃고 어디서 벌었는지&rdquo;만 쓴다.</span></div>
+      <div class="card"><span class="h">F. 원인 가설</span><span class="b">각 가설에 <b>확인 방법</b>을 붙인다. &ldquo;광고 문제일 수 있다&rdquo;(X) → <b>&ldquo;매체별 유입 탭에서 전일 대비 확인&rdquo;</b>(O)</span></div>
+      <div class="card"><span class="h">H. 상품 신호</span><span class="b">퍼널 숫자가 <b>어느 상품에서</b> 생겼는지 연결한다. 신호 4종 중 트리거된 것만(§3-3).</span></div>
+      <div class="card"><span class="h">G. 액션</span><span class="b"><b>[10분]</b>처럼 소요시간을 앞에 붙인다. 출근 직후 <b>&ldquo;지금 할 수 있는 것&rdquo;</b>을 고르게 하기 위함.</span></div>
+    </div>
+
+    <div class="punch">
+      <span class="tagline">숫자 중복 금지 규칙</span>
+      <span class="big">위 퍼널 카드에 <em>이미 표시된 숫자</em>는 다시 쓰지 않는다. 쓰려면 <em>관계로 바꿔서</em> 쓴다.</span>
+      <span class="sub"><b>금지</b> &mdash; &ldquo;유입 880명, 목표 1,070명 대비 82%&rdquo; (위 카드에 그대로 있음)<br>
+      <b>권장</b> &mdash; &ldquo;유입은 <b>7일평균보다 22.7% 많았는데</b> 상품조회 비율은 <b>그대로였다</b>&rdquo; (새 정보 = 관계)<br>
+      예외: 액션의 <b>근거</b>로 인용할 때는 1회 허용합니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>3-2. 기회손실 환산식</h3></div>
+    <p class="lede">병목(케이스 A)이 있을 때만 계산합니다. <b>&ldquo;7일평균 수준만 했어도 얼마였나&rdquo;</b>를 봅니다 &mdash; 목표 기준으로 하면 달성 불가능한 값이라 과장됩니다.</p>
+    <pre><code>손실_건수 = (7일평균_비율 − 당일_비율) × 당일_유입 × (이후 단계 실제 전환율의 곱)
+손실_금액 = 손실_건수 × 당일_객단가
+
+[예] 상품조회가 케이스 A이고 7일평균 33.61% / 당일 30.00%였다면
+     (0.3361 − 0.3000) × 880명 = 31.8명 (상품조회 손실)
+     × 장바구니전환(45/299=15.05%) × 주문서전환(27/45=60.0%) × 완료전환(19/27=70.4%)
+     = 2.0건 × 214,631원 ≈ 430,000원</code></pre>
+    <div class="note">
+      <span><b>표기 규칙</b> &mdash; 손실 금액은 <b>&ldquo;약 N원&rdquo;</b>으로 쓰고 <b>추정임을 명시</b>합니다. 손실 건수가 <b>1건 미만</b>이면 금액을 쓰지 않고 <b>&ldquo;영향 미미&rdquo;</b>로 표기합니다 &mdash; 하루 주문이 19건인 규모에서 소수점 손실을 금액으로 쓰면 과장됩니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h3>3-3. 블록 H &mdash; 상품 신호 <span class="tag t-must">신규</span></h3>
+      <p class="lede">퍼널 숫자가 <b>어느 상품에서 생겼는지</b>를 연결하는 블록입니다. 위치는 <b>액션(G) 바로 앞</b>이며, 그날 트리거된 신호만 <b>최대 3개</b> 표시하고 0개면 블록 자체를 생략합니다.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>신호</th><th>트리거 조건</th><th>표시 예</th><th class="num">우선</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">H1</td><td><b>할인율 이탈</b></td><td><b>실제 할인율 &minus; 설정 할인율 &ge; 3%p</b><br><span style="color:var(--ink-muted)">프로모션 등록 필요(&sect;3-4)</span></td><td>&#9888; 맥스 프리미엄플러스 &mdash; 설정 20% / <b>실제 25.7%</b>, 5.7%p 초과</td><td class="num">1</td></tr>
+          <tr class="mid"><td class="num">H2</td><td><b>조회&ndash;전환 괴리</b></td><td>조회 <b>상위 5위 이내</b>이면서 <b>조회당 매출이 그 5개 중 최하위</b>이고 최상위와 <b>3배 이상</b> 차이</td><td>&#128317; 요기보 맥스 &mdash; 조회 1위(344회)인데 <b>조회당 매출 2,001원</b>, 프리미엄의 1/8</td><td class="num">2</td></tr>
+          <tr class="mid"><td class="num">H3</td><td><b>충전재 믹스 변화</b></td><td>프리미엄 + 프리미엄플러스 <b>매출 비중</b>이 7일평균 대비 <b>&plusmn;5%p</b><br><b>또는</b> 갭 분해의 객단가 항이 <b>&plusmn;100,000원 이상</b>일 때 자동 포함</td><td>&uarr; 프리미엄 비중 <b>29.3%</b>(7일평균 21.4%) &mdash; 객단가 플러스를 만든 요인</td><td class="num">3</td></tr>
+          <tr><td class="num">H4</td><td><b>부착 판매</b></td><td>커버 부착률이 <b>10% 미만</b>이거나 7일평균 대비 <b>&minus;5%p 이하</b></td><td>커버 부착률 <b>2.6%</b> &mdash; 본품 39건 중 1건. 커버 단독 주문은 27건</td><td class="num">4</td></tr>
+        </tbody>
+        <caption>H1이 가장 우선입니다 &mdash; 마진에 직접 영향을 주고, 당일에 잡으면 되돌릴 수 있습니다. H2~H4는 추세 신호입니다.</caption>
+      </table>
+    </div>
+
+    <div class="punch">
+      <span class="tagline">H3가 갭 분해와 연결됩니다</span>
+      <span class="big">객단가 갭이 <em>왜</em> 생겼는지를 상품으로 내려보는 유일한 경로입니다.</span>
+      <span class="sub">블록 E의 갭 분해는 &ldquo;객단가에서 &minus;197,011원&rdquo;까지만 말합니다. H3가 붙으면 <b>&ldquo;프리미엄 비중이 평소보다 낮았기 때문&rdquo;</b>까지 이어집니다.<br>
+      실측 참고 &mdash; 스마트스토어 개당 단가는 <b>프리미엄플러스 425,083원 / 스탠다드 123,817원으로 3.4배</b>입니다. 믹스가 몇 개만 바뀌어도 객단가가 크게 움직입니다.</span>
+    </div>
+
+    <h4>표시 규칙</h4>
+    <ul class="plain">
+      <li><b>상품명은 매핑 테이블을 거쳐 표시</b>합니다(&sect;3-4). 매핑되지 않는 일반 문구성 이름은 <b>표시에서 제외</b>합니다.</li>
+      <li>신호가 <b>0개면 블록을 생략</b>합니다. &ldquo;특이사항 없음&rdquo;조차 쓰지 않습니다 &mdash; 매일 보는 화면에서 빈 블록은 소음입니다.</li>
+      <li>같은 신호가 <b>3일 연속</b>이면 문구 끝에 <b>&ldquo;3일 연속&rdquo;</b>을 붙이고, 기간 종합 카드에서 구조 신호로 승격합니다.</li>
+      <li>H2는 <b>자사몰만</b>(상품 조회 데이터가 Cafe24에만 있음), H3&middot;H4는 <b>스마트스토어만</b>, H1은 <b>양 채널</b>입니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h3>3-4. 상품 데이터 소스와 프로모션 등록 <span class="tag t-must">신규</span></h3>
+      <p class="lede">블록 H를 만들려면 <b>상품 단위 데이터</b>와 <b>프로모션 설정값</b>이 필요합니다. 전자는 이미 있고, 후자는 등록 시 필드 하나가 추가되어야 합니다.</p>
+    </div>
+
+    <h4>상품 단위 데이터 &mdash; 현재 확보 상태</h4>
+    <div class="tw">
+      <table>
+        <thead><tr><th>신호</th><th>채널</th><th>MCP 도구 &middot; 필드</th><th class="num">상태</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td>H1 할인율 이탈</td><td>스마트스토어</td><td><code>smartstore_analysis</code> &rarr; <code>discountEvents</code><br><span style="color:var(--ink-muted)">상품별 <b>실제 할인율이 이미 계산되어</b> 나옴 (<code>discountRate</code>)</span></td><td class="num"><span class="chip ok">있음</span></td></tr>
+          <tr class="mid"><td>H1 할인율 이탈</td><td>자사몰</td><td><code>cafe24_analysis</code> &middot; <code>cafe24_coupons</code><br><span style="color:var(--ink-muted)">즉시할인 + 쿠폰 중복분 합산 산출 필요</span></td><td class="num"><span class="chip mid">산출 필요</span></td></tr>
+          <tr class="hi"><td>H2 조회&ndash;전환 괴리</td><td>자사몰</td><td><code>cafe24_traffic</code> <code>mode:"behavior"</code> &rarr; <code>상품퍼널</code><br><span style="color:var(--ink-muted)">조회수 &middot; 장바구니담기 &middot; 담기율 &middot; 구매주문 &middot; 구매액</span></td><td class="num"><span class="chip ok">있음</span></td></tr>
+          <tr class="hi"><td>H3 충전재 믹스</td><td>스마트스토어</td><td><code>smartstore_analysis</code> &rarr; <code>fillerDist</code> &middot; <code>salesBreakdown.byLine</code><br><span style="color:var(--ink-muted)">스탠다드 / 프리미엄 / 프리미엄플러스 / 기타 &times; 수량&middot;매출</span></td><td class="num"><span class="chip ok">있음</span></td></tr>
+          <tr class="hi"><td>H4 부착 판매</td><td>스마트스토어</td><td><code>smartstore_analysis</code> &rarr; <code>patterns.coverAttach</code><br><span style="color:var(--ink-muted)"><code>mainOrders</code> &middot; <code>attachOrders</code> &middot; <code>attachRate</code> &middot; <code>coverOnlyOrders</code></span></td><td class="num"><span class="chip ok">있음</span></td></tr>
+          <tr><td>보조 &mdash; 품목별 일별</td><td>양 채널</td><td><code>sku_sales</code> <code>by:"day"</code><br><span style="color:var(--ink-muted)">응답의 <code>채널별</code>에서 자사몰&middot;스토어만 재집계</span></td><td class="num"><span class="chip ok">있음</span></td></tr>
+        </tbody>
+        <caption><b>원장 주의</b> &mdash; <code>cafe24_traffic</code>&middot;<code>cafe24_analysis</code>는 <b>Cafe24 주문일 기준</b>, 나머지는 <b>이카운트 출고일 기준</b>입니다. 블록 H는 <b>상품 간 비교</b>가 목적이므로 한 신호 안에서는 한 기준으로만 비교하고, 블록 하단에 기준을 표기합니다.</caption>
+      </table>
+    </div>
+
+    <h4>상품명 매핑</h4>
+    <div class="note">
+      <span>자사몰 상품 퍼널에는 <b>상품명이 일반 문구로 들어간 항목</b>이 섞여 있습니다(9/23~29 조회 상위 15개 중 9개가 동일 문구, 합산 조회 1,078회). <b><code>product_no</code> &rarr; 상품명 매핑 테이블을 거쳐 표시</b>하고, <b>매핑되지 않는 항목은 블록 H에서 제외</b>합니다. 매핑만 정확하면 추가 이슈는 없습니다.</span>
+    </div>
+
+    <h4>프로모션 등록 &mdash; H1을 위해 필요한 필드</h4>
+    <p class="lede">현재 <code>promo_defs</code>는 <b>프로모션당 &ldquo;최대할인율&rdquo; 하나</b>만 가집니다. 충전재별&middot;상품별로 할인율을 다르게 가져가면 그 구조로는 대조가 되지 않습니다. <b>행 단위로 설정 할인율이 들어와야</b> 합니다.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>필드</th><th class="num">현재</th><th>용도</th></tr></thead>
+        <tbody>
+          <tr><td><code>promo_id</code> &middot; <code>name</code> &middot; <code>유형</code></td><td class="num"><span class="chip ok">있음</span></td><td>프로모션 배지 표시</td></tr>
+          <tr><td><code>start</code> &middot; <code>end</code></td><td class="num"><span class="chip ok">있음</span></td><td>기간 배지 &middot; 이상탐지에 &ldquo;프로모션 영향 포함&rdquo; 자동 부기</td></tr>
+          <tr><td><code>mall</code> (채널)</td><td class="num"><span class="chip ok">있음</span></td><td>자사몰 / 스마트스토어 분리</td></tr>
+          <tr><td><code>범위</code> (전제품 &middot; 제품군 &middot; 품목)</td><td class="num"><span class="chip ok">있음</span></td><td>대상 여부 판정</td></tr>
+          <tr><td>대상상품 목록</td><td class="num"><span class="chip ok">있음</span></td><td>프로모션 반응 측정</td></tr>
+          <tr><td><code>최대할인율</code></td><td class="num"><span class="chip ok">있음</span></td><td>상한 확인(프로모션 단위)</td></tr>
+          <tr class="bad"><td><b>상품코드 또는 충전재 티어 &times; 설정 할인율</b></td><td class="num"><span class="chip no">없음</span></td><td><b>H1 설정 vs 실제 대조</b> &mdash; 이 필드가 핵심</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre><code>// 추가 등록 행 — 상품 단위 또는 티어 단위 중 운영 방식에 맞는 쪽
+{ "promo_id": "202610-01", "mall": "스마트스토어",
+  "target_type": "tier",  "target": "프리미엄플러스", "set_rate": 0.20 }
+{ "promo_id": "202610-01", "mall": "스마트스토어",
+  "target_type": "sku",   "target": "FUBPP101",      "set_rate": 0.20 }</code></pre>
+
+    <div class="punch warn">
+      <span class="tagline">등록의 가장 큰 효용</span>
+      <span class="big">실제 할인율은 <em>이미 계산되어 나옵니다.</em> 설정값만 들어오면 <em>매일 자동으로 대조</em>됩니다.</span>
+      <span class="sub">9/23~29 스마트스토어 실측 &mdash; 티어별 실제 할인율(항목 단순평균)은 <b>스탠다드 11.4%</b>, <b>프리미엄 17.7%</b>, <b>프리미엄플러스 26.5%</b>로 <b>2.3배 차이</b>입니다. 개별 건으로는 프리미엄플러스 5건이 <b>25.0 ~ 27.8%</b>, 슬리피보 베개 커버가 <b>30%</b>입니다.<br>
+      HRF 소진을 위한 의도된 설계일 수 있으나 <b>지금은 매일 자동으로 확인되고 있지 않습니다.</b> 설정값이 들어오면 <b>쿠폰 중복으로 의도보다 더 나간 건을 당일에 잡습니다</b> &mdash; 마진 방어에 가장 직접적인 장치입니다.</span>
+    </div>
+
+    <h4>프로모션 등록으로 함께 열리는 것</h4>
+    <ul class="plain">
+      <li><b>프로모션 대상 상품의 반응</b> &mdash; 할인을 건 상품이 실제로 팔렸는지, 안 건 상품 대비 어땠는지.</li>
+      <li><b>할인율과 판매 반응의 관계</b> &mdash; 20% 건 상품과 10% 건 상품 중 무엇이 더 움직였는지. <b>다음 달 할인율을 정하는 근거</b>가 됩니다.</li>
+      <li><b>프로모션 기간 배지 자동화</b>(&sect;4-6) &mdash; 프로모션 첫날은 거의 모든 품목이 &ldquo;급증&rdquo;으로 잡히므로 반드시 필요합니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h3>3-5. 목표 환산 규칙 <span class="tag t-must">확정</span></h3>
+      <p class="lede">퍼널 목표는 <b>월 단위</b>로 설정되어 있고, 일별은 <b>월 목표 &divide; 일수</b>로 일할 계산합니다. 분석에 넘길 때는 <b>반드시 월 목표 원본</b>을 넘겨야 합니다.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>값</th><th>산출</th><th>확인</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td><b>일 목표</b></td><td>월 목표 &divide; 해당 월 일수 <b>(반올림하지 않음)</b></td><td>유입 32,100 &divide; 30 = <b>1,070</b> &mdash; 화면 값과 일치</td></tr>
+          <tr class="hi"><td><b>목표 비율</b><br><span style="color:var(--ink-muted)">유입 대비</span></td><td>월 목표 단계 &divide; 월 목표 유입<br><b>일할 분할해도 비율은 변하지 않는다</b></td><td>상품조회 20,370 &divide; 32,100 = <b>63.46%</b> &mdash; 화면 값과 일치</td></tr>
+          <tr><td>목표 객단가</td><td><b>나누지 않는다</b> &mdash; 단가이므로</td><td>225,000원</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note crit">
+      <span><b>화면의 일 목표로 비율을 역산하면 틀립니다.</b> 주문완료 일 목표 <b>21</b>은 1,070 &times; 1.92% = 20.544를 반올림한 값입니다. <b>21 &divide; 1,070으로 역산하면 1.96%</b>가 되어 실제 1.92%와 어긋나고, 갭 분해가 <b>수십만원 단위로 틀어집니다.</b> 입력에는 월 목표 원본을 넣으십시오.</span>
+    </div>
+    <div class="note">
+      <span><b>월 일수가 바뀌면 일 목표도 바뀝니다.</b> 자사몰 월 목표 125,000,000원 기준 9월(30일) 일 목표 <b>4,166,667원</b>, 10월(31일) <b>4,032,258원</b>으로 <b>3.2% 낮아집니다.</b> 성과가 좋아진 것이 아니므로, 월이 바뀌는 시점에 이를 성과 변화로 쓰지 않도록 프롬프트에 명시했습니다.</span>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 4 ══════════ -->
+<div class="part" id="s4">
+  <div class="part-head">
+    <div class="part-no">Section 4</div>
+    <h2>완성 예시 &mdash; 실제 2026.09.29 자사몰 데이터</h2>
+  </div>
+  <section>
+    <p class="lede">아래는 <b>실제 화면 값으로 만든 완성 카드</b>입니다. 개발 시 이 형태를 목표로 삼으십시오.</p>
+
+    <div class="mock ok-edge">
+      <div class="mock-hd">
+        <span class="badge b-ok">좋음</span>
+        <span class="ttl">2026.09.29 (화) · 자사몰</span>
+        <span class="kpi">7일평균 대비 <b>+46%</b> &nbsp;·&nbsp; 의지 목표 <b>98%</b></span>
+      </div>
+      <div class="mock-bd">
+        <div class="mblk">
+          <span class="lbl">한 줄 판정</span>
+          <span class="one">유입은 목표의 82%에 그쳤지만, 들어온 사람들의 구매 전환은 <b>4개 단계 모두 평소보다 좋았다.</b></span>
+        </div>
+
+        <div class="mblk acc">
+          <span class="lbl">오늘의 병목</span>
+          <span class="tx"><b>없음 &mdash; 전 단계가 7일평균 이상입니다.</b><br>
+          상품조회 +0.36%p · 장바구니 +1.49%p · 주문서작성 +0.28%p · 주문완료 +0.35%p (모두 7일평균 대비)<br>
+          <span style="color:var(--ink-muted)">순매출이 목표에 2% 못 미친 것은 전환이 아니라 <b>유입량</b> 때문입니다.</span></span>
+        </div>
+
+        <div class="mblk">
+          <span class="lbl">잘된 것</span>
+          <span class="tx"><b>장바구니 담기가 평소보다 41% 높았습니다</b> (유입 대비 5.11% vs 7일평균 3.63%).
+          주문완료율도 7일평균을 넘겨, <b>상품을 본 사람의 구매 의지는 최근 중 가장 좋은 날</b>이었습니다.</span>
+        </div>
+
+        <div class="mblk wrn">
+          <span class="lbl">의지 목표 갭 &mdash; 임원 보고용</span>
+          <span class="tx"><b>의지 목표에 544,411원 못 미쳤습니다.</b> 분해하면 &mdash;<br>
+          <b>유입 −820,800원</b> · <b>전환 +473,400원</b> · <b>객단가 −197,011원</b><br>
+          <span style="color:var(--ink-muted)">전환은 의지 목표까지 넘겼고, 갭은 사실상 <b>유입 하나에서 발생</b>했습니다. 상품조회(목표 63.46% / 7일평균 33.61%)와 주문서작성은 <b>상시 갭 구간</b>이므로 오늘의 액션 대상에서 제외했습니다.</span></span>
+        </div>
+
+        <div class="mblk">
+          <span class="lbl">원인 가설 &mdash; 유입이 목표에 못 미친 이유</span>
+          <span class="tx">
+          ① <b>당일 880명은 7일평균 대비 +22.7%</b>로 이미 좋은 편 &mdash; 의지 목표 1,070명은 7일평균의 1.49배 <span style="color:var(--ink-muted)">→ 갭을 메우려면 평소보다 <b>49% 많은 유입</b>이 필요하다는 뜻</span><br>
+          ② 광고 매체 구성 변화 가능성 <span style="color:var(--ink-muted)">→ [트래픽 현황] 탭에서 매체별 유입 전일 대비 확인</span><br>
+          ③ 브랜드 검색 유입 감소 가능성 <span style="color:var(--ink-muted)">→ 네이버 브랜드검색 집행 상태 확인</span></span>
+        </div>
+
+        <div class="mblk">
+          <span class="lbl">상품 신호</span>
+          <span class="tx">
+          <b>&#128317; 요기보 맥스</b> &mdash; 조회 1위(344회)인데 <b>조회당 매출 2,001원</b>으로 맥스 프리미엄(16,220원)의 <b>1/8</b>. 담기율도 10.5%로 최하위권
+          <span class="q">H2 &middot; 자사몰 Cafe24 기준 &middot; 2일 연속</span><br>
+          <b>&uarr; 프리미엄 비중</b> 매출 기준 <b>29.3%</b>(7일평균 21.4%) &mdash; 객단가 갭을 <b>줄인</b> 요인
+          <span class="q">H3 &middot; 갭 분해 객단가 항과 연결</span></span>
+        </div>
+
+        <div class="mblk acc">
+          <span class="lbl">액션</span>
+          <div class="acts">
+            <div class="act"><span class="no">1</span><span class="tm">15분</span><span>
+              <b>전환이 좋았던 날의 유입 확대 여지 점검 &mdash; 검색광고 일예산 소진 여부 확인</b><br>
+              <span class="why">근거 &mdash; 갭 544,411원 중 <b>820,800원이 유입에서 발생</b>했고 전환은 오히려 +473,400원이었습니다. <b>전환이 잘 도는 날에 유입만 더 넣으면 그대로 매출</b>입니다.</span></span></div>
+            <div class="act"><span class="no">2</span><span class="tm">10분</span><span>
+              <b>[트래픽 현황] 탭에서 매체별 유입 전일 대비 확인</b><br>
+              <span class="why">근거 &mdash; 전환은 전부 평소 이상인데 유입만 목표 미달. 문제가 있다면 <b>유입 앞단</b>입니다.</span></span></div>
+            <div class="act"><span class="no">3</span><span class="tm">20분</span><span>
+              <b>객단가 상향 &mdash; 고단가 상품 메인 노출 검토</b><br>
+              <span class="why">근거 &mdash; 객단가 214,631원으로 의지 목표 225,000원 대비 <b>10,369원 낮음.</b> 갭 분해상 <b>−197,011원</b>에 해당합니다.</span></span></div>
+            <div class="act"><span class="no">4</span><span class="tm">5분</span><span>
+              <b>장바구니 전환 개선 요인 기록</b><br>
+              <span class="why">근거 &mdash; 7일평균 대비 +41%. <b>전날 어떤 변경이 있었는지 메모</b>해두면 재현 가능한 자산이 됩니다.</span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="mock-ft">
+        <span>데이터 &mdash; 이프두 3단계 입력됨 · 순매출 MCP 실측</span>
+        <span>기준선 &mdash; 7일평균</span>
+        <span>Claude · claude-opus-4-8 · 2026-09-30 09:14 저장</span>
+      </div>
+    </div>
+
+    <div class="note key">
+      <span><b>현재 가안과 비교해 보십시오.</b> 같은 날짜인데 <b>결론이 반대</b>입니다. 목표 대비 단일축으로 보면 &ldquo;상품조회 44% 심각 미달 · 배지 위험&rdquo;이고, 2축으로 보면 <b>&ldquo;배지 좋음, 병목 없음, 전환은 의지 목표까지 초과, 갭은 전부 유입에서 발생&rdquo;</b>입니다.<br><b>담당자가 실제로 할 일이 완전히 달라집니다</b> &mdash; 상품 상세페이지를 뜯어보는 대신, <b>전환이 잘 도는 날에 유입을 더 넣을 방법</b>을 찾게 됩니다.</span>
+    </div>
+
+    <h4>참고 &mdash; 데이터 이상 케이스 (2026.09.30 스마트스토어)</h4>
+    <div class="mock crit-edge">
+      <div class="mock-hd">
+        <span class="badge b-crit">데이터 이상</span>
+        <span class="ttl">2026.09.30 (수) · 스마트스토어</span>
+        <span class="kpi">유입 <b>집계 0</b> &nbsp;·&nbsp; 순매출 <b>68%</b></span>
+      </div>
+      <div class="mock-bd">
+        <div class="mblk">
+          <span class="lbl">한 줄 판정</span>
+          <span class="one">유입이 0으로 집계됐는데 주문 4건이 발생 &mdash; <b>수치가 아니라 데이터를 먼저 확인해야 하는 날입니다.</b></span>
+        </div>
+        <div class="mblk crt">
+          <span class="lbl">판단 보류</span>
+          <span class="tx"><b>유입 0은 실제 값이 아니라 비즈어드바이저 미집계로 판단됩니다.</b>
+          유입이 없으면 구매율·전환 판정이 불가능하므로 <b>이 날의 퍼널 판정은 전부 보류</b>합니다.<br>
+          <span style="color:var(--ink-muted)">최근 7일 유입 264~567명 흐름과 비교해도 0은 비정상입니다.</span></span>
+        </div>
+        <div class="mblk">
+          <span class="lbl">그래도 읽을 수 있는 것</span>
+          <span class="tx">주문당 매출이 <b>328,543원</b>으로 기준(160,661원)의 <b>2배</b>입니다.
+          주문 건수는 적지만 <b>고단가 주문이 들어온 날</b>입니다 &mdash; 어떤 상품인지 확인할 가치가 있습니다.</span>
+        </div>
+        <div class="mblk acc">
+          <span class="lbl">액션</span>
+          <div class="acts">
+            <div class="act"><span class="no">1</span><span class="tm">10분</span><span>
+              <b>비즈어드바이저에서 9/30 유입 재확인 후 대시보드 재입력</b><br>
+              <span class="why">근거 &mdash; 유입 0은 집계 지연일 가능성이 높습니다. <b>재입력 후 이 카드를 다시 분석</b>하십시오.</span></span></div>
+            <div class="act"><span class="no">2</span><span class="tm">10분</span><span>
+              <b>당일 주문 4건의 상품 구성 확인</b><br>
+              <span class="why">근거 &mdash; 주문당 매출이 기준의 2배. <b>고단가 상품 판매 패턴</b>이라면 노출 확대 검토 대상입니다.</span></span></div>
+            <div class="act"><span class="no">3</span><span class="tm">5분</span><span>
+              <b>스마트스토어 매출 파일 지연(4일) 상태 확인</b><br>
+              <span class="why">근거 &mdash; 파일 지연 중에는 매출(파일) 값이 <b>참고값</b>이므로 달성률 판단에 쓰지 않습니다.</span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="mock-ft">
+        <span>데이터 &mdash; <b style="color:var(--crit)">유입 미집계</b> · 매출 파일 4일 지연</span>
+        <span>Claude · claude-opus-4-8 · 2026-09-30 14:47 저장</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 5 ══════════ -->
+<div class="part" id="s5">
+  <div class="part-head">
+    <div class="part-no">Section 5</div>
+    <h2>기간 선택 · 일자별 분석</h2>
+  </div>
+
+  <section>
+    <div class="punch">
+      <span class="tagline">담당자 요청 원문</span>
+      <span class="big">&ldquo;상단에서 <em>기간 설정한 일자에 대한 분석을 일자별로</em> 볼 수 있도록 만들어 달라&rdquo;</span>
+      <span class="sub">월요일에 금·토·일 3일치를 한 번에 입력하는데 <b>[AI 분석] 버튼이 1개라 전일자만 분석</b>되는 한계를 해결합니다.</span>
+    </div>
+
+    <h4>동작 정의</h4>
+    <ol class="steps">
+      <li><b>기간 선택 시</b> &mdash; 상단 기간 선택기(<code>2026-09-25 ~ 2026-09-29</code>)가 바뀌면 AI 분석 영역이 <b>그 기간의 날짜 목록</b>으로 갱신됩니다.</li>
+      <li><b>분석 상태 표시</b> &mdash; 각 날짜에 <b>분석 완료 / 미분석</b> 상태를 표시합니다. 이미 분석된 날은 <b>저장분을 즉시 표시</b>(비용 0).</li>
+      <li><b>일괄 분석 버튼</b> &mdash; <code>[미분석 3일 분석하기]</code>. <b>미분석 날짜만</b> 호출합니다. 진행률 표시(<code>2 / 3</code>).</li>
+      <li><b>기간 종합 카드 1개</b>를 맨 위에 생성합니다(§5-2).</li>
+      <li><b>일자별 카드 N개</b>를 최신순으로 그 아래에 쌓습니다.</li>
+      <li><b>단일 날짜 선택 시</b>(기존 동작) &mdash; 종합 카드 없이 일자별 카드 1개만 표시합니다.</li>
+    </ol>
+
+    <pre><code>┌──────────────────────────────────────────────────────────┐
+│ AI DAILY ANALYSIS          [Claude · 날짜별 저장]         │
+├──────────────────────────────────────────────────────────┤
+│ 선택 기간  2026-09-25 ~ 2026-09-29 (5일)                  │
+│ 분석 완료 2일 · 미분석 3일     [미분석 3일 분석하기]      │
+├──────────────────────────────────────────────────────────┤
+│ ▣ 기간 종합 · 09.25~09.29                                 │
+│   패턴 · 반복 신호 · 기간 액션                             │
+├──────────────────────────────────────────────────────────┤
+│ ▣ 09.29 (화) [주의]                                       │
+│ ▣ 09.28 (월) [정상]                                       │
+│ ▣ 09.27 (일) [좋음]                                       │
+│ ▣ 09.26 (토) [주의]                                       │
+│ ▣ 09.25 (금) [정상]                                       │
+└──────────────────────────────────────────────────────────┘</code></pre>
+
+    <div class="note crit">
+      <span><b>일괄 분석 시 상한을 두십시오.</b> 담당자가 &ldquo;이번 달&rdquo;을 선택하면 <b>30일 × 2채널 = 60회 호출</b>이 발생합니다. <b>1회 일괄 분석 최대 7일</b>로 제한하고, 초과 시 &ldquo;최근 7일만 분석됩니다&rdquo;를 안내하십시오. 월 단위는 <b>기간 종합 카드만</b> 생성합니다(일자별 카드 생략).</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>5-2. 기간 종합 카드 &mdash; 일자별만 보면 안 보이는 것</h3></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>블록</th><th>내용</th><th>생성</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td><b>기간 요약</b></td><td>기간 합계 실적 / 목표 / 달성률, 일자별 상태 배지 나열</td><td>서버</td></tr>
+          <tr class="hi"><td><b>반복 패턴</b></td><td><b>같은 단계가 N일 중 M일 병목(케이스 A)</b>으로 잡혔는지. <b>2일 이상이면 &ldquo;구조적 문제&rdquo;로 승격</b></td><td>서버+AI</td></tr>
+          <tr class="hi"><td><b>요일 패턴</b></td><td>주말/주중 차이. <b>일 목표가 월 목표 ÷ 일수(균등 배분)</b>이므로 요일 편차가 그대로 달성률 편차로 나타남</td><td>서버+AI</td></tr>
+          <tr class="hi"><td><b>의지 갭 추세</b></td><td><b>갭 금액이 전주 대비 줄었는가</b> · 유입/전환/객단가 기여도별 방향 &mdash; <b>고정 목표에서 유일하게 의미 있는 진척 지표</b>(§2-3)</td><td>서버+AI</td></tr>
+          <tr><td>추세</td><td>기간 내 단계별 비율의 <b>방향</b>(개선/악화/횡보)</td><td>서버+AI</td></tr>
+          <tr class="hi"><td><b>기간 액션</b></td><td><b>3~5개.</b> 일자별 액션과 달리 <b>구조·설정을 바꾸는 것</b> 위주</td><td>AI</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="punch warn">
+      <span class="tagline">기간 종합 카드가 필요한 진짜 이유</span>
+      <span class="big">&ldquo;상품조회가 <em>5일 중 5일</em> 목표 미달&rdquo;은 일자별 카드를 다섯 번 읽어도 <em>드러나지 않습니다.</em></span>
+      <span class="sub">하루만 보면 &ldquo;오늘은 좀 안 됐네&rdquo;지만, <b>5일 연속이면 구조가 막힌 것</b>입니다. 기간 종합 카드는 <b>&ldquo;N일 중 M일&rdquo; 카운트를 자동으로 세어</b> 이 판단을 가능하게 합니다. <b>목표는 고정이므로, 여기서 볼 것은 &ldquo;목표가 맞나&rdquo;가 아니라 &ldquo;갭이 좁혀지고 있나&rdquo;입니다.</b></span>
+    </div>
+    <div class="note">
+      <span><b>요일 패턴은 반드시 넣어주십시오.</b> <b>일 목표 = 월 목표 ÷ 일수</b>(균등 배분)로 확정되었습니다. 그런데 실제 실적은 <b>주말이 주중보다 뚜렷이 높습니다.</b> 균등 배분 목표에서는 <b>주중은 거의 매일 미달, 주말은 거의 매일 초과</b>로 표시됩니다. AI가 이걸 &ldquo;주중 부진&rdquo;으로 해석하면 오진이므로, <b>요일 효과를 명시적으로 분리해 쓰게</b> 해야 합니다.</span>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 6 ══════════ -->
+<div class="part" id="s6">
+  <div class="part-head">
+    <div class="part-no">Section 6</div>
+    <h2>채널별 차이 &mdash; 같은 카드를 쓰면 안 된다</h2>
+  </div>
+  <section>
+    <div class="tw">
+      <table>
+        <thead><tr><th>구분</th><th>자사몰 (이프두)</th><th>스마트스토어 (비즈어드바이저)</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td><b>퍼널 단계</b></td><td><b>6</b> &mdash; 유입 · 상품조회 · 장바구니 · 주문서작성 · 주문완료 · 순매출</td><td><b>4</b> &mdash; 유입 · 주문건수 · 매출(파일) · 순매출</td></tr>
+          <tr><td>중간 단계</td><td>있음 &mdash; <b>병목을 단계로 특정 가능</b></td><td><b>없음</b> &mdash; 유입 → 주문건수 직행. 병목은 <b>&ldquo;구매율&rdquo; 하나</b>로만 판단</td></tr>
+          <tr><td>비율 지표</td><td>각 단계 <b>유입 대비 %</b></td><td><b>구매율</b>(주문건수 ÷ 유입) 하나</td></tr>
+          <tr><td>객단가</td><td>객단가 (순매출 ÷ 주문완료)</td><td><b>건당 매출</b> (매출 ÷ 주문건수)</td></tr>
+          <tr class="mid"><td><b>매출 원장</b></td><td>순매출 = MCP 실측(취소·반품 제외)</td><td><b>두 개</b> &mdash; 매출(파일, 참고값·취소 반영 전) / 순매출(MCP 실측)</td></tr>
+          <tr class="bad"><td><b>데이터 지연</b></td><td>이프두 3단계 미입력 시 해당 단계 보류</td><td><b>매출 파일 최대 4일 지연</b> · 순매출 부분 집계(예: 29/30일)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>채널별 카드 조정</h4>
+    <ul class="plain">
+      <li><b>스마트스토어는 블록 C(병목)를 &ldquo;구매율 점검&rdquo;으로 대체</b>합니다. 단계가 없으므로 &ldquo;어느 단계가 막혔나&rdquo;를 말할 수 없습니다.</li>
+      <li>대신 <b>&ldquo;유입은 늘었는데 구매율이 떨어졌다&rdquo; vs &ldquo;유입이 줄어 주문이 줄었다&rdquo;</b>를 구분해 씁니다 &mdash; 이 둘은 처방이 완전히 다릅니다.</li>
+      <li><b>매출(파일)은 배지 판정·달성률에 사용하지 않습니다.</b> 취소 반영 전 값이므로 <b>참고 표시만</b> 하고, 판정은 <b>순매출(MCP)</b>로만 합니다.</li>
+      <li>순매출이 <b>부분 집계</b>인 기간(예: 29/30일)은 <b>달성률을 산출하지 않고</b> &ldquo;부분 집계 &mdash; 판정 보류&rdquo;로 표기합니다.</li>
+      <li>헤더에 <b>채널명을 반드시 표기</b>합니다. 카드가 누적되면 토글 상태만으로는 구분되지 않습니다.</li>
+    </ul>
+
+    <div class="note crit">
+      <span><b>카드 저장 키에 채널을 포함하십시오.</b> 현재 구조가 &ldquo;날짜별 저장&rdquo;인데, <b>자사몰과 스마트스토어가 같은 날짜로 저장되면 서로 덮어씁니다.</b> 저장 키는 <code>(날짜 + 채널)</code>이어야 합니다.</span>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 7 ══════════ -->
+<div class="part" id="s7">
+  <div class="part-head">
+    <div class="part-no">Section 7</div>
+    <h2>출력 스키마 · 프롬프트 규격</h2>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>7-1. 역할 분담 &mdash; 숫자는 서버, 문장은 AI</h3></div>
+    <div class="punch">
+      <span class="tagline">반드시 지켜야 할 분리</span>
+      <span class="big">달성률 · 비율 · 케이스 판정 · 기회손실은 <em>전부 서버에서 계산</em>합니다. AI에게는 <em>확정된 숫자와 판정</em>만 넘깁니다.</span>
+      <span class="sub">AI에게 원시 데이터를 주고 &ldquo;분석해줘&rdquo;라고 하면 <b>계산이 틀리고, 같은 날을 두 번 눌렀을 때 숫자가 달라집니다.</b> AI는 <b>문장 생성기</b>로만 씁니다 &mdash; 블록 B(한 줄 판정) · D(잘된 것) · F(원인 가설) · G(액션), 그리고 C·E의 <b>설명 문장</b>만.</span>
+    </div>
+    <pre><code>{
+  "meta": {
+    "date": "2026-09-29", "weekday": "화", "channel": "자사몰",
+    "badge": "warn",
+    "data_status": { "ifdu_3steps": true, "net_revenue": "actual",
+                     "store_file_delay_days": null, "partial": false },
+    "analyzed_at": "2026-09-30T09:14:00+09:00",
+    "model": "claude-opus-4-8"
+  },
+
+  "headline_kpi": {
+    "net_vs_avg7_pct": 46.2,        // ← 배지 판정 기준
+    "net_vs_target_pct": 98.0       // ← 표시만. 배지에 쓰지 않음
+  },
+
+  "steps": [
+    { "name": "유입",       "actual": 880, "target": 1070, "avg7": 717,
+      "rate_vs_target": 82.2, "rate_vs_avg7": 122.7, "case": "A_or_null" },
+    { "name": "상품조회",   "actual": 299, "target": 679, "avg7": 241,
+      "pct_of_inflow": 33.98, "pct_target": 63.46, "pct_avg7": 33.61,
+      "gap_target_pp": -29.48, "gap_avg7_pp": 0.36, "case": "C" },
+    { "name": "장바구니",   "...": "동일 구조", "case": "E" },
+    { "name": "주문서작성", "...": "동일 구조", "case": "C" },
+    { "name": "주문완료",   "...": "동일 구조", "case": "E" }
+  ],
+
+  "net_revenue": { "actual": 4080000, "target": 4170000, "rate": 98.0,
+                   "aov": 214631, "aov_target": 225000, "aov_gap": -10369 },
+
+  "bottleneck": null,                          // 케이스 A 단계명 또는 null
+  "opportunity_loss": null,                    // { "orders": 2.0, "amount": 430000 }
+  "gap_items": ["상품조회", "주문서작성"],       // 케이스 B·C — 의지 목표 갭
+  "quiet_decline": [],                         // 케이스 D
+
+  "will_gap": {                                // 의지 목표 갭 분해 (§2-3)
+    "total": -544411,
+    "inflow": -820800, "conversion": 473400, "aov": -197011,
+    "vs_last_week_total": null                 // 갭 추세 (기간 종합에서 사용)
+  },
+
+  "promo": [                                   // 대상일에 걸린 프로모션 (§3-4)
+    { "promo_id": "202610-01", "name": "...", "start": "...", "end": "...",
+      "scope": "품목", "max_rate": 0.20 }
+  ],
+
+  "product_signals": [                         // 블록 H — 트리거된 것만, 최대 3개
+    { "type": "H2", "channel": "자사몰", "ledger": "cafe24",
+      "product_no": "39", "name": "요기보 맥스",
+      "views": 344, "view_rank": 1, "cart_rate": 10.5,
+      "rev_per_view": 2001, "peer_best": 16220, "ratio": 8.1,
+      "consecutive_days": 2 },
+    { "type": "H3", "channel": "스마트스토어", "ledger": "ecount",
+      "premium_share": 29.3, "premium_share_avg7": 21.4, "delta_pp": 7.9,
+      "linked_to_aov_gap": true },
+    { "type": "H1", "channel": "스마트스토어", "ledger": "ecount",
+      "sku": "FUBPP101", "name": "맥스 프리미엄플러스",
+      "set_rate": 0.20, "actual_rate": 0.257, "gap_pp": 5.7 }
+  ],
+
+  // ↓ 여기부터 AI 생성
+  "verdict_line":  "유입은 목표의 82%에 그쳤지만, 들어온 사람들의 구매 전환은 4개 단계 모두 평소보다 좋았다.",
+  "bottleneck_text": "없음 — 전 단계가 7일평균 이상입니다. …",
+  "good_text":     "장바구니 담기가 평소보다 41% 높았습니다. …",
+  "will_gap_text": "의지 목표에 544,411원 못 미쳤습니다. 유입 −820,800원 · 전환 +473,400원 · 객단가 −197,011원 …",
+  "product_text": "요기보 맥스 — 조회 1위인데 조회당 매출은 프리미엄의 1/8 …",   // 신호 0개면 null
+  "hypotheses": [
+    { "text": "목표 자체가 7일평균의 1.49배", "how_to_check": "목표 설정 근거 확인" }
+  ],
+  "actions": [
+    { "no": 1, "eta_min": 15,
+      "title": "검색광고 일예산 소진 여부 확인 — 전환이 좋은 날의 유입 확대 여지",
+      "why": "갭 544,411원 중 820,800원이 유입에서 발생. 전환은 오히려 +473,400원." }
+  ]
+}</code></pre>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>7-2. 프롬프트에 반드시 넣을 제약</h3></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>제약</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td><b>숫자를 새로 계산하지 마라. 주어진 값만 인용하라.</b></td><td>산술 오류 방지 · 재조회 시 값 변동 방지</td></tr>
+          <tr class="bad"><td><b>위 퍼널 카드에 이미 표시된 숫자를 그대로 반복하지 마라.</b> 관계(7일평균 대비, 단계 간 대조)로 바꿔 쓰라.</td><td>화면 중복 제거 &mdash; <b>가독성 개선의 핵심</b></td></tr>
+          <tr class="bad"><td><b>케이스 B·C 단계를 &ldquo;병목&rdquo; 또는 &ldquo;개선 필요&rdquo;로 쓰지 마라.</b> &ldquo;의지 목표 갭&rdquo;으로 쓰라.</td><td><b>오진 방지</b> &mdash; 본 문서의 출발점</td></tr>
+          <tr class="bad"><td><b>목표 수정·재설정·하향을 제안하지 마라.</b> 목표는 임원진이 설정한 고정 의지치다. 갭을 줄이는 방법만 제시하라.</td><td>목표는 변경 대상이 아니다. 제안해도 실행 불가이며 <b>보고 자리에서 부적절</b>하다</td></tr>
+          <tr class="bad"><td><b>광고비 증액 · 재고 확대 · 신규 출점 · 상시 할인 확대를 제안하지 마라.</b></td><td>현재 전부 실행 불가 조건</td></tr>
+          <tr class="bad"><td>할인율은 <b>20%를 넘지 않는다.</b></td><td>사내 정책</td></tr>
+          <tr class="mid"><td><b>액션은 3~5개. 트리거된 항목이 3개 미만이면 그만큼만 쓰고, 0개면 &ldquo;조치 불필요&rdquo;라고 답하라.</b></td><td>이상 없는 날의 <b>억지 액션 생성 방지</b></td></tr>
+          <tr class="mid"><td><b>각 액션에 소요시간(분)과 근거를 반드시 붙여라.</b></td><td>출근 직후 실행 가능성 판단</td></tr>
+          <tr><td>추측은 <b>&ldquo;추정&rdquo;·&ldquo;가능성&rdquo;</b>으로 명시하라.</td><td>확정값과 추론 구분</td></tr>
+          <tr class="mid"><td><b>상품 신호가 0개면 블록 H를 생략하라.</b> 억지로 채우지 마라</td><td>매일 보는 화면에서 빈 블록은 소음</td></tr>
+          <tr class="mid"><td><b>매핑되지 않은 상품명은 언급하지 마라.</b> 상품을 특정할 수 없으면 그 신호를 버려라</td><td>담당자가 행동할 수 없는 문구 차단</td></tr>
+          <tr><td><b>할인율 이탈(H1)을 &ldquo;잘못됐다&rdquo;로 단정하지 마라.</b> 설정값과 실제값을 나란히 제시하고 확인을 요청하라</td><td>HRF 소진 등 의도된 설계일 수 있음</td></tr>
+          <tr><td>금액은 <b>천단위 콤마 · 통화기호 없음 · K/M 축약 금지</b></td><td>자사 표기 규칙</td></tr>
+          <tr><td>한 블록은 <b>3문장 이내</b></td><td>스캔 가능한 길이 유지</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note key">
+      <span><b>&ldquo;조치 불필요&rdquo;를 허용하는 한 줄이 시스템 신뢰도를 좌우합니다.</b> 아무 이상 없는 날에도 액션 3개를 강제하면 AI는 <b>무의미한 제안을 지어냅니다.</b> 그런 카드가 몇 번 나오면 담당자는 액션 블록 자체를 읽지 않게 됩니다.</span>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 8 ══════════ -->
+<div class="part" id="s8">
+  <div class="part-head">
+    <div class="part-no">Section 8</div>
+    <h2>예외 처리</h2>
+  </div>
+  <section>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>상황</th><th>동작</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">1</td><td><b>퍼널 데이터 미입력</b></td><td><b>AI 호출 없이</b> &ldquo;2026-09-29 퍼널 데이터가 없습니다. 입력 후 분석해 주세요&rdquo; 표시. 비용·오답 방지</td></tr>
+          <tr class="bad"><td class="num">2</td><td><b>유입 0인데 하위 단계에 값 존재</b></td><td>배지 <b>「데이터 이상」</b> · 퍼널 판정 <b>전부 보류</b> · 액션 1번을 <b>&ldquo;재확인 후 재입력&rdquo;</b>으로 고정</td></tr>
+          <tr class="mid"><td class="num">3</td><td>이프두 3단계 일부만 입력</td><td>해당 단계만 <b>&ldquo;판단 보류&rdquo;</b>, 나머지는 정상 분석 <span style="color:var(--ink-muted)">(현재 구현 유지)</span></td></tr>
+          <tr class="mid"><td class="num">4</td><td><b>스마트스토어 파일 지연</b></td><td>헤더에 <b>「파일 N일 지연」</b> 배지 · 매출(파일)은 <b>참고 표시만</b> · 판정은 순매출로만</td></tr>
+          <tr class="mid"><td class="num">5</td><td><b>순매출 부분 집계</b> (예: 29/30일)</td><td>달성률 <b>산출하지 않음</b> · &ldquo;부분 집계 &mdash; 판정 보류&rdquo; 표기</td></tr>
+          <tr><td class="num">6</td><td>7일평균 산출 불가 <span style="color:var(--ink-muted)">(이력 7일 미만)</span></td><td><b>2축 판정 불가</b> &mdash; 목표 대비만으로 판정하되 <b>&ldquo;기준선 부족&rdquo;을 명시</b></td></tr>
+          <tr><td class="num">7</td><td>프로모션 기간</td><td>카드 헤더에 <b>프로모션명 배지</b> 표시 · 해석에 &ldquo;프로모션 영향 포함&rdquo; 자동 부기</td></tr>
+          <tr><td class="num">8</td><td>AI 호출 실패 · 타임아웃(30초)</td><td><b>서버 계산 블록(A·C·E)은 그대로 표시</b>하고 AI 블록만 &ldquo;해석 생성 실패 · 다시 시도&rdquo;. <b>전체가 막히면 안 됨</b></td></tr>
+          <tr><td class="num">9</td><td>미래 날짜 선택</td><td>날짜 선택기 최대값을 <b>어제(또는 최신 입력일)로 고정</b></td></tr>
+          <tr><td class="num">10</td><td>일괄 분석 7일 초과</td><td>&ldquo;최근 7일만 분석됩니다&rdquo; 안내 후 진행 · 월 단위는 <b>기간 종합만</b></td></tr>
+          <tr class="mid"><td class="num">11</td><td><b>상품명이 매핑되지 않음</b></td><td>해당 항목을 <b>블록 H에서 제외</b>하고 다음 순위로 대체. 전부 미매핑이면 해당 신호를 생략</td></tr>
+          <tr class="mid"><td class="num">12</td><td><b>프로모션 설정 할인율 미등록</b></td><td><b>H1을 생략</b>하고 H2~H4만 표시. 실제 할인율은 참고로만 표기하고 &ldquo;설정값 미등록&rdquo;을 명시</td></tr>
+          <tr><td class="num">13</td><td>프로모션 첫날 · 종료 다음날</td><td>블록 H에 <b>&ldquo;프로모션 시작/종료 영향 포함&rdquo;</b> 자동 부기. 이 이틀은 H2~H4를 <b>경보로 승격하지 않음</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════ 9 ══════════ -->
+<div class="part" id="s9">
+  <div class="part-head">
+    <div class="part-no">Section 9</div>
+    <h2>확인 요청 항목</h2>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>9-1. 개발자 확인</h3></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>항목</th><th class="num">기본값</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td class="num">1</td><td><b>7일평균이 DB에 저장되어 있는지</b> &mdash; 화면에 표시 중이므로 값은 있으나, <b>단계별 &ldquo;유입 대비 7일평균 비율&rdquo;</b>을 계산할 수 있는지 확인 필요</td><td class="num">저장값 사용</td></tr>
+          <tr class="bad"><td class="num">1-1</td><td><b>7일평균 &ldquo;순매출&rdquo;이 있는지</b> &mdash; <b>배지 판정의 기준 지표</b>입니다(§2-2). 순매출 카드에만 7일평균 줄이 없습니다. 없으면 <b>7일평균 주문완료 × 7일평균 객단가</b>로 산출하거나 별도 저장 필요</td><td class="num"><b>필수</b></td></tr>
+          <tr class="hi"><td class="num">2</td><td><b>카드 저장 키에 채널이 포함되어 있는지</b> (§6)</td><td class="num">(날짜+채널)</td></tr>
+          <tr><td class="num">3</td><td>케이스 판정 임계치(동등 폭 ±0.5%p)를 <b>설정 화면에서 조정 가능</b>하게</td><td class="num">±0.5%p</td></tr>
+          <tr><td class="num">4</td><td>일괄 분석 1회 상한</td><td class="num">7일</td></tr>
+          <tr><td class="num">5</td><td>&ldquo;N일 연속 미달&rdquo; 카운트를 위해 <b>과거 판정 결과를 조회 가능</b>하게 저장</td><td class="num">필요</td></tr>
+          <tr class="hi"><td class="num">6</td><td><b><code>product_no</code> &rarr; 상품명 매핑 테이블</b> &mdash; 블록 H 표시의 전제(&sect;3-4). 미매핑 항목은 제외 처리</td><td class="num"><b>필수</b></td></tr>
+          <tr class="hi"><td class="num">7</td><td><b><code>promo_defs</code>에 &ldquo;대상 &times; 설정 할인율&rdquo; 행 추가</b> &mdash; H1의 전제. 현재는 프로모션당 최대할인율 하나뿐</td><td class="num"><b>필수</b></td></tr>
+          <tr><td class="num">8</td><td>충전재 티어별 7일평균(프리미엄 매출 비중)을 저장 &mdash; H3 기준선</td><td class="num">필요</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>9-2. 담당자 확인</h3></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="num">#</th><th>항목</th><th class="num">기본값</th></tr></thead>
+        <tbody>
+          <tr class="bad"><td class="num">1</td><td><b>순매출 목표와 퍼널 단계 목표가 정합하지 않습니다.</b> 퍼널 목표를 곱하면 <b>1,070명 × 1.92% × 225,000원 = 4,622,400원</b>인데 화면의 순매출 목표는 <b>4,170,000원</b>(월 125,000,000 ÷ 30)으로 <b>452,400원 차이</b>입니다. <b>갭 분해를 어느 쪽 기준으로 할지</b> 확정이 필요합니다<br><span style="color:var(--ink-muted)">반품·취소 여유를 감안한 의도적 차이라면 그대로 두고 기준만 명시하면 됩니다</span></td><td class="num">퍼널 목표 곱<br>기준 사용</td></tr>
+          <tr class="hi"><td class="num">2</td><td><b>퍼널 목표는 월 단위 &mdash; 확정</b><br>대시보드에 월별 목표가 설정되어 있고, 일별은 <b>월 목표 &divide; 일수로 일할 계산</b>합니다. 요일 가중은 적용하지 않습니다<br><span style="color:var(--ink-muted)">자사몰 온라인은 주말/주중 방문 1.19배 &middot; 주문 1.18배로 요일 편차가 작아(오프라인 좌수는 3.30배) 균등 배분으로 충분합니다</span></td><td class="num">해결</td></tr>
+          <tr><td class="num">3</td><td>액션 개수 3~5개 적정 여부</td><td class="num">3~5개</td></tr>
+          <tr><td class="num">4</td><td>블록 F(원인 가설)를 항상 표시할지, 병목이 있을 때만 표시할지</td><td class="num">병목 시만</td></tr>
+          <tr><td class="num">5</td><td>기간 종합 카드를 <b>항상</b> 표시할지, 2일 이상 선택 시만 표시할지</td><td class="num">2일 이상</td></tr>
+          <tr class="mid"><td class="num">6</td><td><b>할인율을 상품(SKU) 단위로 등록할지, 충전재 티어 단위로 등록할지</b><br><span style="color:var(--ink-muted)">티어 단위가 입력이 훨씬 가볍습니다. 예외 상품만 SKU 행으로 추가하는 혼합도 가능합니다</span></td><td class="num">티어 + 예외 SKU</td></tr>
+          <tr><td class="num">7</td><td>H1 할인율 이탈 임계치 <b>3%p</b> 적정 여부<br><span style="color:var(--ink-muted)">쿠폰 중복으로 상시 넘어가는 폭이 있다면 그만큼 올려야 합니다</span></td><td class="num">3%p</td></tr>
+          <tr><td class="num">8</td><td>의지 목표 갭 블록을 담당자 화면에도 항상 노출할지, 접어둘지<br><span style="color:var(--ink-muted)">임원 보고용 성격이 강합니다</span></td><td class="num">항상 노출</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="punch">
+      <span class="tagline">목표가 고정 의지치라는 전제에서의 결론</span>
+      <span class="big">목표를 바꿀 수 없다면, <em>목표를 읽는 방법</em>을 바꾸는 것이 유일한 해법입니다.</span>
+      <span class="sub"><b>배지·병목·액션은 7일평균 대비로</b> 판정해 &ldquo;오늘 이상이 있었나&rdquo;에 답하고, <b>의지 목표 갭은 금액으로 분해해</b> &ldquo;어디서 얼마를 잃었나&rdquo;에 답합니다. <b>두 질문을 한 화면에서 분리하면 고정 의지치도 매일 다른 정보를 줍니다.</b><br>
+      9/29 예시 &mdash; 달성률만 보면 &ldquo;98%&rdquo; 한 줄이지만, 갭을 분해하면 <b>&ldquo;유입에서 82만원 잃고 전환에서 47만원 벌었다&rdquo;</b>가 나오고, <b>그것이 곧 내일의 액션</b>이 됩니다.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="punch">
+      <span class="tagline">개발자에게 전달할 한 문장</span>
+      <span class="big">카드를 <em>8블록으로 고정</em>하고, <em>배지는 7일평균 대비로</em> 판정하고, <em>의지 목표 갭은 금액으로 분해</em>하고, <em>기간 선택 시 일자별 + 기간 종합 카드</em>를 생성해 주십시오.</span>
+      <span class="sub">숫자 계산(비율·케이스 판정·갭 분해·기회손실)은 <b>전부 서버</b>에서 하고, AI는 <b>문장만</b> 생성합니다. <b>목표 달성률로 배지를 달지 마십시오</b> &mdash; 평상시 47.2%라 매일 빨간불이 켜집니다. 저장 키에 <b>채널</b>을 포함하고, 일괄 분석은 <b>미분석 날짜만</b> 호출합니다.</span>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <span><b>검증 기준</b> &mdash; 2026.09.29 자사몰 퍼널 화면값(유입 880 / 1,070 / 7일평균 717, 상품조회 299 / 679 / 241, 장바구니 45 / 45 / 26, 주문서작성 27 / 41 / 20, 주문완료 19 / 21 / 13, 순매출 408만원 / 417만원, 객단가 214,631원 / 225,000원) 직접 재계산.</span>
+  <span><b>참조</b> &mdash; 2026.09 스마트스토어 기간 화면값(유입 10,876 / 11,721, 주문 383 / 361.0, 매출 파일 5,948만원, 순매출 5,816만원 / 5,800만원, 29/30일 집계, 파일 4일 지연) · 현행 AI 분석 카드 2건(09.29 · 09.30).</span>
+  <span>작성 2026-09-30 · 요기보 코리아 온라인 MD</span>
+</footer>
+
+</div>
+
+<script>
+(async function () {
+  var FILENAME = 'AI분석시트_설계서.html';
+  var btn = document.getElementById('dl');
+  var hint = document.querySelector('.hint');
+  if (!btn) return;
+  function setHint(t) { if (hint) hint.textContent = t; }
+  function buildHTML() {
+    var clone = document.documentElement.cloneNode(true);
+    var strip = clone.querySelector('.actions');
+    if (strip) strip.remove();
+    var sc = clone.querySelectorAll('script');
+    for (var i = 0; i < sc.length; i++) sc[i].remove();
+    return '<!doctype html>\n' + clone.outerHTML;
+  }
+  var inViewer = typeof claude !== 'undefined' && typeof claude.use === 'function';
+  var downloads = null;
+  if (inViewer) {
+    try { downloads = await claude.use('downloads'); } catch (e) { downloads = null; }
+    if (!downloads) { btn.remove(); return; }
+  }
+  btn.addEventListener('click', async function () {
+    var html = buildHTML();
+    if (downloads) {
+      try {
+        setHint('저장 중…');
+        await downloads.save({ filename: FILENAME, data: html });
+        setHint('저장 완료 — ' + FILENAME);
+      } catch (e) {
+        setHint('저장 실패 — 인쇄 버튼으로 PDF 저장을 이용해 주세요');
+      }
+      return;
+    }
+    try {
+      var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = FILENAME;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+      setHint('내려받기 완료 — ' + FILENAME);
+    } catch (e) {
+      setHint('내려받기 실패 — 인쇄 버튼으로 PDF 저장을 이용해 주세요');
+    }
+  });
+})();
+</script>
+</body>
+</html>

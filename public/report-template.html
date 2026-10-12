@@ -3088,10 +3088,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
   <div class="card" style="margin-top:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <h3 class="card-title" style="margin:0">해당 월 트래픽 현황 (일자별)</h3>
+      <h3 class="card-title" style="margin:0">해당 월 트래픽 현황 (일자별) <span style="font-size:11px;font-weight:500;color:var(--mute)">최근 날짜부터</span></h3>
       <div style="display:flex;align-items:center;gap:6px">
         <label style="font-size:12px;color:var(--sub)">기준 월</label>
-        <select id="trfMonthSelect" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:12px;outline:none"><option value="2026-06">2026년 6월</option><option value="2026-05">2026년 5월</option><option value="2026-04">2026년 4월</option><option value="2026-03">2026년 3월</option><option value="2026-02">2026년 2월</option><option value="2026-01">2026년 1월</option><option value="2025-12">2025년 12월</option><option value="2025-11">2025년 11월</option><option value="2025-10">2025년 10월</option><option value="2025-09">2025년 9월</option><option value="2025-08">2025년 8월</option><option value="2025-07">2025년 7월</option><option value="2025-06">2025년 6월</option><option value="2025-05">2025년 5월</option><option value="2025-04">2025년 4월</option><option value="2025-03">2025년 3월</option><option value="2025-02">2025년 2월</option><option value="2025-01">2025년 1월</option></select>
+        <select id="trfMonthSelect" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:12px;outline:none"></select>
         <span id="trfMonthSummary" style="font-size:12px;color:var(--sub);margin-left:8px">총 방문 18,629명 · PV 76,996 · 구매 332건 (1.78%) · 가입 345명 (1.85%)</span>
       </div>
     </div>
@@ -7026,8 +7026,10 @@ function renderTrfMonthly() {
   const monthSet = new Set();
   TRAFFIC_FULL.forEach(t => { if (t.Date) monthSet.add(t.Date.slice(0,7)); });
   const months = [...monthSet].sort().reverse();
-  // 첫 호출 시 옵션 초기화
-  if (!sel.options.length) {
+  // 첫 호출 시 옵션 초기화 — 데이터에 있는 달로 늘 새로 채운다(가장 최근 달이 맨 위).
+  //   예전에는 "옵션이 비어 있을 때만" 채웠는데, 템플릿에 2026-06 까지의 옵션이 박혀 있어 7월부터 새 달이 목록에 나오지 않았다(2026-10-12 수정)
+  if (sel.dataset.ready !== '1') {
+    sel.innerHTML = '';
     months.forEach(m => {
       const o = document.createElement('option');
       o.value = m;
@@ -7038,6 +7040,7 @@ function renderTrfMonthly() {
     const defaultMonth = currentDate.slice(0,7);
     sel.value = months.includes(defaultMonth) ? defaultMonth : months[0];
     sel.addEventListener('change', renderTrfMonthly);
+    sel.dataset.ready = '1';
   }
   const ym = sel.value || months[0];
   if (!ym) return;
@@ -7051,6 +7054,9 @@ function renderTrfMonthly() {
     const t = trafficByDateFull[dateStr];
     monthRows.push({date: dateStr, t: t || null});
   }
+  // 화면 순서 = 가장 최근 날짜부터(직원 요청 2026-10-12). 어제 이후(아직 오지 않은 날)는 줄을 만들지 않는다
+  const trfLastDay = getYesterdayKST();
+  const shownRows = monthRows.filter(r => r.t || r.date <= trfLastDay).reverse();
   // 합계/평균
   const valid = monthRows.filter(r=>r.t);
   const sumK = (k) => valid.reduce((s,r)=> s + (r.t[k]||0), 0);
@@ -7134,7 +7140,7 @@ function renderTrfMonthly() {
       </tr>
     </thead>
     <tbody>
-      ${monthRows.map(r => {
+      ${shownRows.map(r => {
         const t = r.t;
         const isFuture = r.date > getYesterdayKST();
         const isToday = r.date === currentDate;
@@ -10558,5 +10564,5 @@ function openInputModal(kind){
 }
 loadInputModals().catch(function(){});
 </script>
-<script src="/ai-cards.js?v=20261002b"></script>
+<script src="/ai-cards.js?v=20261012b"></script>
 </body></html>

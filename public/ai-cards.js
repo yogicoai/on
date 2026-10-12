@@ -4,11 +4,13 @@
  *   MD 설계(md/AI분석카드_최종폼.html · AI분석시트_설계서.html, 2026-10-02)의 카드 모양으로 그린다.
  *     · 고른 기간의 날짜마다 카드 1장 + (2일 이상이면) 기간 종합 카드 1장. 처음 열면 어제 하루.
  *     · 카드의 숫자·판정·문장은 전부 데이터 기반(서버 규칙, lib/funnelAiCard ruleDay·rulePeriod) — 열자마자 보이고 비용 0.
- *     · 🤖 AI 조언은 참고 의견 — AI 가 같은 데이터를 한 번 더 보고 규칙이 놓친 점만 1~3문장. 버튼을 누를 때만, 저장 후 재사용
- *       (사용자 결정 2026-10-02: 토큰이 과하게 나가지 않게 AI 는 간략하게).
+ *     · AI 버튼은 하나 — 🤖 AI 상세 분석(아래). 예전에는 🤖 AI 조언(규칙이 놓친 점만 1~3문장) 버튼이 따로 있었는데
+ *       "버튼이 두 개라 헷갈린다"는 직원 의견으로 화면에서 뺐다(2026-10-12). 이미 받아 둔 조언은 카드 아래에 읽기 전용으로만 보인다.
+ *       서버의 조언 API(mode 없이 부르는 analyze · period)는 그대로 있다 — 되살리려면 화면 버튼만 다시 달면 된다.
  *     · 🤖 AI 상세 분석 — MD 설계서 방식(AI 가 카드 문장 전체를 씀, Sonnet · 생각 보통, 장당 수십 원). 카드마다 버튼, 받으면 저장되고
  *       [데이터 분석 | 🤖 AI 상세 분석]으로 바꿔 본다. 이미 받은 날을 다시 누르면 "이미 받았습니다" 경고 후에만 다시 받는다(사용자 요청 2026-10-02).
  *     · 월요일엔 [지난 주말(금~일)] — 금·토·일 일자별 카드와 기간 종합을 한 번에(MD 요청).
+ *     · ‹ › — 고른 기간의 폭만큼 앞뒤로(하루를 골랐으면 하루씩). 퍼널 점검의 ‹ › 와 같은 동작(직원 요청 2026-10-12).
  *   데이터: GET /api/funnel/cards · POST /api/funnel/cards/analyze(하루 AI 조언 · mode:'detail' 이면 상세 분석) · POST /api/funnel/cards/period(기간)
  */
 (function () {
@@ -29,6 +31,10 @@
 '.aic-seg button{border:0;background:#fff;padding:7px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--sub);cursor:pointer}'+
 '.aic-seg button.on{background:var(--ink);color:#fff}'+
 '.aic-ctl input[type=date]{height:32px;border:1px solid var(--line);border-radius:8px;padding:0 8px;font:inherit;font-size:13px;background:#fff}'+
+'.aic-nav{display:inline-flex;gap:4px}'+
+'.aic-nav button{width:32px;height:32px;padding:0;border:1px solid var(--line);background:#fff;border-radius:8px;font:inherit;font-size:17px;line-height:1;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}'+
+'.aic-nav button:hover{background:#F4F5F7}'+
+'.aic-nav button:disabled{opacity:.35;cursor:default;background:#fff}'+
 '.aic-chip{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--sub)}'+
 '.aic-chip.on{border-color:var(--t);color:var(--t);font-weight:700;background:var(--t-bg)}'+
 '.aic-go{border:0;background:var(--ink);color:#fff;border-radius:8px;padding:7px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}'+
@@ -127,7 +133,7 @@
   var BADGE = { good: '좋음', normal: '정상', warn: '주의', risk: '위험', data_error: '데이터 이상' };
   var CASE_TXT = { A: '진짜 병목', B: '의지 목표 갭', C: '의지 목표 갭', D: '조용한 악화', E: '정상' };
   // view: 카드별 보기(rule = 데이터 분석 · ai = AI 상세 분석, 기본은 받았으면 ai) · busyKey/busyKind: 지금 받는 카드(상세 분석 진행 표시)
-  var S = { ch: 'mall', start: null, end: null, data: null, open: {}, view: {}, busy: false, busyKey: null, busyKind: '', progress: '', loading: false, err: '' };
+  var S = { ch: 'mall', start: null, end: null, data: null, open: {}, view: {}, busy: false, busyKey: null, busyKind: '', progress: '', loading: false, err: '', seq: 0 };
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function comma(n) { return n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('ko-KR'); }
@@ -151,10 +157,15 @@
   function injectCss() { if (document.getElementById('aic-style')) return; var st = document.createElement('style'); st.id = 'aic-style'; st.textContent = CSS; document.head.appendChild(st); }
 
   // ── 데이터 ──
+  // 브라우저가 서버에 닿지 못하면 "Failed to fetch" 같은 영어 문장만 준다 — 무슨 일인지 우리말로
+  function netMsg(e) { var m = String((e && e.message) || e); return /Failed to fetch|NetworkError|Load failed/i.test(m) ? '서버에 연결하지 못했습니다(서버가 꺼져 있거나 다시 켜지는 중일 수 있습니다)' : m; }
+  function readJson(r) { return r.json().catch(function () { throw new Error('서버 응답을 읽지 못했습니다(HTTP ' + r.status + ')'); }); }
   function load() {
+    var seq = ++S.seq; // ‹ › 를 빠르게 누르면 응답이 뒤바뀌어 올 수 있다 — 마지막 요청의 응답만 쓴다
     S.loading = true; S.err = ''; draw();
     var q = '/api/funnel/cards?start=' + S.start + '&end=' + S.end + '&ch=' + S.ch;
-    return fetch(q, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    return fetch(q, { cache: 'no-store' }).then(readJson).then(function (j) {
+      if (seq !== S.seq) return;
       S.loading = false;
       if (!j.ok) { S.err = j.error || '불러오지 못했습니다'; S.data = null; draw(); return; }
       S.data = j;
@@ -164,53 +175,23 @@
         var last = j.days[j.days.length - 1]; if (last) S.open[last.date] = true;
       }
       draw();
-    }).catch(function (e) { S.loading = false; S.err = e.message; draw(); });
+    }).catch(function (e) { if (seq !== S.seq) return; S.loading = false; S.err = netMsg(e); S.data = null; draw(); }); // 앞 기간의 카드가 남아 있으면 날짜 칸과 어긋난다 — 비운다
   }
   function post(url, body) {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) throw new Error(j.error || 'AI 요청 실패'); return j; });
+      .then(readJson, function (e) { throw new Error(netMsg(e)); }).then(function (j) { if (!j.ok) throw new Error(j.error || 'AI 요청 실패'); return j; });
+  }
+  // ‹ › — 고른 기간의 폭만큼 앞(−1) · 뒤(+1)로. 하루를 골랐으면 하루씩, 금~일이면 3일씩. 어제를 넘지 않는다(폭은 그대로)
+  function spanDays() { return Math.round((new Date(S.end + 'T00:00:00Z') - new Date(S.start + 'T00:00:00Z')) / 86400000) + 1; }
+  function move(dir) {
+    if (S.busy || !S.start || !S.end) return;
+    var n = spanDays(), y = yday();
+    if (dir > 0 && S.end >= y) return;
+    var a = shift(S.start, dir * n), b = shift(S.end, dir * n);
+    if (b > y) { b = y; a = shift(y, -(n - 1)); }
+    S.start = a; S.end = b; S.open = {}; S.view = {}; load();
   }
   function replaceDay(card) { if (S.data) S.data.days = S.data.days.map(function (d) { return d.date === card.date ? card : d; }); }
-  function adviceOne(date, regenerate) {
-    if (S.busy) return;
-    S.busy = true; S.progress = dlabel(date) + ' AI 조언 받는 중…'; S.open[date] = true; draw();
-    post('/api/funnel/cards/analyze', { date: date, ch: S.ch, regenerate: !!regenerate })
-      .then(function (j) { replaceDay(j.card); })
-      .catch(function (e) { alert(dlabel(date) + ' AI 조언 실패 — ' + e.message); })
-      .then(function () { S.busy = false; S.progress = ''; draw(); });
-  }
-  function advicePeriod(regenerate) {
-    if (S.busy || !S.data) return;
-    S.busy = true; S.progress = '기간 AI 조언 받는 중…'; S.open.P = true; draw();
-    post('/api/funnel/cards/period', { start: S.start, end: S.end, ch: S.ch, regenerate: !!regenerate })
-      .then(function (j) { S.data.period = j.period; })
-      .catch(function (e) { alert('기간 AI 조언 실패 — ' + e.message); })
-      .then(function () { S.busy = false; S.progress = ''; draw(); });
-  }
-  function needAdvice(d) { return (d.status === 'ok' || d.status === 'data_error') && (!d.saved || d.saved.ai_error); }
-  // 한꺼번에 — 조언이 없는 날만, 오래된 날부터, 최대 7일. 기간이 7일을 넘으면 기간 조언만(설계서 §5 상한)
-  function batch() {
-    if (S.busy || !S.data) return;
-    var max = (S.data.cfg && S.data.cfg.batchMax) || 7;
-    var todo = S.data.days.length > max ? [] : S.data.days.filter(needAdvice).map(function (d) { return d.date; });
-    var p = S.data.period, needP = p && (!p.saved || p.saved.ai_error);
-    if (!todo.length && !needP) return;
-    S.busy = true; draw();
-    var i = 0;
-    function next() {
-      if (i < todo.length) {
-        var d = todo[i]; S.progress = 'AI 조언 ' + (i + 1) + ' / ' + todo.length + ' — ' + dlabel(d); draw();
-        return post('/api/funnel/cards/analyze', { date: d, ch: S.ch }).then(function (j) { replaceDay(j.card); }).catch(function (e) { console.warn(d, e.message); })
-          .then(function () { i++; return next(); });
-      }
-      if (needP) {
-        S.progress = '기간 AI 조언 받는 중…'; draw();
-        return post('/api/funnel/cards/period', { start: S.start, end: S.end, ch: S.ch }).then(function (j) { S.data.period = j.period; S.open.P = true; }).catch(function (e) { console.warn('period', e.message); });
-      }
-    }
-    Promise.resolve(next()).then(function () { S.busy = false; S.progress = ''; draw(); });
-  }
-
   // ── 🤖 AI 상세 분석 — MD 설계서 방식(AI 가 카드 문장 전체를 씀) ──
   function hasDetail(x) { return !!(x && x.detail && x.detail.text); }
   function viewOf(x, key) { return hasDetail(x) && S.view[key] !== 'rule' ? 'ai' : 'rule'; }
@@ -274,20 +255,25 @@
       '<p class="aic-sub">자사몰 · 스마트스토어 일일 퍼널 분석 — 고른 기간의 날짜마다 카드 1장, 2일 이상이면 기간 종합 카드가 함께 나옵니다.</p></div></div>';
     h += '<div class="aic-how"><b>이 화면은 이렇게 만들어집니다</b>' +
       '<ul><li><b>기간·일자별 분석은 데이터 기반</b>입니다 — 숫자·판정·문장 모두 우리 데이터(이카운트·Cafe24·이프두·비즈어드바이저)로 서버 규칙이 만들어 열자마자 보입니다. 비용이 들지 않습니다.</li>' +
-      '<li><b>🤖 AI 조언은 참고 의견</b>입니다 — AI가 같은 데이터를 한 번 더 확인해 규칙 분석이 놓쳤을 수 있는 점만 짧게 덧붙입니다. 버튼을 누를 때만 만들고(토큰 절약을 위해 간략하게), 한 번 받은 조언은 저장됩니다.</li>' +
       '<li><b>🤖 AI 상세 분석</b>은 MD 설계서 방식입니다 — 서버가 계산한 숫자를 AI(Claude Sonnet)가 받아 카드 문장 전체(판정·병목·가설·액션)를 다시 씁니다. 카드의 버튼을 누를 때만 만들고(장당 수십 원), 받은 분석은 저장돼 <b>[데이터 분석 | 🤖 AI 상세 분석]</b>으로 바꿔 봅니다. 이미 받은 날을 다시 누르면 경고가 뜹니다.</li>' +
-      '<li>월요일에는 <b>[지난 주말]</b>을 누르면 금·토·일 일자별 카드와 기간 종합을 한 번에 봅니다.</li></ul></div>';
+      '<li>월요일에는 <b>[지난 주말]</b>을 누르면 금·토·일 일자별 카드와 기간 종합을 한 번에 봅니다.</li>' +
+      '<li>날짜 앞의 <b>‹ ›</b>로 하루씩 넘겨 봅니다 — 여러 날을 골랐으면 그 기간 폭만큼(금~일이면 3일씩) 이동합니다.</li></ul></div>';
     h += '<div class="aic-box">' + controls() + status() + list() + '</div>';
     h += '<p class="aic-p mute" style="margin:0 2px 20px">배지는 <b>순매출 7일평균 대비</b>로 매깁니다(의지 목표 달성률은 헤더에 숫자로만). 케이스 — A 진짜 병목 · B/C 의지 목표 갭(오늘의 문제 아님) · D 조용한 악화 · E 정상. 의지 목표 갭은 유입·전환·객단가 금액으로 나눠 봅니다(임원 보고용).</p>';
+    var act = document.activeElement, keep = act && el.contains(act) && /^aic(Prev|Next)$/.test(act.id) ? act.id : '';
     el.innerHTML = h + '</div>';
     bind();
+    if (keep) { var f = document.getElementById(keep); if (f && !f.disabled) { try { f.focus({ preventScroll: true }); } catch (_) {} } }
   }
   function controls() {
     var y = yday();
     var pre = [['1', '어제'], ['w', '지난 주말(금~일)'], ['3', '최근 3일'], ['7', '최근 7일'], ['m', '이번 달']];
     var cur = presetOf();
+    var n = S.start && S.end ? spanDays() : 1, unit = n > 1 ? n + '일' : '하루';
     return '<div class="aic-ctl">' +
       '<span class="aic-seg"><button type="button" data-ch="mall" class="' + (S.ch === 'mall' ? 'on' : '') + '">자사몰</button><button type="button" data-ch="ss" class="' + (S.ch === 'ss' ? 'on' : '') + '">스마트스토어</button></span>' +
+      '<span class="aic-nav"><button type="button" id="aicPrev" aria-label="이전 ' + unit + '" title="이전 ' + unit + '"' + (S.busy ? ' disabled' : '') + '>‹</button>' +
+      '<button type="button" id="aicNext" aria-label="다음 ' + unit + '" title="' + (S.end >= y ? '어제가 가장 최근입니다' : '다음 ' + unit) + '"' + (S.busy || S.end >= y ? ' disabled' : '') + '>›</button></span>' +
       '<input type="date" id="aicS" max="' + y + '" value="' + S.start + '"> ~ <input type="date" id="aicE" max="' + y + '" value="' + S.end + '">' +
       '<button type="button" class="aic-go light" id="aicGo">조회</button>' +
       pre.map(function (p) { return '<button type="button" class="aic-chip' + (cur === p[0] ? ' on' : '') + '" data-pre="' + p[0] + '">' + p[1] + '</button>'; }).join('') +
@@ -305,27 +291,23 @@
   }
   function status() {
     if (S.loading) return '<div class="aic-stat"><span class="aic-spin"></span> 불러오는 중…</div>';
-    if (S.err) return '<div class="aic-stat" style="color:#C0392B">불러오지 못했습니다 — ' + esc(S.err) + '</div>';
+    if (S.err) return '<div class="aic-stat" style="color:#C0392B"><span>불러오지 못했습니다 — ' + esc(S.err) + '</span><button type="button" class="aic-go light" id="aicRetry">다시 시도</button></div>';
     if (!S.data) return '';
     var d = S.data.days, n = d.length, max = (S.data.cfg && S.data.cfg.batchMax) || 7;
     var ready = d.filter(function (x) { return x.rule; }).length;
-    var adv = d.filter(function (x) { return x.saved && !x.saved.ai_error; }).length;
-    var todo = d.filter(needAdvice).length;
     var na = d.filter(function (x) { return x.status === 'no_data' || x.status === 'pending_input'; }).length;
-    var p = S.data.period, needP = p && (!p.saved || p.saved.ai_error);
-    var label = n > max ? (needP ? '기간 AI 조언 받기' : '') : (todo || needP) ? ('🤖 AI 조언 받기 — ' + (todo ? todo + '일' : '') + (todo && needP ? ' + ' : '') + (needP ? '기간' : '')) : '';
+    var p = S.data.period;
     var det = d.filter(hasDetail).length, dtodo = n > max ? 0 : d.filter(needDetail).length, dneedP = !!(p && !hasDetail(p));
     var anyOk = d.some(function (x) { return x.status === 'ok' || x.status === 'data_error'; });
     var dDone = n > max ? !dneedP : !dtodo && !dneedP; // 받을 게 없으면 버튼은 연하게 — 누르면 "이미 모두 받았습니다" 경고
     var dLabel = !anyOk ? '' : dDone ? '🤖 AI 상세 분석 — 모두 받음' : n > max ? '🤖 기간 AI 상세 분석 받기'
       : '🤖 AI 상세 분석 받기 — ' + (dtodo ? dtodo + '일' : '') + (dtodo && dneedP ? ' + ' : '') + (dneedP ? '기간' : '');
     var h = '<div class="aic-stat"><span>선택 기간 <b>' + S.start + (n > 1 ? ' ~ ' + S.end : '') + '</b> (' + n + '일)</span>' +
-      '<span>· 데이터 분석 <b>' + ready + '</b>일 · AI 조언 <b>' + adv + '</b>일 · AI 상세 <b>' + det + '</b>일' + (na ? ' · 입력 대기 ' + na + '일' : '') + '</span>' +
-      (label ? '<button type="button" class="aic-go" id="aicBatch"' + (S.busy ? ' disabled' : '') + ' title="Claude Sonnet · 날마다 몇 초 · 받은 조언은 저장">' + label + '</button>' : '') +
+      '<span>· 데이터 분석 <b>' + ready + '</b>일 · AI 상세 분석 <b>' + det + '</b>일' + (na ? ' · 입력 대기 ' + na + '일' : '') + '</span>' +
       (dLabel ? '<button type="button" class="aic-go ai' + (dDone ? ' light' : '') + '" id="aicBatchD"' + (S.busy ? ' disabled' : '') + ' title="MD 설계서 방식 · Claude Sonnet(생각 보통) · 날마다 10~30초 · 장당 수십 원 · 이미 받은 날은 건너뜀">' + dLabel + '</button>' : '') +
       (S.progress ? '<span><span class="aic-spin"></span> ' + esc(S.progress) + '</span>' : '') +
       '<span class="sp" style="font-size:11.5px;color:#9CA3AF">AI 모델 ' + esc(S.data.modelDetail || S.data.model || '') + '</span></div>';
-    if (n > max) h += '<p class="aic-note">' + max + '일이 넘는 기간은 기간 종합(조언·상세 분석)만 한꺼번에 받습니다 — 날짜별은 카드를 펼쳐 따로 누르세요(데이터 분석은 모든 날짜에 이미 나와 있습니다).</p>';
+    if (n > max) h += '<p class="aic-note">' + max + '일이 넘는 기간은 기간 종합 AI 상세 분석만 한꺼번에 받습니다 — 날짜별은 카드를 펼쳐 따로 누르세요(데이터 분석은 모든 날짜에 이미 나와 있습니다).</p>';
     return h;
   }
   function list() {
@@ -333,11 +315,11 @@
     var h = '', p = S.data.period;
     if (p) {
       h += '<div class="aic-row period' + (S.open.P ? ' open' : '') + '" data-open="P"><span class="aic-badge period">기간 종합</span><span class="dt">' + dlabel(p.period.start) + ' ~ ' + dlabel(p.period.end) + '</span>' +
-        '<span class="vl">' + esc(textOf(p, 'P').summary_line || '') + '</span>' + detTag(p) + advTag(p) + '<span class="tw">▶</span></div>';
+        '<span class="vl">' + esc(textOf(p, 'P').summary_line || '') + '</span>' + detTag(p) + '<span class="tw">▶</span></div>';
       if (S.open.P) h += periodCard(p);
     }
     S.data.days.slice().reverse().forEach(function (d) {
-      var st = d.status === 'pending_input' ? '<span class="st new">유입 입력 대기</span>' : d.status === 'no_data' ? '<span class="st">데이터 없음</span>' : detTag(d) + advTag(d);
+      var st = d.status === 'pending_input' ? '<span class="st new">유입 입력 대기</span>' : d.status === 'no_data' ? '<span class="st">데이터 없음</span>' : detTag(d);
       h += '<div class="aic-row' + (S.open[d.date] ? ' open' : '') + '" data-open="' + d.date + '"><span class="aic-badge ' + (d.badge || 'none') + '">' + (BADGE[d.badge] || '—') + '</span><span class="dt">' + dlabel(d.date) + '</span>' +
         '<span class="vl">' + esc(d.rule ? textOf(d, d.date).verdict_line || '' : (d.note || '')) + '</span>' + st + '<span class="tw">▶</span></div>';
       if (S.open[d.date]) h += dayCard(d);
@@ -346,11 +328,6 @@
     return h;
   }
   function detTag(x) { return hasDetail(x) ? '<span class="st det">🤖 AI 상세' + (x.detailStale ? ' · 데이터 바뀜' : '') + '</span>' : ''; }
-  function advTag(x) {
-    if (!x.saved) return '<span class="st">AI 조언 없음</span>';
-    if (x.saved.ai_error) return '<span class="st stale">AI 조언 실패</span>';
-    return '<span class="st ai">🤖 AI 조언' + (x.saved.source === 'example' ? '(예제)' : '') + (x.stale ? ' · 이후 데이터 바뀜' : '') + '</span>';
-  }
 
   // 카드 머리 — 배지 · 날짜 · 채널 · 프로모션 · 핵심 2지표
   function head(d) {
@@ -418,20 +395,13 @@
       (has ? '↻ 다시 받기' : dt && dt.ai_error ? '🤖 다시 시도' : '🤖 AI 상세 분석 받기') + '</button>';
     return h + '</div>';
   }
-  // 🤖 AI 조언 — 데이터 분석(규칙)이 놓쳤을 수 있는 점만. 없으면 받기 버튼
-  function aiBlock(x, kind) {
+  // 예전에 받아 둔 🤖 AI 조언 — 읽기 전용. 받기 버튼은 "AI 버튼이 두 개라 헷갈린다"는 의견으로 뺐다(2026-10-12). 받아 둔 것이 없으면 그리지 않는다
+  function aiBlock(x) {
     var sv = x.saved;
-    var h = '<div class="aic-blk ai"><p class="aic-lb">🤖 AI 조언 <span style="letter-spacing:0;font-weight:500">— AI가 같은 데이터를 한 번 더 확인한 참고 의견(간략)</span></p>';
-    if (sv && !sv.ai_error) {
-      h += sv.advice && sv.advice.length ? '<ul class="aic-ol">' + sv.advice.map(function (a) { return '<li>· ' + esc(a) + '</li>'; }).join('') + '</ul>' : '<p class="aic-p">데이터 분석이 놓친 점은 없다는 의견입니다.</p>';
-      h += '<p class="aic-p mute" style="margin-top:4px">Claude · ' + esc(sv.model || '') + ' · ' + when(sv.createdAt) + ' 저장' + (sv.source === 'example' ? ' · 예제(Claude Code 작성)' : '') + (x.stale ? ' · <span style="color:#C0392B">조언 이후 데이터가 바뀌었습니다</span>' : '') +
-        (sv.source === 'example' || x.stale ? ' <button type="button" class="aic-go light" data-act="' + kind + '" data-regen="1"' + (S.busy ? ' disabled' : '') + '>↻ Sonnet으로 다시 받기</button>' : '') + '</p>';
-    } else if (sv && sv.ai_error) {
-      h += '<p class="aic-p" style="color:#C0392B">AI 조언을 받지 못했습니다 — ' + esc(sv.ai_error) + ' <button type="button" class="aic-go light" data-act="' + kind + '" data-regen="1"' + (S.busy ? ' disabled' : '') + '>다시 시도</button></p>';
-    } else {
-      h += '<p class="aic-p">아직 받지 않았습니다. <button type="button" class="aic-go" data-act="' + kind + '"' + (S.busy ? ' disabled' : '') + '>🤖 AI 조언 받기</button> <span style="font-size:11.5px;color:#9CA3AF">Claude Sonnet · 몇 초 · 토큰 소량</span></p>';
-    }
-    return h + '</div>';
+    if (!sv || sv.ai_error || !(sv.advice && sv.advice.length)) return '';
+    return '<div class="aic-blk ai"><p class="aic-lb">이전에 받은 AI 조언 <span style="letter-spacing:0;font-weight:500">— 참고 의견(간략)</span></p>' +
+      '<ul class="aic-ol">' + sv.advice.map(function (a) { return '<li>· ' + esc(a) + '</li>'; }).join('') + '</ul>' +
+      '<p class="aic-p mute" style="margin-top:4px">Claude · ' + esc(sv.model || '') + ' · ' + when(sv.createdAt) + ' 저장' + (sv.source === 'example' ? ' · 예제(Claude Code 작성)' : '') + (x.stale ? ' · 이후 데이터가 바뀌었습니다' : '') + '</p></div>';
   }
 
   function dayCard(d) {
@@ -471,7 +441,7 @@
         return '<li><b>' + esc(x.name || '') + '</b> — ' + esc(x.detail || '') + ' <span class="ck">' + esc(x.type) + (x.consecutive_days > 1 ? ' · ' + x.consecutive_days + '일 연속' : '') + '</span></li>';
       }).join('') + '</ul></div>';
     }
-    h += actions(t.actions, '액션') + (aiv ? '' : aiBlock(d, d.date)) + detail(d) + foot(d, aiv);
+    h += actions(t.actions, '액션') + (aiv ? '' : aiBlock(d)) + detail(d) + foot(d, aiv);
     return h + '</div>';
   }
 
@@ -529,7 +499,7 @@
         return '<span>' + esc(x.name) + ' <b class="' + (x.direction === '개선' ? 'aic-pos' : x.direction === '악화' ? 'aic-neg' : '') + '">' + (x.direction || '—') + ' ' + spp(x.delta_pp) + '</b></span>';
       }).join(' · ') + '</p>' + (aiv && t.trend_text ? '<p class="aic-p">' + esc(t.trend_text) + '</p>' : '') + '</div>';
     }
-    h += actions(t.actions, '기간 액션') + (aiv ? '' : aiBlock(p, 'P'));
+    h += actions(t.actions, '기간 액션') + (aiv ? '' : aiBlock(p));
     var notes = (p.data_notes || []).length ? '참고 — ' + p.data_notes.map(esc).join(', ') + ' · ' : '';
     return h + '<div class="aic-foot">' + notes + (aiv ? '문장 — 🤖 AI 상세 분석(' + aiMeta(p.detail) + ')' : '분석 — 데이터 기반(서버 규칙)') + ' · 일자별 카드 ' + p.period.days + '장은 아래에</div></div>';
   }
@@ -556,19 +526,13 @@
       if (b > y) b = y; if (a > y) a = y;
       S.start = a; S.end = b; S.open = {}; S.view = {}; load();
     };
-    var bt = el.querySelector('#aicBatch'); if (bt) bt.onclick = batch;
+    var pv = el.querySelector('#aicPrev'); if (pv) pv.onclick = function () { move(-1); };
+    var nx = el.querySelector('#aicNext'); if (nx) nx.onclick = function () { move(1); };
+    var rt = el.querySelector('#aicRetry'); if (rt) rt.onclick = function () { if (!S.busy) load(); };
     var bd = el.querySelector('#aicBatchD'); if (bd) bd.onclick = batchDetail;
     el.querySelectorAll('[data-detail]').forEach(function (b) { b.onclick = function (ev) { ev.stopPropagation(); detailOne(b.dataset.detail); }; });
     el.querySelectorAll('[data-view]').forEach(function (b) { b.onclick = function (ev) { ev.stopPropagation(); S.view[b.dataset.view] = b.dataset.v; draw(); }; });
     el.querySelectorAll('[data-open]').forEach(function (r) { r.onclick = function () { var k = r.dataset.open; S.open[k] = !S.open[k]; draw(); }; });
-    el.querySelectorAll('[data-act]').forEach(function (b) {
-      b.onclick = function (ev) {
-        ev.stopPropagation();
-        var k = b.dataset.act, regen = b.dataset.regen === '1';
-        if (regen && !confirm('Claude Sonnet으로 AI 조언을 다시 받습니다(토큰 소량 사용). 진행할까요?')) return;
-        if (k === 'P') advicePeriod(regen); else adviceOne(k, regen);
-      };
-    });
   }
 
   // ── 열기 — 대시보드의 다른 탭을 숨기고 이 화면만 ──

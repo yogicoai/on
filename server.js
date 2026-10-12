@@ -58,13 +58,33 @@ const alerts = require('./lib/alerts');             // 경보 스캔("오늘 챙
 
 // 경보 스캔 10분 캐시 — 원천 여러 곳(원장·광고·게시판·재고 API)을 도는 무거운 조회라 dash 홈을 열 때마다 돌리지 않는다.
 let _alertsCache = null; // { at, data }
+// 오늘 챙길 것(매장별 · 프로모션 · 광고) 10분 캐시 — 날짜별. 경보 API 의 팀별 심각이 쓴다.
+const _dailyActionsCache = new Map(); // date → { at, data }
+async function dailyActionsCached(date, fresh) {
+  const y = new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10); // 어제(KST)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) && date <= y ? date : y;
+  const hit = _dailyActionsCache.get(d);
+  if (!fresh && hit && Date.now() - hit.at < 10 * 60 * 1000) return { ...hit.data, 캐시: true };
+  const data = await dailyActions.build({ date: d, jwasuP: dailyMail.jwasuDay(d) });
+  _dailyActionsCache.set(d, { at: Date.now(), data });
+  if (_dailyActionsCache.size > 20) _dailyActionsCache.delete(_dailyActionsCache.keys().next().value);
+  return { ...data, 캐시: false };
+}
+//   팀별 심각(오프라인 매장 · 온라인 프로모션 · 광고)도 같이 싣는다 — 일일 모니터링 "오늘 챙길 것"과 같은 계산(lib/dailyActions).
+//   dash 카드가 전사 경보와 함께 보인다(사용자 요청 2026-10-12). 이쪽이 실패해도 전사 경보는 그대로 나간다.
 async function alertsCached(fresh) {
   if (!fresh && _alertsCache && Date.now() - _alertsCache.at < 10 * 60 * 1000) return { ..._alertsCache.data, 캐시: true };
-  const data = await alerts.scan();
+  const [scan, team] = await Promise.all([
+    alerts.scan(),
+    dailyActionsCached('', fresh).then((r) => ({ 팀별심각: r.심각목록 || [] }))
+      .catch((e) => ({ 팀별심각: [], 팀별심각_오류: String((e && e.message) || e).slice(0, 120) })),
+  ]);
+  const data = { ...scan, ...team };
   _alertsCache = { at: Date.now(), data };
   return { ...data, 캐시: false };
 }
 const dailyMail = require('./lib/dailyMail');       // 일일 모니터링 메일 페이지(dashboards/daily_mail.html) 데이터 — KPI·좌수·재고
+const dailyActions = require('./lib/dailyActions'); // 오늘 챙길 것(매장별 · 프로모션 · 광고) — 경보 API 의 팀별 심각에도 쓴다
 // 메일 페이지 10분 캐시 — 날짜·판매기준별. 캡처 직전 fresh=1 로 한 번 새로 만든다.
 const _dailyMailCache = new Map(); // key → { at, data }
 async function dailyMailCached(date, basis, fresh) {

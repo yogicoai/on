@@ -202,6 +202,63 @@
   .act-sum b{color:var(--ink);}
   .act-sum .warn-t{color:var(--warn);}
   .act-sum.act-promo{margin-top:8px;} /* 프로모션 머리 줄 — 위 주의 줄과 붙지 않게 */
+  /* 그래프(오늘 챙길 것 탭 맨 위) — 색은 역할로만: 상태(심각 · 주의 · 양호) / 전달(회색) vs 이번 달(파랑) / 늘어남(파랑) ↔ 줄어듦(빨강) */
+  .gx-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0 4px;}
+  .gx-card{border:1px solid #eef1f4; border-radius:14px; padding:12px 14px; min-width:0;}
+  .gx-card.wide{grid-column:1 / -1;}
+  .gx-t{margin:0; font-size:13px; font-weight:700; letter-spacing:-.01em;}
+  .gx-d{margin:2px 0 8px; font-size:11.5px; color:var(--ink-3); line-height:1.5;}
+  .gx-say{margin:8px 0 0; font-size:12px; line-height:1.6; color:var(--ink-2);}
+  .gx-say b{color:var(--ink);}
+  .gx-leg{display:flex; gap:12px; flex-wrap:wrap; margin:0 0 6px; font-size:11.5px; color:var(--ink-2);}
+  .gx-leg span{display:inline-flex; align-items:center; gap:5px;}
+  .gx-leg i{display:inline-block; width:10px; height:10px; border-radius:3px;}
+  .gx-leg i.ln{width:16px; height:2px; border-radius:1px;}
+  .gx-leg i.bd{background:rgba(139,149,161,.16); border:1px solid #e5e8eb;}
+  .gx-bars{--nm:112px; --tip:58px; position:relative;}
+  .gx-row{display:grid; grid-template-columns:var(--nm) 1fr; align-items:center; column-gap:8px; min-height:26px; font-size:11.5px;}
+  .gx-nm{display:flex; align-items:center; gap:5px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .gx-nm .chip{font-size:10px; padding:0 6px;}
+  .gx-track{position:relative; align-self:stretch; display:flex; align-items:center; gap:6px; border-left:1px solid #d1d6db; min-width:0;}
+  .gx-track b{display:block; flex:0 0 auto; height:13px; min-width:2px; border-radius:0 4px 4px 0;}
+  .gx-track em{position:relative; z-index:2; background:var(--card); padding:0 3px; margin-left:-3px; border-radius:3px; font-style:normal; font-weight:700; font-size:11px; color:var(--ink-2); white-space:nowrap; font-variant-numeric:tabular-nums;} /* 흰 바탕 — 기준선이 숫자를 가로지르지 않게 */
+  .gx-pair .gx-track{flex-direction:column; align-items:stretch; justify-content:center; gap:2px; padding:4px 0;}
+  .gx-pair .gx-track > span{display:flex; align-items:center; gap:6px; height:9px;}
+  .gx-pair .gx-track b{height:9px;}
+  .gx-ref{position:absolute; top:0; bottom:0; left:calc((100% - var(--tip)) * var(--ref)); border-left:1px solid var(--ink-2); z-index:1;}
+  .gx-refrow{min-height:18px;}
+  .gx-refrow .gx-track{border-left-color:transparent;}
+  .gx-track em.gx-reflb{position:absolute; left:calc((100% - var(--tip)) * var(--ref) + 5px); bottom:1px; margin-left:0; background:transparent;}
+  .gx-dv{display:grid; grid-template-columns:1fr 1fr; align-self:stretch; min-width:0;}
+  .gx-dv > span{display:flex; align-items:center; gap:6px; min-width:0;}
+  .gx-dv .l{justify-content:flex-end;}
+  .gx-dv .r{border-left:1px solid #b0b8c1;}
+  .gx-dv b{display:block; flex:0 0 auto; height:13px; min-width:2px;}
+  .gx-dv .l b{border-radius:4px 0 0 4px;}
+  .gx-dv .r b{border-radius:0 4px 4px 0;}
+  .gx-dv em{font-style:normal; font-weight:700; font-size:11px; color:var(--ink-2); white-space:nowrap; font-variant-numeric:tabular-nums;}
+  .gx-two{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .gx-mini{margin:0 0 4px; font-size:12px; font-weight:700; color:var(--ink-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .gx-flow{position:relative;}
+  .gx-flow svg{display:block; width:100%; height:auto; overflow:visible;}
+  .gx-flow text{font-family:inherit; font-size:11px; fill:#8b95a1;}
+  .gx-flow text.v{font-weight:700; fill:#4e5968;}
+  .gx-cross{display:none; position:absolute; top:0; bottom:0; border-left:1px solid #8b95a1; pointer-events:none;}
+  .gx-tt{display:none; position:absolute; top:6px; z-index:3; background:#191f28; color:#fff; border-radius:8px; padding:7px 10px; font-size:11.5px; line-height:1.6; white-space:nowrap; pointer-events:none;}
+  .gx-tt b{font-weight:700;}
+  .gx-tt i{display:inline-block; width:12px; height:2px; vertical-align:middle; margin-right:5px;}
+  .gx-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;}
+  .gx-tile{background:var(--card-2); border-radius:12px; padding:11px 13px;}
+  .gx-tile .lb{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-2);}
+  .gx-tile .v{margin-top:3px; font-size:22px; font-weight:700; letter-spacing:-.02em;}
+  .gx-tile .n{margin-top:1px; font-size:11px; color:var(--ink-3);}
+  .gx-meter{height:6px; border-radius:3px; margin-top:8px; overflow:hidden;}
+  .gx-meter i{display:block; height:100%; border-radius:3px;}
+  .gx-det{margin-top:6px;}
+  .gx-det summary{cursor:pointer; font-size:11.5px; color:var(--ink-3); list-style:none;}
+  .gx-det summary::-webkit-details-marker{display:none;}
+  body.capture .gx-det{display:none;} /* 메일 그림에는 접힌 표 안내를 넣지 않는다 */
+  @media (max-width:760px){ .gx-grid,.gx-two{grid-template-columns:1fr;} .gx-bars{--nm:92px;} }
   /* 탭 — 오프라인(처음) · 온라인 · 광고. 캡처(메일)에서는 탭 줄을 숨기고 세 묶음을 다 펼친다 */
   .act-tabs{display:flex; gap:2px; margin:16px 0 0; border-bottom:1px solid #e5e8eb; overflow-x:auto;}
   .act-tabs button{font:inherit; font-size:13.5px; font-weight:700; color:var(--ink-3); background:transparent; border:0; border-bottom:2px solid transparent; margin-bottom:-1px; padding:9px 14px 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
@@ -213,6 +270,9 @@
   .act-pane-t{display:none; align-items:center; gap:6px; margin:18px 0 0; padding-top:14px; border-top:1px solid #e5e8eb; font-size:14px; font-weight:700; color:var(--ink);}
   .act-pane-t .chip{font-size:10.5px; padding:1px 6px;}
   .acts .alerts li.go{cursor:pointer;} /* 전사 점검의 팀별 심각 — 누르면 그 탭으로 */
+  .act-go{display:inline-block; margin-left:6px; padding:1px 9px; border-radius:8px; background:#e8f3ff; color:var(--c-vol); font-size:11.5px; font-weight:700; text-decoration:none; white-space:nowrap;} /* 하러 가기 링크 */
+  .act-go:hover{background:#d6e9ff;}
+  body.capture .act-go{display:none;}
   body.capture .act-tabs{display:none;}
   body.capture .act-pane{display:block;}
   body.capture .act-pane-t{display:flex;}
@@ -324,11 +384,161 @@
   //   문장은 서버가 만든다(lib/dailyActions.js — 규칙 계산, AI 아님). 여기서는 등급 칩과 묶음만 그린다.
   //   과거 날짜를 보면 전사 경보 · 실시간 광고는 빠진다(둘 다 "지금" 기준).
   function gChip(g){ return '<span class="chip ' + (g === '심각' ? 'dn' : g === '주의' ? 'warn' : g === '양호' ? 'up' : 'na') + '">' + esc(g) + '</span>'; }
+  // 항목에서 바로 가는 링크 — dash 첫 화면의 "물류센터 재고 →"와 같은 방식. 새 탭으로 연다. 메일 캡처에는 안 보인다(그림이라 못 누름).
+  function goLink(w){ return w && w.href ? ' <a class="act-go" href="' + esc(w.href) + '" target="_blank" rel="noopener noreferrer">' + esc(w.label) + ' →</a>' : ''; }
+  // 전사 점검(경보 분야) → 확인할 곳 — dash TodayWatch 의 WHERE 와 같은 곳
+  var AL_GO = {
+    재고: { href: 'https://yogibo.kr/off/stock/index.html', label: '물류센터 재고 확인' },
+    좌수: { href: 'https://yogibo.kr/off/y_League.html', label: 'Y리그 확인' },
+    광고: { href: 'https://mkt-sage.vercel.app/', label: '광고 통합에서 확인' },
+    CS: { href: 'https://cs-fawn-alpha.vercel.app/admin', label: 'CS 셀프가이드' },
+    퍼널: { href: '/dashboards/funnel_daily.html', label: '일일 퍼널 점검' },
+    트래픽: { href: '/', label: '온라인 판매분석' },
+    반품: { href: '/', label: '온라인 판매분석' }
+  };
   function actRows(list, nameKey, textKey){
     return '<ul class="alerts">' + list.map(function(x){
-      return '<li>' + gChip(x.등급) + '<span class="area">' + esc(x[nameKey]) + '</span><span>' + esc(x[textKey]) + '</span></li>';
+      return '<li>' + gChip(x.등급) + '<span class="area">' + esc(x[nameKey]) + '</span><span>' + esc(x[textKey]) + goLink(x.링크) + '</span></li>';
     }).join('') + '</ul>';
   }
+  // ── 그래프(오늘 챙길 것 탭 맨 위) — 직원 의견 "그래프로도 보고 싶다"(2026-10-12 사용자 요청). 문장과 같은 숫자(d.챙길것의 수치 · 흐름 · 잔액)를 그린다.
+  //   외부 도구 없이 HTML · SVG 로만 — 이 화면은 통째로 메일 그림이 되므로 불러올 것이 없어야 캡처가 안정적이다.
+  //   색은 역할로만 쓴다: 상태(심각 · 주의 · 양호 — 등급 글자와 함께) / 전달(회색) vs 이번 달(파랑) / 늘어남(파랑) ↔ 줄어듦(빨강).
+  //   막대 끝에 값을 적어 축 눈금은 두지 않는다. 자세한 숫자는 바로 아래 문장에 있다(그래프가 유일한 통로가 아니다).
+  var GX = { blue: '#3182f6', orange: '#f06c00', red: '#f04452', ctx: '#c4cad3', na: '#c4cad3', 심각: '#f04452', 주의: '#e87b00', 양호: '#03a65a', 참고: '#c4cad3' };
+  function gxPct(n){ return n == null || !isFinite(n) ? '—' : (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toFixed(1) + '%'; }
+  function gxNice(v){ var st = [10, 20, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750, 1000]; for (var i = 0; i < st.length; i++) if (v <= st[i]) return st[i]; return Math.ceil(v / 500) * 500; }
+  function gxKey(color, label, cls){ return '<span><i' + (cls ? ' class="' + cls + '"' : '') + (color ? ' style="background:' + color + '"' : '') + '></i>' + esc(label) + '</span>'; }
+  function gxCard(title, sub, legend, body, say, wide){
+    return '<div class="gx-card' + (wide ? ' wide' : '') + '"><p class="gx-t">' + esc(title) + '</p><p class="gx-d">' + sub + '</p>' + (legend ? '<div class="gx-leg">' + legend + '</div>' : '') + body + (say ? '<p class="gx-say">' + say + '</p>' : '') + '</div>';
+  }
+  // 막대 길이 — 끝에 값 글자가 들어갈 자리(--tip)를 뺀 폭에 대한 비율
+  function gxW(r){ return 'width:calc((100% - var(--tip)) * ' + Math.max(0, Math.min(1, r)).toFixed(4) + ')'; }
+  // 0 기준 좌우 막대 한 줄 — 왼쪽(줄어듦 · 빨강) / 오른쪽(늘어남 · 파랑). posBad 면 오른쪽이 나쁜 쪽(단가 오름)이라 색을 바꾼다
+  function gxDvRow(name, v, bound, posBad, title){
+    var r = Math.min(1, Math.abs(v) / bound), w = 'width:calc((100% - 52px) * ' + r.toFixed(4) + ')';
+    var neg = v < 0, col = (neg ? !posBad : posBad) ? GX.red : GX.blue;
+    return '<div class="gx-row" title="' + esc(title || '') + '"><span class="gx-nm">' + esc(name) + '</span><span class="gx-dv">' +
+      '<span class="l">' + (neg ? '<em>' + gxPct(v) + '</em><b style="' + w + ';background:' + col + '"></b>' : '') + '</span>' +
+      '<span class="r">' + (neg ? '' : '<b style="' + w + ';background:' + col + '"></b><em>' + gxPct(v) + '</em>') + '</span></span></div>';
+  }
+  // 오프라인 — ① 매장별 매출 달성률 + 월 경과 기준선 ② 좌수: 전달 같은 기간(회색) vs 이번 달(파랑)
+  function gxOffline(o){
+    var st = (o.매장 || []).filter(function(x){ return x.수치; }); if (!st.length) return '';
+    var el = o.월경과율, early = o.월초;
+    var pace = st.slice().sort(function(a, b){ return (a.수치.달성률 || 0) - (b.수치.달성률 || 0); });
+    var max = Math.ceil(Math.max(100, Math.max.apply(null, pace.map(function(x){ return x.수치.달성률 || 0; }))) / 10) * 10;
+    var behind = pace.filter(function(x){ return x.수치.매출등급 === '심각' || x.수치.매출등급 === '주의'; });
+    var b1 = '<div class="gx-bars" style="--nm:150px;--ref:' + (el / max).toFixed(4) + '" role="img" aria-label="매장별 월 목표 달성률 막대 그래프">' +
+      '<div class="gx-row gx-refrow"><span></span><span class="gx-track"><em class="gx-reflb">월 경과 ' + el + '%</em></span></div>' +
+      pace.map(function(x){ var v = x.수치, g = v.매출등급 || '참고';
+        return '<div class="gx-row" title="' + esc(x.매장 + ' — ' + comma(v.매출) + '원 / 목표 ' + comma(v.목표) + '원') + '"><span class="gx-nm">' + gChip(g) + esc(x.매장) + '</span>' +
+          '<span class="gx-track"><i class="gx-ref"></i><b style="' + gxW((v.달성률 || 0) / max) + ';background:' + (GX[g] || GX.na) + '"></b><em>' + (v.달성률 != null ? v.달성률 + '%' : '—') + '</em></span></div>';
+      }).join('') + '</div>';
+    var h = gxCard('매장별 매출 — 월 목표 달성률', '세로선 = 월 경과 ' + el + '%. 막대가 선에 못 미치면 페이스 미달' + (early ? ' · 월초(1~3일)는 판정 보류' : ''),
+      gxKey(GX.심각, '심각') + gxKey(GX.주의, '주의') + gxKey(GX.양호, '양호') + (early ? gxKey(GX.na, '판정 보류') : ''), b1,
+      early ? '월초라 페이스 판정은 4일부터 합니다.' : behind.length ? '<b>페이스 미달 ' + behind.length + '곳</b> — ' + behind.map(function(x){ return esc(x.매장) + ' ' + x.수치.달성률 + '%'; }).join(' · ') : '<b>모든 매장이 페이스 안</b>입니다.');
+    var seats = st.slice().sort(function(a, b){ return (b.수치.좌수 || 0) - (a.수치.좌수 || 0); });
+    var smax = Math.max.apply(null, seats.map(function(x){ return Math.max(x.수치.좌수 || 0, x.수치.전달좌수 || 0); }).concat([1]));
+    var noPrev = seats.filter(function(x){ return x.수치.전달좌수 == null; }).map(function(x){ return x.매장; });
+    var short = seats.filter(function(x){ return x.수치.전달좌수 != null && x.수치.좌수 < x.수치.전달좌수; });
+    var b2 = '<div class="gx-bars gx-pair" role="img" aria-label="매장별 좌수 — 전달 같은 기간과 이번 달 비교 막대 그래프">' + seats.map(function(x){ var v = x.수치;
+      return '<div class="gx-row" title="' + esc(x.매장 + ' — 이번 달 ' + comma(v.좌수) + '좌' + (v.전달좌수 != null ? ' / 전달 같은 기간 ' + comma(v.전달좌수) + '좌' : '')) + '"><span class="gx-nm">' + esc(x.매장) + '</span><span class="gx-track">' +
+        '<span>' + (v.전달좌수 != null ? '<b style="' + gxW(v.전달좌수 / smax) + ';background:' + GX.ctx + '"></b>' : '') + '</span>' +
+        '<span><b style="' + gxW((v.좌수 || 0) / smax) + ';background:' + GX.blue + '"></b><em>' + comma(v.좌수) + '좌</em></span></span></div>';
+    }).join('') + '</div>';
+    h += gxCard('매장별 좌수 — 전달 같은 기간 대비', '좌수 = Y리그 상담 인원 · 전달 같은 기간 ' + esc(o.전달기간) + (noPrev.length ? ' · 전달 기록 없음: ' + noPrev.map(esc).join(', ') : ''),
+      gxKey(GX.ctx, '전달 같은 기간') + gxKey(GX.blue, '이번 달'), b2,
+      short.length ? '<b>전달보다 부족한 매장 ' + short.length + '곳</b> — ' + short.map(function(x){ return esc(x.매장) + ' −' + comma(x.수치.전달좌수 - x.수치.좌수) + '좌'; }).join(' · ') : '<b>전달 같은 기간보다 부족한 매장이 없습니다.</b>');
+    return '<div class="gx-grid">' + h + '</div>';
+  }
+  // 온라인 — ③ 자사몰 · 스마트스토어 일별 매출(선) + 프로모션 기간 띠 ④ 어제: 7일평균 대비 무엇이 빠졌나
+  function gxFlow(f){
+    var n = f.날짜.length, W = 960, H = 220, L = 44, R = 54, T = 10, B = 22, pw = W - L - R, ph = H - T - B;
+    var all = f.자사몰.concat(f.스마트스토어), lo = Math.min(0, Math.min.apply(null, all)), hi = Math.max.apply(null, all.concat([1]));
+    var step = Math.pow(10, Math.floor(Math.log10(hi / 4))); step = [1, 2, 2.5, 5, 10].map(function(m){ return m * step; }).filter(function(x){ return hi / x <= 5; })[0] || step * 10;
+    // 음수(그날 잡힌 반품이 판매보다 많은 날)가 있으면 0 아래로 필요한 만큼만 내린다 — 눈금은 0 위쪽에만 둔다
+    var top = Math.ceil(hi / step) * step, bot = lo < 0 ? Math.floor(lo / (step / 4)) * (step / 4) : 0;
+    var X = function(i){ return L + (n > 1 ? (i / (n - 1)) * pw : pw / 2); }, Y = function(v){ return T + (1 - (v - bot) / (top - bot)) * ph; };
+    var tick = function(v){ var m = v / 10000; return Math.abs(m) >= 10000 ? (m / 10000).toFixed(1) + '억' : Math.round(m).toLocaleString('ko-KR') + '만'; };
+    var g = '';
+    for (var v = 0; v <= top + 1; v += step) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '" stroke="' + (v === 0 ? '#b0b8c1' : '#eef1f4') + '" stroke-width="1"/><text x="' + (L - 6) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + tick(v) + '</text>';
+    var z = f.구간, i0 = z ? f.날짜.indexOf(z.start) : -1, i1 = z ? f.날짜.indexOf(z.end) : -1;
+    if (z && i0 >= 0 && i1 < 0 && z.end > f.날짜[n - 1]) i1 = n - 1; // 진행 중 — 기준일까지
+    var band = z && i0 >= 0 && i1 >= i0 ? '<rect x="' + X(i0).toFixed(1) + '" y="' + T + '" width="' + Math.max(2, X(i1) - X(i0)).toFixed(1) + '" height="' + ph + '" fill="rgba(139,149,161,.16)"/><text class="v" x="' + (X(i0) + 6).toFixed(1) + '" y="' + (T + 14) + '">' + esc(z.이름) + '</text>' : '';
+    var every = Math.max(1, Math.ceil(n / 11)), xs = '';
+    for (var i = 0; i < n; i += every) xs += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + (+f.날짜[i].slice(5, 7)) + '/' + (+f.날짜[i].slice(8, 10)) + '</text>';
+    var path = function(arr){ return arr.map(function(v, i){ return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(' '); };
+    var e1 = Y(f.자사몰[n - 1]), e2 = Y(f.스마트스토어[n - 1]), far = Math.abs(e1 - e2) >= 14; // 끝 숫자가 겹치면 적지 않는다(범례 · 마우스 올리기가 대신)
+    var end = function(arr, c, y){ return '<circle cx="' + X(n - 1).toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + c + '" stroke="#fff" stroke-width="2"/>' + (far ? '<text class="v" x="' + (X(n - 1) + 8).toFixed(1) + '" y="' + (y + 4).toFixed(1) + '">' + tick(arr[n - 1]) + '</text>' : ''); };
+    return '<div class="gx-flow" data-gxflow="1" role="img" aria-label="자사몰과 스마트스토어 일별 매출 선 그래프"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">' + g + band + xs +
+      '<path d="' + path(f.자사몰) + '" fill="none" stroke="' + GX.blue + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<path d="' + path(f.스마트스토어) + '" fill="none" stroke="' + GX.orange + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      end(f.자사몰, GX.blue, e1) + end(f.스마트스토어, GX.orange, e2) + '</svg><i class="gx-cross"></i><div class="gx-tt"></div></div>';
+  }
+  function gxOnline(pr, dg){
+    var h = '';
+    if (pr && pr.흐름) {
+      var f = pr.흐름, z = f.구간, n = f.날짜.length, i0 = z ? f.날짜.indexOf(z.start) : -1, i1 = z ? f.날짜.indexOf(z.end) : -1;
+      if (z && i0 >= 0 && i1 < 0 && z.end > f.날짜[n - 1]) i1 = n - 1;
+      var avg = function(arr, a, b){ if (a > b || a < 0) return null; var s = 0, c = 0; for (var i = a; i <= b && i < arr.length; i++) { s += arr[i]; c++; } return c ? s / c : null; };
+      var say = '';
+      if (z && i0 > 0 && i1 >= i0) say = ['자사몰', '스마트스토어'].map(function(k){
+        var post = i1 < n - 1 ? avg(f[k], i1 + 1, n - 1) : null;
+        return '<b>' + k + '</b> 하루 평균 — 프로모션 전 ' + man(avg(f[k], 0, i0 - 1)) + ' 원 → 기간 ' + man(avg(f[k], i0, i1)) + ' 원' + (post != null ? ' → 끝난 뒤 ' + man(post) + ' 원' : '');
+      }).join('<br>');
+      gxFlowData = f; // 마우스 올리기(bindActs)가 쓴다
+      h += gxCard('자사몰 · 스마트스토어 일별 매출' + (z ? ' — 프로모션 전후' : ' — 최근 30일'),
+        (z ? '회색 띠 = ' + esc(z.이름) + '(' + dayLabel(z.start) + ' ~ ' + dayLabel(z.end) + ')' : '기준이 될 프로모션이 등록돼 있지 않아 최근 30일만 보입니다') + ' · 이카운트 출고 기준',
+        gxKey(GX.blue, '자사몰', 'ln') + gxKey(GX.orange, '스마트스토어', 'ln') + (z ? gxKey('', '프로모션 기간', 'bd') : ''),
+        gxFlow(f) + '<details class="gx-det"><summary>▸ 표로 보기</summary><div class="twrap"><table class="t"><thead><tr><th>날짜</th><th class="r">자사몰</th><th class="r">스마트스토어</th></tr></thead><tbody>' +
+          f.날짜.map(function(x, i){ return '<tr><td>' + dayLabel(x) + '</td><td class="r tnum">' + comma(f.자사몰[i]) + '</td><td class="r tnum">' + comma(f.스마트스토어[i]) + '</td></tr>'; }).join('') + '</tbody></table></div></details>',
+        say, true);
+    }
+    var items = dg ? (dg.항목 || []).filter(function(x){ return x.수치 && x.수치.순매출 != null; }) : [];
+    if (items.length) {
+      h += gxCard('어제 매출 — 7일평균 대비 무엇이 빠졌나', '0보다 왼쪽(빨강)이 평소보다 줄어든 항목 · 유입 · 전환 · 객단가 중 가장 크게 빠진 곳이 원인',
+        gxKey(GX.blue, '평소보다 늘어남') + gxKey(GX.red, '평소보다 줄어듦'),
+        '<div class="gx-two">' + items.map(function(x){ var v = x.수치;
+          var rows = [['순매출', v.순매출], ['유입', v.유입], [v.전환이름 || '전환', v.전환], ['객단가', v.객단가], ['광고 클릭', v.광고클릭]].filter(function(r){ return r[1] != null; });
+          var bound = gxNice(Math.max.apply(null, rows.map(function(r){ return Math.abs(r[1]); }).concat([10])));
+          return '<div><p class="gx-mini">' + gChip(x.등급) + esc(x.채널) + (v.금액 != null ? ' · 순매출 ' + man(v.금액) + ' 원' : '') + '</p><div class="gx-bars" style="--nm:64px" role="img" aria-label="' + esc(x.채널) + ' 어제 요인별 7일평균 대비 변화">' +
+            rows.map(function(r){ return gxDvRow(r[0], r[1], bound, false, x.채널 + ' ' + r[0] + ' 7일평균 대비 ' + gxPct(r[1])); }).join('') + '</div></div>';
+        }).join('') + '</div>', '', true);
+    }
+    return h ? '<div class="gx-grid">' + h + '</div>' : '';
+  }
+  // 광고 — ⑤ 매체별 광고비: 전달 같은 기간(회색) vs 이번 달(파랑) ⑥ 클릭 단가 변화(오른쪽 = 오름 = 빨강) ⑦ 잔액 며칠분(숫자가 답인 자리라 타일)
+  function gxAds(ad, rt){
+    var h = '';
+    var rows = ad ? (ad.매체 || []).filter(function(m){ return m.수치; }).slice().sort(function(a, b){ return b.수치.광고비 - a.수치.광고비; }) : [];
+    if (rows.length) {
+      var mx = Math.max.apply(null, rows.map(function(m){ return Math.max(m.수치.광고비 || 0, m.수치.전달광고비 || 0); }).concat([1]));
+      h += gxCard('매체별 광고비 — 전달 같은 기간 대비', esc(ad.기간) + ' · 매체가 집계한 광고비', gxKey(GX.ctx, '전달 같은 기간') + gxKey(GX.blue, '이번 달'),
+        '<div class="gx-bars gx-pair" role="img" aria-label="매체별 광고비 — 전달 같은 기간과 이번 달 비교 막대 그래프">' + rows.map(function(m){ var v = m.수치;
+          return '<div class="gx-row" title="' + esc(m.매체 + ' — 이번 달 ' + comma(v.광고비) + '원 / 전달 같은 기간 ' + comma(v.전달광고비) + '원') + '"><span class="gx-nm">' + esc(m.매체) + '</span><span class="gx-track">' +
+            '<span><b style="' + gxW((v.전달광고비 || 0) / mx) + ';background:' + GX.ctx + '"></b></span><span><b style="' + gxW((v.광고비 || 0) / mx) + ';background:' + GX.blue + '"></b><em>' + man(v.광고비) + '</em></span></span></div>';
+        }).join('') + '</div>', ad.풀이 ? '<b>' + esc(ad.풀이) + '</b>' : '');
+      var cpc = rows.filter(function(m){ return m.수치.CPC변화 != null; }).slice().sort(function(a, b){ return b.수치.CPC변화 - a.수치.CPC변화; });
+      var skip = rows.filter(function(m){ return m.수치.CPC변화 == null; }).map(function(m){ return m.매체 + (m.수치.끊김 ? '(수집 끊김)' : ''); });
+      var worse = cpc.filter(function(m){ return m.등급 === '심각' || m.등급 === '주의'; });
+      if (cpc.length) {
+        var bound = gxNice(Math.max.apply(null, cpc.map(function(m){ return Math.abs(m.수치.CPC변화); }).concat([10])));
+        h += gxCard('매체별 클릭 단가(CPC) 변화', '전달 같은 기간 대비 · 오른쪽(빨강)이면 같은 돈으로 클릭이 덜 들어옵니다' + (skip.length ? ' · 비교 제외: ' + skip.map(esc).join(', ') : ''),
+          gxKey(GX.red, '단가 오름') + gxKey(GX.blue, '단가 내림'),
+          '<div class="gx-bars" role="img" aria-label="매체별 클릭 단가 변화 막대 그래프">' + cpc.map(function(m){ var v = m.수치; return gxDvRow(m.매체, v.CPC변화, bound, true, m.매체 + ' — CPC ' + comma(v.전달CPC) + ' → ' + comma(v.CPC) + '원'); }).join('') + '</div>',
+          worse.length ? '<b>점검할 매체 ' + worse.length + '곳</b> — ' + worse.map(function(m){ return esc(m.매체) + ' ' + gxPct(m.수치.CPC변화) + '(' + esc(m.등급) + ')'; }).join(' · ') : '<b>단가가 크게 오른 매체가 없습니다.</b>');
+      }
+    }
+    var bal = rt ? (rt.잔액 || []) : [];
+    if (bal.length) h += gxCard('실시간 — 잔액이 며칠분 남았나', '최근 7일 하루 평균 광고비 기준 · 1일분 미만 심각, 3일분 미만 주의', '',
+      '<div class="gx-tiles">' + bal.map(function(b){ var c = GX[b.등급] || GX.na;
+        return '<div class="gx-tile"><div class="lb">' + gChip(b.등급) + '<span>' + esc(b.이름) + '</span></div><div class="v">약 ' + b.일수.toFixed(1) + '일분</div><div class="n">' + comma(b.잔액) + '원 · 하루 평균 ' + man(b.하루평균) + ' 원</div>' +
+          '<div class="gx-meter" style="background:' + c + '2e" title="7일분을 가득으로 본 막대"><i style="width:' + Math.max(4, Math.min(100, (b.일수 / 7) * 100)).toFixed(0) + '%;background:' + c + '"></i></div></div>';
+      }).join('') + '</div>', '', true);
+    return h ? '<div class="gx-grid">' + h + '</div>' : '';
+  }
+  var gxFlowData = null;
   // 탭 — 오프라인(처음 보이는 탭) · 온라인 · 광고. 전사 점검은 탭 위에 늘 보인다(사용자 지정 2026-10-12 —
   //   처음엔 온라인 먼저였다가, 팀별 심각을 전사 점검에 올린 뒤 오프라인 먼저로 바꿨다).
   //   팀별(탭별) 심각은 전사 점검에도 올린다 — 탭에 가려 있어도 놓치지 않게. 그 줄을 누르면 해당 탭이 열린다.
@@ -402,21 +612,13 @@
         }).join('') + '</div>';
     }
 
-    // 팀별 심각 → 전사 점검에도. 같은 매체가 실시간 · 전달 대비 양쪽에서 심각이면(META · META 요기보) 실시간 쪽 한 번만
-    var crit = [];
-    lOff.forEach(function(st){ if (st.등급 === '심각') crit.push({ tab: 'off', 이름: '오프라인 · ' + st.매장, 글: st.지시 }); });
-    lOn.forEach(function(i){ if (i.등급 === '심각') crit.push({ tab: 'on', 이름: '온라인 · ' + i.채널, 글: i.글 }); });
-    var adNames = [];
-    (rt && rt.ok ? rt.data.항목 : []).concat(ad && ad.ok ? ad.data.매체 : []).forEach(function(i){
-      if (i.등급 !== '심각') return;
-      var nm = String(i.매체);
-      if (adNames.some(function(y){ return nm.indexOf(y) === 0 || y.indexOf(nm) === 0; })) return;
-      adNames.push(nm); crit.push({ tab: 'ad', 이름: '광고 · ' + nm, 글: i.글 || i.평가 });
-    });
+    // 팀별 심각 → 전사 점검에도. 목록은 서버가 만든다(lib/dailyActions criticals — dash 첫 화면 카드와 같은 목록)
+    var TAB_OF = { 오프라인: 'off', 온라인: 'on', 광고: 'ad' };
+    var crit = (a.심각목록 || []).map(function(c){ return { tab: TAB_OF[c.팀] || 'on', 이름: c.팀 + ' · ' + c.이름, 글: c.글, 링크: c.링크 }; });
 
     // 전사 점검 — 탭과 상관없이 늘 보인다. 순서: 전사 심각 → 팀별 심각 → 전사 주의
-    var liAl = function(e){ var r = red(e); return '<li class="' + (r ? 'bad' : '') + '"><span class="chip ' + (r ? 'dn' : 'warn') + '">' + (r ? '심각' : '주의') + '</span><span class="area">' + esc(e.분야) + '</span><span>' + esc(e.내용) + '</span></li>'; };
-    var liCrit = function(c){ return '<li class="bad go" data-goto="' + c.tab + '" title="눌러서 ' + TAB_NAME[c.tab] + ' 탭 보기"><span class="chip dn">심각</span><span class="area">' + esc(c.이름) + '</span><span>' + esc(c.글) + '</span></li>'; };
+    var liAl = function(e){ var r = red(e); return '<li class="' + (r ? 'bad' : '') + '"><span class="chip ' + (r ? 'dn' : 'warn') + '">' + (r ? '심각' : '주의') + '</span><span class="area">' + esc(e.분야) + '</span><span>' + esc(e.내용) + goLink(AL_GO[e.분야]) + '</span></li>'; };
+    var liCrit = function(c){ return '<li class="bad go" data-goto="' + c.tab + '" title="눌러서 ' + TAB_NAME[c.tab] + ' 탭 보기"><span class="chip dn">심각</span><span class="area">' + esc(c.이름) + '</span><span>' + esc(c.글) + goLink(c.링크) + '</span></li>'; };
     var alList = al ? (al.경보 || []) : [];
     var rows = alList.filter(red).map(liAl).concat(crit.map(liCrit)).concat(alList.filter(function(e){ return !red(e); }).map(liAl));
     if (alErr || al || crit.length) {
@@ -424,7 +626,10 @@
         (rows.length ? '<ul class="alerts">' + rows.join('') + '</ul>' : al ? renderAlerts(al) : '');
     }
 
-    var tabs = [['off', hOff, lOff], ['on', hOn, lOn], ['ad', hAd, lAd]];
+    // 탭마다 맨 위에 그래프, 그 아래에 문장(같은 숫자)
+    gxFlowData = null;
+    var gOff = off && off.ok ? gxOffline(off.data) : '', gOn = gxOnline(pr && pr.ok ? pr.data : null, dg && dg.ok ? dg.data : null), gAd = gxAds(ad && ad.ok ? ad.data : null, rt && rt.ok ? rt.data : null);
+    var tabs = [['off', gOff + hOff, lOff], ['on', gOn + hOn, lOn], ['ad', gAd + hAd, lAd]];
     if (!TAB_NAME[actTab]) actTab = 'off';
     h += '<div class="act-tabs" role="tablist">' + tabs.map(function(t){
       var on = t[0] === actTab;
@@ -444,6 +649,31 @@
       postHeight(); // dash 안(iframe)이면 높이를 다시 알린다
     };
     box.querySelectorAll('[data-acttab]').forEach(function(btn){ btn.onclick = function(){ show(btn.getAttribute('data-acttab')); }; });
+    // 일별 매출 선 그래프 — 마우스를 올리면 가장 가까운 날짜의 두 값을 보인다(선 위에 정확히 올리지 않아도 된다)
+    var fl = box.querySelector('[data-gxflow]');
+    if (fl && gxFlowData) {
+      var f = gxFlowData, n = f.날짜.length, cross = fl.querySelector('.gx-cross'), tt = fl.querySelector('.gx-tt'), svg = fl.querySelector('svg');
+      var hide = function(){ cross.style.display = 'none'; tt.style.display = 'none'; };
+      fl.addEventListener('pointerleave', hide);
+      fl.addEventListener('pointermove', function(ev){
+        var r = svg.getBoundingClientRect(), k = r.width / 960, x0 = 44 * k, pw = (960 - 44 - 54) * k;
+        var i = Math.round(((ev.clientX - r.left - x0) / pw) * (n - 1)); if (i < 0 || i > n - 1) { hide(); return; }
+        var x = x0 + (n > 1 ? (i / (n - 1)) * pw : pw / 2);
+        cross.style.display = 'block'; cross.style.left = x + 'px';
+        tt.textContent = '';
+        var head = document.createElement('b'); head.textContent = dayLabel(f.날짜[i]); tt.appendChild(head);
+        [['자사몰', GX.blue], ['스마트스토어', GX.orange]].forEach(function(s){
+          tt.appendChild(document.createElement('br'));
+          var key = document.createElement('i'); key.style.background = s[1]; tt.appendChild(key);
+          var val = document.createElement('b'); val.textContent = comma(f[s[0]][i]) + '원'; tt.appendChild(val);
+          tt.appendChild(document.createTextNode(' ' + s[0]));
+        });
+        tt.style.display = 'block';
+        tt.style.left = (x + 12 + tt.offsetWidth > r.width ? x - 12 - tt.offsetWidth : x + 12) + 'px';
+      });
+    }
+    // 줄 안의 "하러 가기" 링크는 링크만 연다(줄을 눌러 탭이 바뀌는 동작과 겹치지 않게)
+    box.querySelectorAll('.act-go').forEach(function(a){ a.addEventListener('click', function(ev){ ev.stopPropagation(); }); });
     // 전사 점검의 팀별 심각 줄 — 누르면 그 탭으로
     box.querySelectorAll('[data-goto]').forEach(function(li){
       li.onclick = function(){ show(li.getAttribute('data-goto')); var t = box.querySelector('.act-tabs'); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); };

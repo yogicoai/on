@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <!--
   일일 모니터링 메일 페이지 — 매일 이 페이지를 통째로 캡처해 메일로 보낸다.
-    ① 어제 한눈에(매출·목표 대비 온라인 몰별/오프라인 매장별·경보) · ② 자사몰/스마트스토어 KPI · ③ 오프라인 좌수 · ④ 재고 주의(품번 기준, MD 양식)
+    ① 어제 한눈에(매출 · 오늘 챙길 것[전사 경보 · 매장별 지시 · 광고 피드백] · 목표 대비 온라인 몰별/오프라인 매장별) · ② 자사몰/스마트스토어 KPI · ③ 오프라인 좌수 · ④ 재고 주의(품번 기준, MD 양식)
     ① 온오프 매출·샐리필은 기존 메일(photo.js) 그대로.
   데이터: /api/daily-mail (lib/dailyMail.js). 주소 파라미터:
     ?date=YYYY-MM-DD  기준일(기본 어제)   ?basis=online  재고 예상판매를 온라인만으로(기본 온+오프)
@@ -176,6 +176,48 @@
   .alerts{gap:6px;}
   .alerts li{border-left:0; background:var(--card-2); border-radius:12px; padding:10px 12px;}
   .alerts .area{color:var(--ink);}
+  /* 오늘 챙길 것 — 타일 바로 아래: 전사 점검 · 오프라인 매장별 · 온라인 광고(전달 대비 · 어제 진단 · 실시간) */
+  .acts{margin:4px 0 16px; border:1px solid #eef1f4; border-radius:16px; padding:14px 16px;}
+  .acts-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 4px;}
+  .acts-head b{font-size:15px; font-weight:700; letter-spacing:-.02em;}
+  .acts-head .sub{font-size:11.5px; color:var(--ink-3);}
+  .acts h4{margin:14px 0 7px; font-size:12.5px; font-weight:700; color:var(--ink);}
+  .acts h4 span{font-weight:500; color:var(--ink-3); font-size:11.5px; margin-left:7px;}
+  .acts .alerts li{align-items:flex-start; line-height:1.6;}
+  .acts .alerts .area{white-space:nowrap; min-width:0; flex:0 0 auto;} /* 이름이 긴 글에 눌려 겹치지 않게 */
+  .acts .alerts .chip{margin-top:1px; flex:0 0 auto;}
+  .acts .alerts li > span:last-child{flex:1 1 auto; min-width:0;}
+  .act-one{margin:5px 0 0; font-size:11.5px; line-height:1.55; color:var(--ink-2);}
+  .act-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .act-card{background:var(--card-2); border-radius:12px; padding:10px 12px;}
+  .act-top{display:flex; gap:7px; align-items:baseline; flex-wrap:wrap; font-size:12.5px; line-height:1.5;}
+  .act-top b{font-weight:700;}
+  .act-top .dir{font-weight:700; color:var(--ink);}
+  .act-items{list-style:none; margin:6px 0 0; padding:0; display:grid; gap:3px;}
+  .act-items li{font-size:11.5px; line-height:1.55; color:var(--ink-2); padding-left:34px; position:relative;}
+  .act-items li i{position:absolute; left:0; top:0; font-style:normal; font-weight:700; font-size:11px; color:var(--ink-3);}
+  .act-items li.bad{color:var(--ink);} .act-items li.bad i{color:var(--bad);}
+  .act-items li.warn{color:var(--ink);} .act-items li.warn i{color:var(--warn);}
+  .act-sum{font-size:12px; line-height:1.65; margin:0 0 7px; color:var(--ink-2);}
+  .act-sum b{color:var(--ink);}
+  .act-sum .warn-t{color:var(--warn);}
+  .act-sum.act-promo{margin-top:8px;} /* 프로모션 머리 줄 — 위 주의 줄과 붙지 않게 */
+  /* 탭 — 오프라인(처음) · 온라인 · 광고. 캡처(메일)에서는 탭 줄을 숨기고 세 묶음을 다 펼친다 */
+  .act-tabs{display:flex; gap:2px; margin:16px 0 0; border-bottom:1px solid #e5e8eb; overflow-x:auto;}
+  .act-tabs button{font:inherit; font-size:13.5px; font-weight:700; color:var(--ink-3); background:transparent; border:0; border-bottom:2px solid transparent; margin-bottom:-1px; padding:9px 14px 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .act-tabs button:hover{color:var(--ink-2);}
+  .act-tabs button.on{color:var(--ink); border-bottom-color:var(--ink);}
+  .act-tabs button .chip{font-size:10.5px; padding:1px 6px;}
+  .act-pane{display:none;}
+  .act-pane.on{display:block;}
+  .act-pane-t{display:none; align-items:center; gap:6px; margin:18px 0 0; padding-top:14px; border-top:1px solid #e5e8eb; font-size:14px; font-weight:700; color:var(--ink);}
+  .act-pane-t .chip{font-size:10.5px; padding:1px 6px;}
+  .acts .alerts li.go{cursor:pointer;} /* 전사 점검의 팀별 심각 — 누르면 그 탭으로 */
+  body.capture .act-tabs{display:none;}
+  body.capture .act-pane{display:block;}
+  body.capture .act-pane-t{display:flex;}
+  body.capture .acts .alerts li.go{cursor:default;}
+  @media (max-width:760px){ .act-grid{grid-template-columns:1fr;} }
   table.stock th{background:var(--card-2); color:var(--ink-2); border:1px solid var(--line-2); font-weight:600;}
   table.stock td{border:1px solid #eef1f4;}
   .rule-box{border:0; border-radius:14px; padding:14px 16px;}
@@ -274,10 +316,138 @@
       '<span class="range-tools">기간 보기 <input type="date" id="r-s" max="' + yday() + '" value="' + esc(d.기준일) + '"> ~ <input type="date" id="r-e" max="' + yday() + '" value="' + esc(d.기준일) + '">' +
       ' <button type="button" id="r-go">적용</button> <button type="button" id="r-7">최근 7일</button> <button type="button" id="r-m">이번 달</button> <button type="button" id="r-reset">기준일로</button></span></div>';
     h += '<div id="tiles">' + (d.타일 && d.타일.ok ? renderTiles(d.타일.data) : d.타일 ? errBox(d.타일) : '') + '</div>';
+    h += renderActions(d); // 오늘 챙길 것 — 전사 경보도 이 묶음 안으로 올렸다(예전엔 목표 표 아래)
     h += renderTarget(d.매출);
-    if (d.경보 && d.경보.error) h += errBox(d.경보);
-    else if (al) h += renderAlerts(al);
     return h + '</div>';
+  }
+  // ── 오늘 챙길 것 — 전사 점검(경보 9항목 + 팀별 심각, 늘 보임) + 탭: 오프라인(매장별) · 온라인(프로모션 · 어제 매출 진단) · 광고(전달 대비 · 실시간) ──
+  //   문장은 서버가 만든다(lib/dailyActions.js — 규칙 계산, AI 아님). 여기서는 등급 칩과 묶음만 그린다.
+  //   과거 날짜를 보면 전사 경보 · 실시간 광고는 빠진다(둘 다 "지금" 기준).
+  function gChip(g){ return '<span class="chip ' + (g === '심각' ? 'dn' : g === '주의' ? 'warn' : g === '양호' ? 'up' : 'na') + '">' + esc(g) + '</span>'; }
+  function actRows(list, nameKey, textKey){
+    return '<ul class="alerts">' + list.map(function(x){
+      return '<li>' + gChip(x.등급) + '<span class="area">' + esc(x[nameKey]) + '</span><span>' + esc(x[textKey]) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  // 탭 — 오프라인(처음 보이는 탭) · 온라인 · 광고. 전사 점검은 탭 위에 늘 보인다(사용자 지정 2026-10-12 —
+  //   처음엔 온라인 먼저였다가, 팀별 심각을 전사 점검에 올린 뒤 오프라인 먼저로 바꿨다).
+  //   팀별(탭별) 심각은 전사 점검에도 올린다 — 탭에 가려 있어도 놓치지 않게. 그 줄을 누르면 해당 탭이 열린다.
+  //   메일 캡처(capture=1)는 누를 수 없으므로 탭 줄을 숨기고 세 묶음을 차례로 다 펼친다(css body.capture).
+  var actTab = 'off'; // 고른 탭(처음은 오프라인) — 다시 불러와도 유지
+  var TAB_NAME = { on: '온라인', ad: '광고', off: '오프라인' };
+  function tabCount(list){ var c = { b: 0, w: 0 }; (list || []).forEach(function(x){ if (x.등급 === '심각') c.b++; else if (x.등급 === '주의') c.w++; }); return c; }
+  function countChips(c){ return (c.b ? '<span class="chip dn">심각 ' + c.b + '</span>' : '') + (c.w ? '<span class="chip warn">주의 ' + c.w + '</span>' : '') + (!c.b && !c.w ? '<span class="chip up">이상 없음</span>' : ''); }
+  function renderActions(d){
+    var a = d.챙길것 && !d.챙길것.error ? d.챙길것 : null;
+    var al = d.경보 && !d.경보.error ? d.경보 : null;
+    var alErr = d.경보 && d.경보.error, aErr = d.챙길것 && d.챙길것.error;
+    if (!a && !al && !alErr && !aErr) return '';
+    var red = function(x){ return x.심각도 === '🔴'; };
+    var bad = (a ? a.개수.심각 : 0) + (al ? (al.경보 || []).filter(red).length : 0);
+    var warn = (a ? a.개수.주의 : 0) + (al ? (al.경보 || []).filter(function(x){ return !red(x); }).length : 0);
+    var h = '<div class="acts"><div class="acts-head"><b>오늘 챙길 것</b>' +
+      (bad ? '<span class="chip dn">심각 ' + bad + '</span>' : '') + (warn ? '<span class="chip warn">주의 ' + warn + '</span>' : '') + (!bad && !warn ? '<span class="chip up">이상 없음</span>' : '') +
+      '<span class="sub">매장 · 광고별로 무엇이 얼마나 부족한지 — 숫자와 문장 모두 자동 계산</span></div>';
+    if (!a) { // 팀별 자료가 없으면 전사 점검만
+      if (alErr) h += '<h4>전사 점검</h4>' + errBox(d.경보);
+      else if (al) h += '<h4>전사 점검<span>9개 항목 자동 점검</span></h4>' + renderAlerts(al);
+      return h + (aErr ? errBox(d.챙길것) : '') + '</div>';
+    }
+    var off = a.오프라인, ad = a.광고, dg = a.진단, rt = a.실시간, pr = a.프로모션;
+    var hOn = '', hAd = '', hOff = '', lOn = [], lAd = [], lOff = [];
+
+    // 온라인 — 프로모션(진행 중 · 곧 시작 · 막 끝남 · 미등록) + 어제 매출 진단
+    if (pr && !pr.ok) hOn += '<h4>프로모션</h4>' + errBox(pr);
+    else if (pr) {
+      var STATE = { 진행: '진행 중', 예정: '곧 시작', 종료: '막 끝남', 없음: '마지막 프로모션' };
+      lOn = lOn.concat(pr.data.경고 || []);
+      hOn += '<h4>프로모션<span>프로모션 전 · 전년 대비, 힘이 빠지는지, 끝난 뒤 반동</span></h4>' + (pr.data.경고 && pr.data.경고.length ? actRows(pr.data.경고, '채널', '글') : '') +
+        pr.data.프로모션.map(function(p){
+          lOn = lOn.concat(p.항목);
+          return '<p class="act-sum act-promo"><span class="chip ' + (p.상태 === '진행' ? 'up' : 'na') + '">' + esc(STATE[p.상태] || p.상태) + '</span> <b>' + esc(p.이름) + '</b>' + (p.유형 ? ' (' + esc(p.유형) + ')' : '') + ' · ' + esc(p.머리) +
+            (p.요약 ? '<br>' + esc(p.요약) : '') + '</p>' + (p.항목.length ? actRows(p.항목, '채널', '글') : '');
+        }).join('');
+    }
+    if (dg && !dg.ok) hOn += '<h4>어제 매출 진단</h4>' + errBox(dg);
+    else if (dg) { lOn = lOn.concat(dg.data.항목); hOn += '<h4>어제 매출 진단<span>매출이 빠진 날, 광고 유입 부족인지 전환 · 객단가 · 반품인지 가른다</span></h4>' + actRows(dg.data.항목, '채널', '글'); }
+
+    // 광고 — 매체별 전달 대비 + 실시간(오늘 지금까지)
+    if (ad && !ad.ok) hAd += '<h4>전달 대비</h4>' + errBox(ad);
+    else if (ad) {
+      var x = ad.data; lAd = lAd.concat(x.매체);
+      hAd += '<h4>전달 대비<span>이번 달 vs 전달 같은 기간(' + esc(x.기간) + ')</span></h4>' +
+        '<p class="act-sum">' + (x.풀이 ? '<b>' + esc(x.풀이) + '</b><br>' : '') + esc(x.합계) + (x.주석 ? '<br><span class="warn-t">※ ' + esc(x.주석) + '</span>' : '') + '</p>' + actRows(x.매체, '매체', '평가');
+    }
+    if (rt && !rt.ok) hAd += '<h4>실시간</h4>' + errBox(rt);
+    else if (rt) {
+      lAd = lAd.concat(rt.data.항목);
+      hAd += '<h4>실시간<span>' + esc(rt.data.합계) + '</span></h4>' +
+        (rt.data.항목.length ? actRows(rt.data.항목, '매체', '글') : '<ul class="alerts ok"><li>' + gChip('양호') + '<span>지금 걸리는 것이 없습니다 — 수집 · 잔액 · 집행 모두 정상</span></li></ul>');
+    }
+
+    // 오프라인 — 매장별
+    if (off && !off.ok) hOff += '<h4>매장별</h4>' + errBox(off);
+    else if (off) {
+      var o = off.data; lOff = o.매장;
+      hOff += '<h4>매장별<span>좌수는 전달 같은 기간(' + esc(o.전달기간) + ') 대비 · 매출은 월 목표 페이스(월 경과 ' + o.월경과율 + '% · 남은 ' + o.남은일 + '일)</span></h4><div class="act-grid">' +
+        o.매장.map(function(s){
+          // 심각 · 주의 매장은 항목을 다 펼치고, 양호 매장은 한 줄 요약 + 참고할 점만(묶음이 길어지지 않게)
+          var open = s.등급 === '심각' || s.등급 === '주의';
+          var list = open ? s.항목 : s.항목.filter(function(i){ return i.등급 === '참고' && i.짧게; }); // 한 줄 요약과 겹치지 않게 — 꼭 볼 점(쏠림 등)만
+          // 글이 구분 이름으로 시작하면(좌수 128좌…) 왼쪽 이름표와 겹치므로 한 번만 보인다
+          var body = function(i){ var t = String(i.글); return t.indexOf(i.구분 + ' ') === 0 ? t.slice(i.구분.length + 1) : t; };
+          return '<div class="act-card"><div class="act-top">' + gChip(s.등급) + '<b>' + esc(s.매장) + '</b><span class="dir">' + esc(s.지시) + '</span></div>' +
+            (open ? '' : '<p class="act-one">' + esc(s.한줄 || '') + '</p>') +
+            (list.length ? '<ul class="act-items">' + list.map(function(i){ return '<li class="' + (i.등급 === '심각' ? 'bad' : i.등급 === '주의' ? 'warn' : '') + '"><i>' + esc(i.구분) + '</i>' + esc(body(i)) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+        }).join('') + '</div>';
+    }
+
+    // 팀별 심각 → 전사 점검에도. 같은 매체가 실시간 · 전달 대비 양쪽에서 심각이면(META · META 요기보) 실시간 쪽 한 번만
+    var crit = [];
+    lOff.forEach(function(st){ if (st.등급 === '심각') crit.push({ tab: 'off', 이름: '오프라인 · ' + st.매장, 글: st.지시 }); });
+    lOn.forEach(function(i){ if (i.등급 === '심각') crit.push({ tab: 'on', 이름: '온라인 · ' + i.채널, 글: i.글 }); });
+    var adNames = [];
+    (rt && rt.ok ? rt.data.항목 : []).concat(ad && ad.ok ? ad.data.매체 : []).forEach(function(i){
+      if (i.등급 !== '심각') return;
+      var nm = String(i.매체);
+      if (adNames.some(function(y){ return nm.indexOf(y) === 0 || y.indexOf(nm) === 0; })) return;
+      adNames.push(nm); crit.push({ tab: 'ad', 이름: '광고 · ' + nm, 글: i.글 || i.평가 });
+    });
+
+    // 전사 점검 — 탭과 상관없이 늘 보인다. 순서: 전사 심각 → 팀별 심각 → 전사 주의
+    var liAl = function(e){ var r = red(e); return '<li class="' + (r ? 'bad' : '') + '"><span class="chip ' + (r ? 'dn' : 'warn') + '">' + (r ? '심각' : '주의') + '</span><span class="area">' + esc(e.분야) + '</span><span>' + esc(e.내용) + '</span></li>'; };
+    var liCrit = function(c){ return '<li class="bad go" data-goto="' + c.tab + '" title="눌러서 ' + TAB_NAME[c.tab] + ' 탭 보기"><span class="chip dn">심각</span><span class="area">' + esc(c.이름) + '</span><span>' + esc(c.글) + '</span></li>'; };
+    var alList = al ? (al.경보 || []) : [];
+    var rows = alList.filter(red).map(liAl).concat(crit.map(liCrit)).concat(alList.filter(function(e){ return !red(e); }).map(liAl));
+    if (alErr || al || crit.length) {
+      h += '<h4>전사 점검<span>' + (al || alErr ? '9개 항목 자동 점검 + ' : '') + '팀별 심각' + (crit.length ? ' ' + crit.length + '건' : ' 없음') + '</span></h4>' + (alErr ? errBox(d.경보) : '') +
+        (rows.length ? '<ul class="alerts">' + rows.join('') + '</ul>' : al ? renderAlerts(al) : '');
+    }
+
+    var tabs = [['off', hOff, lOff], ['on', hOn, lOn], ['ad', hAd, lAd]];
+    if (!TAB_NAME[actTab]) actTab = 'off';
+    h += '<div class="act-tabs" role="tablist">' + tabs.map(function(t){
+      var on = t[0] === actTab;
+      return '<button type="button" role="tab" aria-selected="' + on + '" data-acttab="' + t[0] + '"' + (on ? ' class="on"' : '') + '>' + TAB_NAME[t[0]] + countChips(tabCount(t[2])) + '</button>';
+    }).join('') + '</div>';
+    h += tabs.map(function(t){
+      return '<div class="act-pane' + (t[0] === actTab ? ' on' : '') + '" data-actpane="' + t[0] + '"><p class="act-pane-t">' + TAB_NAME[t[0]] + countChips(tabCount(t[2])) + '</p>' + (t[1] || '<p class="act-sum">볼 내용이 없습니다.</p>') + '</div>';
+    }).join('');
+    return h + '</div>';
+  }
+  function bindActs(){
+    var box = document.querySelector('.acts'); if (!box) return;
+    var show = function(name){
+      actTab = name;
+      box.querySelectorAll('[data-acttab]').forEach(function(x){ var on = x.getAttribute('data-acttab') === name; x.classList.toggle('on', on); x.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      box.querySelectorAll('[data-actpane]').forEach(function(p){ p.classList.toggle('on', p.getAttribute('data-actpane') === name); });
+      postHeight(); // dash 안(iframe)이면 높이를 다시 알린다
+    };
+    box.querySelectorAll('[data-acttab]').forEach(function(btn){ btn.onclick = function(){ show(btn.getAttribute('data-acttab')); }; });
+    // 전사 점검의 팀별 심각 줄 — 누르면 그 탭으로
+    box.querySelectorAll('[data-goto]').forEach(function(li){
+      li.onclick = function(){ show(li.getAttribute('data-goto')); var t = box.querySelector('.act-tabs'); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    });
   }
   // 타일 — 하루면 "전주 동요일 대비", 기간이면 "직전 N일 대비"(한 달 통째면 "전월 대비")
   function renderTiles(t){
@@ -611,6 +781,7 @@
     onSales = d.매출 && d.매출.ok ? d.매출.data.온라인.합계 : null;
     document.getElementById('root').innerHTML = renderTop(d) + renderKpi(d.kpi) + renderJwasu(d.좌수) + renderStock(d.재고);
     bindRange(d);
+    bindActs();
     document.body.setAttribute('data-date', d.기준일); // 발송 스크립트가 기준일을 읽는 곳(위쪽 날짜 칸은 없앴다)
     document.title = '일일 모니터링 ' + d.기준일 + ' · 요기보';
   }

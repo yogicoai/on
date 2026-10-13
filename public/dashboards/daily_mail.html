@@ -11,7 +11,7 @@
     ① 온오프 매출·샐리필은 기존 메일(photo.js) 그대로.
   데이터: /api/daily-mail (lib/dailyMail.js). 주소 파라미터:
     ?date=YYYY-MM-DD  기준일(기본 어제)   ?basis=online  재고 예상판매를 온라인만으로(기본 온+오프)
-    ?fresh=1          캐시 없이 새로 계산   ?capture=1     캡처용(상단 조작줄 숨김·폭 고정)
+    ?fresh=1          캐시 없이 새로 계산   ?capture=1     캡처용(상단 조작줄 숨김·폭 고정 · 그림 높이 한도를 넘으면 전체를 줄임 — fitCapture)
   렌더가 끝나면 <body data-ready="1"> — 캡처 스크립트는 이것을 기다린다.
   메일 이미지라 라이트 테마로 고정한다(받는 쪽 다크 모드와 무관하게 같은 그림).
 -->
@@ -369,6 +369,18 @@
   }
   if (EMBED) { document.documentElement.classList.add('embed'); window.addEventListener('resize', postHeight); }
   if (qs.get('capture') === '1') document.body.classList.add('capture');
+  // 메일 그림 높이 한도 — 크롬은 세로 16,384px 를 넘는 그림을 찍으면 넘는 부분에 맨 위 내용을 다시 그린다.
+  //   발송 스크립트는 선명도 2배로 .wrap 을 통째로 찍으므로 화면 높이 8,192px 가 한계다. 2026-10-13 메일(화면 9,791px → 그림 19,582px)에서
+  //   아래 3,198px 가 맨 위 내용으로 바뀌고 재고 표 뒷부분이 잘렸다. 캡처 모드에서 한계를 넘으면 전체를 그만큼 줄여 한 장에 다 들어가게 한다
+  //   (그림이 그만큼 작게 찍히지만 메일에서는 같은 폭으로 보인다). 화면으로 볼 때는 손대지 않는다.
+  function fitCapture(){
+    if (!document.body.classList.contains('capture')) return;
+    var w = document.querySelector('.wrap'); if (!w) return;
+    w.style.zoom = '';
+    var limit = 16000 / (window.devicePixelRatio || 1), h = w.getBoundingClientRect().height, z = 1;
+    if (h > limit) { z = Math.floor((limit / h) * 0.985 * 1000) / 1000; w.style.zoom = String(z); } // 0.985 — 줄이면 줄바꿈이 조금 달라질 수 있어 여유를 둔다
+    document.body.setAttribute('data-zoom', String(z)); // 얼마나 줄였는지(1 = 그대로) — 확인용
+  }
 
   // ── 포맷 ──
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1111,7 +1123,7 @@
         document.body.setAttribute('data-error', '1');
       })
       .then(function(){ root.classList.remove('is-loading'); return document.fonts && document.fonts.ready; })
-      .then(function(){ document.body.setAttribute('data-ready', '1'); postHeight(); setTimeout(postHeight, 300); });
+      .then(function(){ fitCapture(); document.body.setAttribute('data-ready', '1'); postHeight(); setTimeout(postHeight, 300); });
   }
 
   // 조작줄 — 주소를 바꿔 다시 불러온다(새로 고침해도 같은 화면)

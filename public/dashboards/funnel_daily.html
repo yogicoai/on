@@ -556,6 +556,7 @@ function shiftRange(dir){
 function renderAll(){
   document.getElementById('fresh').innerHTML='데이터 기준일 — 자사몰(이프두): <b>'+lastDate('mall').replace(/-/g,'.')+'</b> · 스마트스토어: <b>'+lastDate('ss').replace(/-/g,'.')+'</b>'+(ch==='ss'?' <span class="chip warn">파일 4일 지연</span>':'');
   renderPace(); setRange('mtd'); renderBasis(); // 처음 열 때·채널 바꿀 때 기본 기간 = 이번 달(1일 ~ 최신일)
+  if(baseDate) setBaseDate(baseDate); // 부모가 기준일을 골라 뒀으면 그 날짜까지(1일 ~ 기준일)
 }
 document.querySelectorAll('.seg [role="tab"]').forEach(function(b){
   b.onclick=function(){ document.querySelectorAll('.seg [role="tab"]').forEach(function(x){x.setAttribute('aria-selected','false');});
@@ -566,6 +567,26 @@ document.getElementById('d1').onchange=function(){document.querySelectorAll('.pr
 document.getElementById('d2').onchange=function(){document.querySelectorAll('.preset').forEach(function(b){b.setAttribute('aria-pressed','false');});renderMain();};
 document.getElementById('nav-prev').onclick=function(){ shiftRange(-1); };
 document.getElementById('nav-next').onclick=function(){ shiftRange(1); };
+// ── 부모(일일 매출 대시보드)의 [기준일] 따라가기 — 위에서 기준일을 바꿔도 이 화면이 그대로라는 의견(2026-10-12)
+//   보고 있던 기간의 "끝날"을 기준일로 옮긴다: 하루를 보고 있었으면 기준일 하루, 이번 달 누적(1일 시작)이면 그 달 1일 ~ 기준일,
+//   그 밖에는 같은 폭으로 끝날만 맞춘다. 데이터 범위를 벗어나면 가장 가까운 날짜로. ‹ › · 프리셋은 그대로 따로 쓸 수 있다.
+var baseDate=null;
+function setBaseDate(date){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')) return;
+  baseDate=date;
+  if(!rows(ch).length) return; // 데이터를 받기 전 — 받은 뒤 renderAll 이 맞춘다
+  var d1=document.getElementById('d1'), d2=document.getElementById('d2'), lo=firstDate(ch), hi=lastDate(ch);
+  var b=date>hi?hi:(date<lo?lo:date), a0=d1.value, b0=d2.value, a;
+  if(a0&&a0===b0) a=b;
+  else if(!a0||!b0||a0===b0.slice(0,8)+'01') a=b.slice(0,8)+'01';
+  else { var len=Math.round((new Date(b0+'T00:00:00Z')-new Date(a0+'T00:00:00Z'))/86400000)+1; a=shiftISO(b,-(len-1)); }
+  if(a<lo) a=lo;
+  d1.value=a; d2.value=b;
+  var p=(a===b&&b===hi)?'last':(b===hi&&a===hi.slice(0,8)+'01')?'mtd':'';
+  document.querySelectorAll('.preset').forEach(function(x){x.setAttribute('aria-pressed', x.dataset.p===p?'true':'false');});
+  renderMain();
+}
+window.addEventListener('message', function(ev){ var m=ev.data; if(ev.source===window.parent && m && m.type==='funnel:setDate') setBaseDate(m.date); });
 // ── 데이터 로드 — 값은 하드코딩하지 않고 서버(/api/funnel/data)에서 받는다.
 //   방문시작·주문완료·순매출·스토어 유입/매출은 시스템이 매일 자동 갱신하고,
 //   상품조회·장바구니조회·주문서작성은 MD가 올린 값(퍼널 입력)이 합쳐져서 온다.
@@ -580,6 +601,7 @@ function showLoadError(msg){
     MALL=j.mall||[]; SS=j.ss||[]; CFG=j.cfg||CFG; buildNetmap();
     if(!MALL.length){ showLoadError('퍼널 데이터가 아직 없습니다. 이 화면 위 [📊 퍼널 입력]에서 엑셀을 올려주세요.'); return; }
     renderAll();
+    try { if (window.parent !== window) window.parent.postMessage({ type: 'funnel:ready' }, '*'); } catch (e) {} // 부모가 이미 기준일을 바꿔 뒀으면 다시 알려 준다
   }).catch(function(e){ showLoadError(e.message+' — 잠시 후 새로고침하시거나 온라인팀에 알려주세요.'); });
 })();
 

@@ -3586,9 +3586,17 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 
 <script>
+// 위쪽 [기준일]을 바꾸면 일일 퍼널 점검(iframe)과 AI 분석 화면도 그 날짜로 맞춘다.
+//   두 화면은 날짜 칸이 따로 있어 기준일을 바꿔도 그대로였다("바꿔도 아래 데이터가 안 바뀐다" — 직원 의견 2026-10-12). 다른 탭은 renderAll 이 다시 그린다.
+var baseDateTouched = false;
+function pushBaseDate() {
+  try { var f = document.getElementById('funnelFrame'); if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'funnel:setDate', date: currentDate }, location.origin); } catch (e) {}
+  try { if (window.AiCards && window.AiCards.setDate) window.AiCards.setDate(currentDate); } catch (e) {}
+}
 // 퍼널 iframe 높이 동기화 — 고정 높이로 두면 여백이나 이중 스크롤이 생긴다
 window.addEventListener('message', function (ev) {
   var d = ev.data;
+  if (d && d.type === 'funnel:ready') { if (baseDateTouched) pushBaseDate(); return; } // 퍼널이 늦게 떴으면 고른 기준일을 다시 알린다
   if (!d || d.type !== 'funnel:height' || !(d.height > 0)) return;
   var f = document.getElementById('funnelFrame');
   if (f) f.style.height = Math.min(Math.max(d.height + 24, 600), 20000) + 'px';
@@ -4207,7 +4215,7 @@ function init() {
   // Populate date selector with all dates that have data, latest first
   refreshDateSelector();
   const sel = document.getElementById('selDate');
-  sel.addEventListener('change', e => { if(!e.target.value) return; currentDate = e.target.value; yoyCustomRange = null; const yp = document.getElementById('yoyPreset'); if (yp) yp.value = 'mtd'; renderAll(); });
+  sel.addEventListener('change', e => { if(!e.target.value) return; currentDate = e.target.value; yoyCustomRange = null; const yp = document.getElementById('yoyPreset'); if (yp) yp.value = 'mtd'; renderAll(); baseDateTouched = true; pushBaseDate(); });
   document.getElementById('selChannel').addEventListener('change', e => { currentChannel = e.target.value; renderAll(); });
 
   // YoY/MoM range controls (t2 tab)
@@ -10564,5 +10572,5 @@ function openInputModal(kind){
 }
 loadInputModals().catch(function(){});
 </script>
-<script src="/ai-cards.js?v=20261012b"></script>
+<script src="/ai-cards.js?v=20261012c"></script>
 </body></html>

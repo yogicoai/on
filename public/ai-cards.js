@@ -556,7 +556,21 @@
     try { if (location.hash === '#ai') history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
   });
 
-  window.AiCards = { open: open };
+  // 대시보드 위쪽 [기준일]이 바뀌면 — 보고 있던 기간의 끝날을 그 날짜로(퍼널 점검과 같은 규칙: 하루면 그날 하루, 1일 시작이면 그 달 1일 ~ 기준일, 그 밖엔 같은 폭)
+  function setDate(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '') || S.busy) return;
+    var y = yday(), b = date > y ? y : date, a;
+    if (!S.start || !S.end || S.start === S.end) a = b;
+    else if (S.start === S.end.slice(0, 8) + '01') a = b.slice(0, 8) + '01';
+    else a = shift(b, -(spanDays() - 1));
+    if (a === S.start && b === S.end) return;
+    S.start = a; S.end = b; S.open = {}; S.view = {};
+    var p = document.getElementById('t12');
+    if (p && p.classList.contains('active')) load(); // 지금 보고 있으면 바로 다시 불러온다
+    else { S.seq++; S.data = null; S.loading = false; } // 닫혀 있으면 다음에 열 때 불러온다
+  }
+
+  window.AiCards = { open: open, setDate: setDate };
   window.openAiCards = open;
   // /api/report#ai 로 들어오면 바로 이 화면 — 같은 페이지에서 주소의 #ai 만 바뀌어도(새로 읽지 않음) 연다
   if (location.hash === '#ai') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open); else open(); }

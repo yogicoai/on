@@ -38,7 +38,6 @@ const smartstoreIngest = require('./lib/smartstoreIngest');
 const smartstoreAnalysis = require('./lib/smartstoreAnalysis');
 const otherChannels = require('./lib/otherChannels');
 const dailySync = require('./lib/dailySync');
-const mallPromos = require('./lib/mallPromotions');
 const cafe24Products = require('./lib/cafe24Products');
 const products = require('./lib/products');
 const promoPerformance = require('./lib/promoPerformance');
@@ -567,13 +566,9 @@ async function handle(req, res) {
     try { return sendJson(res, 200, { ok: true, items: await promoPeriods.listPromos() }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
-  if (u.pathname === '/api/promo-periods/set' && req.method === 'POST') {
-    try { const b = await readBody(req); return sendJson(res, 200, { ok: true, saved: await promoPeriods.setPromo(b.month, b.name, b.start, b.end) }); }
-    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
-  }
-  if (u.pathname === '/api/promo-periods/delete' && req.method === 'POST') {
-    try { const b = await readBody(req); await promoPeriods.deletePromo(b.month); return sendJson(res, 200, { ok: true }); }
-    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  // 직접 입력 · 삭제는 폐지(2026-10-15) — 목록은 MD 프로모션 정의(promo_defs)의 전사 프로모션에서 만든다(lib/promoPeriods)
+  if ((u.pathname === '/api/promo-periods/set' || u.pathname === '/api/promo-periods/delete') && req.method === 'POST') {
+    return sendJson(res, 410, { ok: false, error: promoPeriods.RETIRED });
   }
 
   // ── 몰별 프로모션 (몰·상품·할인율) — 전사 promo_periods 대체 ──
@@ -627,17 +622,11 @@ async function handle(req, res) {
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
 
-  if (u.pathname === '/api/promotions/list') {
-    try { return sendJson(res, 200, { ok: true, items: await mallPromos.listPromotions(u.searchParams.get('mall') || '') }); }
-    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
-  }
-  if (u.pathname === '/api/promotions/set' && req.method === 'POST') {
-    try { const b = await readBody(req); return sendJson(res, 200, { ok: true, saved: await mallPromos.setPromotion(b) }); }
-    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
-  }
-  if (u.pathname === '/api/promotions/delete' && req.method === 'POST') {
-    try { const b = await readBody(req); await mallPromos.deletePromotion(b.id); return sendJson(res, 200, { ok: true }); }
-    catch (e) { return sendJson(res, 400, { ok: false, error: String(e.message) }); }
+  // 몰별 프로모션 설정(mall_promotions) 편집 — 폐지(2026-10-15). 옛 설정은 백업(promo_backup_20261015) 후 지웠고,
+  //   온라인 프로모션은 MD 프로모션 정의(promo_defs, [📣 프로모션 등록])를 기준으로 한다.
+  const PROMO_RETIRED = '몰별 프로모션 설정은 폐지됐습니다 — 프로모션은 [📣 프로모션 등록](MD 엑셀)으로 올려 주세요.';
+  if (u.pathname === '/api/promotions/list' || ((u.pathname === '/api/promotions/set' || u.pathname === '/api/promotions/delete') && req.method === 'POST')) {
+    return sendJson(res, 410, { ok: false, error: PROMO_RETIRED });
   }
   // ── 일일 모니터링 메일 페이지 ─────────────────────────────────────────────
   //   dashboards/daily_mail.html 이 부른다. 기본 = 어제. 어제일 때만 맨 위 경보("오늘 챙길 것")를 붙인다(경보 스캔은 어제 기준).
@@ -769,11 +758,9 @@ async function handle(req, res) {
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   // 자사몰: 프로모션별 쿠폰기준 성과 — start/end 주면 '프로모션 기간 ∩ 분석구간'으로 집계
-  if (u.pathname === '/api/promotions/coupon-performance') {
-    const start = u.searchParams.get('start') || '';
-    const end = u.searchParams.get('end') || '';
-    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.forMallCoupons(u.searchParams.get('mall') || '', start, end)) }); }
-    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
+  //   폐지(2026-10-15) — 쿠폰 연결은 옛 몰별 프로모션 설정에만 있었다. 판매분석 ④ 프로모션 화면은 /api/promo-defs/perf(대상상품 매칭)를 쓴다
+  if (u.pathname === '/api/promotions/coupon-performance' || u.pathname === '/api/promotions/coupon-perf-one') {
+    return sendJson(res, 410, { ok: false, error: '쿠폰 연결 기준 프로모션 성과는 폐지됐습니다 — 화면을 새로고침하세요(프로모션 성과는 대상상품 기준으로 봅니다).' });
   }
   // 주문(embed=coupons)에서 쿠폰명을 직접 적재 — 삭제 쿠폰까지 그 기간 사용분 전부 캡처('만료 쿠폰 포함 갱신')
   if (u.pathname === '/api/cafe24/sync-coupons-from-orders') {
@@ -799,13 +786,6 @@ async function handle(req, res) {
     const end = u.searchParams.get('end') || '';
     if (!no) return sendJson(res, 400, { ok: false, error: '쿠폰번호(no) 필요' });
     try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.syncCouponByNo(no, name, start, end)) }); }
-    catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
-  }
-  // 단일 프로모션 전체기간(또는 지정구간) 쿠폰성과 — '프로모션 기간 매출 확인' 버튼
-  if (u.pathname === '/api/promotions/coupon-perf-one') {
-    const id = u.searchParams.get('id') || '';
-    if (!id) return sendJson(res, 400, { ok: false, error: 'id 필요' });
-    try { return sendJson(res, 200, { ok: true, ...(await cafe24Coupons.couponPerfForPromo(id, u.searchParams.get('start') || '', u.searchParams.get('end') || '')) }); }
     catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }
   }
   // 단일 쿠폰 — 사용 주문의 상품 순위 + 전체기간 매출 대비 비중 (쿠폰 행 클릭 팝업)

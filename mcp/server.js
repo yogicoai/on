@@ -17,12 +17,10 @@ const { parsePeriod } = require('../lib/period'); // 기간 자연어 파서("�
 const productAnalysis = require('../lib/productAnalysis');
 const smartstoreAnalysis = require('../lib/smartstoreAnalysis');
 const promoPerformance = require('../lib/promoPerformance');
-const cafe24Coupons = require('../lib/cafe24Coupons');
 const bizadvisor = require('../lib/bizadvisor');
 const otherChannels = require('../lib/otherChannels');
 const compare = require('../lib/compare');
 const target = require('../lib/target');
-const mallPromos = require('../lib/mallPromotions');
 const productPrices = require('../lib/productPrices');
 const forecast = require('../lib/forecast');
 const adEfficiency = require('../lib/adEfficiency'); // 광고효율 (adboard, 별도 클러스터 MONGODB_URI)
@@ -149,7 +147,7 @@ function build() {
   // ── 통합: 자사몰 쿠폰·혜택 (성과/사용현황/진행중 할인) ──
   server.registerTool('cafe24_coupons', {
     title: '자사몰 쿠폰·혜택 — 성과/사용현황/진행중 할인 [확정집계]',
-    description: 'mode 선택: performance=프로모션 연결 쿠폰별 성과(매출·주문·실효할인율) / usage=기간 실사용 쿠폰별 집계(+coupon 지정 시 그 쿠폰 구매 주문 리스트) / benefits=현재 진행중 혜택·할인 설정 목록. ' +
+    description: 'mode 선택: performance=(폐지 — 프로모션 성과는 promotion_performance 도구) / usage=기간 실사용 쿠폰별 집계(+coupon 지정 시 그 쿠폰 구매 주문 리스트) / benefits=현재 진행중 혜택·할인 설정 목록. ' +
       '"쿠폰 성과", "어떤 쿠폰 얼마나 쓰였어", "○○쿠폰으로 산 주문", "지금 무슨 할인 걸려있어" 질문에 사용.',
     inputSchema: {
       mode: z.enum(['performance', 'usage', 'benefits']).describe('performance=연결쿠폰 성과 / usage=실사용 집계 / benefits=진행중 혜택'),
@@ -171,12 +169,9 @@ function build() {
       return { 기준일: today, 전체: rows.length, 진행중: rows.filter((r) => r.진행중).length, 목록: rows.sort((a, b) => (b.진행중 - a.진행중)) };
     }
     if (mode === 'usage') return couponUsage.usage(start, end, { coupon });
-    // performance
-    const promos = await mallPromos.listPromotions('자사몰');
-    const names = [];
-    for (const p of (promos || [])) { if (p.end < start || p.start > end) continue; for (const c of (p.coupons || [])) if (c.coupon_name) names.push(c.coupon_name); }
-    if (!names.length) return { start, end, byCoupon: [], note: '이 기간 연결 쿠폰 없음' };
-    return cafe24Coupons.couponPerfFor([...new Set(names)], start, end);
+    // performance — 프로모션 ↔ 쿠폰 연결은 옛 몰별 프로모션 설정(mall_promotions)에만 있었고 2026-10-15 정리했다.
+    //   자사몰은 2026-07부터 즉시할인이라 연결 쿠폰 기준 성과가 없다. 실사용 쿠폰은 usage 모드, 프로모션 성과는 promotion_performance 도구.
+    return { start, end, byCoupon: [], note: '프로모션 연결 쿠폰 정보가 없습니다(2026-10-15 옛 몰별 프로모션 설정 정리). 기간에 실제 쓰인 쿠폰은 mode=usage, 프로모션 성과는 promotion_performance 도구(MD 등록 정의 · 대상상품 기준)로 조회하세요.' };
   }));
 
   // ── 통합: 자사몰 고객/혜택군 분석 (회원vs비회원 / 상품태그 / 적립금·쿠폰 사용) ──

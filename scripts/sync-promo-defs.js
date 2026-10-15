@@ -15,11 +15,11 @@ const path = require('path');
 const store = require('../lib/store');
 const { ingest } = require('../lib/promoIngest');
 
-const DEFAULT_SRC = path.join('C:', 'Users', 'Yogibo Design', 'Desktop', 'onlineData',
-  '전사프로모션별 성과 취합_MCP 저장용_260917', 'mcp_promotions.json');
-
+// 기본 경로는 없앴다(2026-10-15). 예전 기본값(…_MCP 저장용_260917)으로 그냥 돌리면 10/15에 새로 넣은 온라인 행이 9월 자료로 되돌아간다.
+//   또 이 스크립트는 전 몰 전량 교체라, 10/15 결정("온라인만 교체, 오프라인은 그대로")과 달리 오프라인 행까지 바꾼다 — 파일을 꼭 확인하고 돌린다.
 (async () => {
-  const src = process.argv[2] || DEFAULT_SRC;
+  const src = process.argv[2];
+  if (!src) { console.error('사용법: node scripts/sync-promo-defs.js <mcp_promotions.json 경로>\n   ⚠️ 전 몰(자사몰 · 스마트스토어 · 오프라인) 전량 교체입니다. 직전 상태는 promo_defs_backup 에 남습니다.'); process.exit(1); }
   let data;
   try { data = JSON.parse(fs.readFileSync(src, 'utf8')); }
   catch (e) { console.error('❌ 소스 읽기 실패:', e.message, '\n   경로:', src); process.exit(1); }

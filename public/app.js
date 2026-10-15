@@ -503,7 +503,7 @@ async function applyCurrentMonthPromo() {
     let promo = items.find((r) => r.month === ym)
       || items.find((r) => r.start <= today && r.end >= today)
       || items.filter((r) => r.start <= today).sort((a, b) => (a.start < b.start ? 1 : -1))[0];
-    if (!promo) { setStatus(`${ym} 등록된 전사 프로모션이 없습니다 — 설정에서 먼저 등록하세요`, 'err'); return; }
+    if (!promo) { setStatus(`${ym} 등록된 전사 프로모션이 없습니다 — [📣 프로모션 등록]에서 MD 자료를 올려 주세요`, 'err'); return; }
     el('start').value = promo.start; el('end').value = promo.end;
     applyRangeToActiveView(promo.start, promo.end);
     setStatus(`프로모션 기간: ${promo.name} (${promo.start} ~ ${promo.end})`, 'ok');
@@ -572,13 +572,15 @@ el('refreshWeek').addEventListener('click', async () => {
 function monthStart() { const t = new Date(); return ymd(new Date(t.getFullYear(), t.getMonth(), 1)); }
 const enc = encodeURIComponent;
 
-// ── ④ 프로모션 구매고객 (상품태그 / 쿠폰 토글) ──
+// ── ③ 프로모션 매출 — MD 등록 프로모션(promo_defs)별 대상상품 매출 ──
+//   2026-10-15: 옛 "연결 쿠폰 실사용" 기준(몰별 프로모션 설정 · 쿠폰 연결)을 정리하고 MD 등록 정의를 기준으로 바꿨다.
+//   자사몰은 2026-07부터 즉시할인이라 쿠폰으로는 잡히지 않는다 — 대상상품이 그 기간에 팔린 금액으로 본다(/api/promo-defs/perf, MCP promotion_performance 와 같은 계산).
 let buyersInit = false;
 function initBuyers() {
   if (buyersInit) return; buyersInit = true;
   el('tab-buyers').innerHTML = `
     <div class="card" style="margin-bottom:14px"><div class="muted" style="font-size:12px">
-      <b id="bRangeLbl"></b> <b>선택 구간</b> 기준 · 그 기간에 진행된 <b>프로모션(이벤트)</b>별 매출 분석 (자사몰 = 연결 쿠폰 실사용) · 매출/주문은 <b>이벤트 기간 ∩ 선택 구간</b>으로 집계 · 각 이벤트의 <b>프로모션 기간 매출 확인</b>으로 전체기간도 확인 · 상품태그별은 ④ 탭
+      <b id="bRangeLbl"></b> <b>선택 구간</b> 기준 · 그 기간에 진행된 <b>프로모션(MD 등록 · 📣 프로모션 등록)</b>별 <b>대상상품 매출</b>(자사몰 · 이카운트 원장) · 매출/주문은 <b>프로모션 기간 ∩ 선택 구간</b>으로 집계 · 전년 · 직전 비교는 하루 평균 기준
     </div></div>
     <div id="bResult"></div>`;
 }
@@ -588,45 +590,37 @@ async function loadBuyers() {
   if (el('bRangeLbl')) el('bRangeLbl').textContent = `${s} ~ ${e}`;
   el('bResult').innerHTML = '<div class="empty">불러오는 중…</div>';
   try {
-    const j = await (await fetch(`/api/promotions/coupon-performance?mall=${enc('자사몰')}&start=${enc(s)}&end=${enc(e)}`)).json();
+    const j = await (await fetch(`/api/promo-defs/perf?mall=${enc('자사몰')}&start=${enc(s)}&end=${enc(e)}`)).json();
     if (!j.ok) throw new Error(j.error);
-    renderBuyersEvents(j.promotions || [], s, e); // 백엔드가 선택구간과 겹치는 이벤트만 반환
+    renderBuyersEvents(j.promotions || [], s, e, j); // 백엔드가 선택구간과 겹치는 프로모션만 반환
   } catch (err) { el('bResult').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
-function renderBuyersEvents(events, s, e) {
+function renderBuyersEvents(events, s, e, j) {
   const box = el('bResult');
-  if (!events.length) { box.innerHTML = `<div class="empty">${s} ~ ${e} 구간에 진행된 프로모션(이벤트)이 없습니다 — 프로모션 달력/채널 관리에서 등록하세요</div>`; return; }
-  const tot = events.reduce((a, p) => { if (p.hasCoupons) { a.orders += p.totals.orders; a.members += p.totals.members; a.revenue += p.totals.revenue; a.disc += p.totals.couponDiscount; a.withCp += 1; } return a; }, { orders: 0, members: 0, revenue: 0, disc: 0, withCp: 0 });
+  if (!events.length) { box.innerHTML = `<div class="empty">${s} ~ ${e} 구간에 등록된 프로모션이 없습니다 — [📣 프로모션 등록]에서 MD 자료를 올리면 여기에 나옵니다</div>`; return; }
+  const tot = events.reduce((a, p) => { a.sales += p.sales || 0; a.orders += p.orders || 0; a.qty += p.qty || 0; return a; }, { sales: 0, orders: 0, qty: 0 });
+  const pct = (v) => (v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : '') + (+v).toFixed(1) + '%');
+  const cmpLine = (c) => {
+    const parts = [];
+    if (c && c.직전기간 && c.직전기간.리프트_pct != null) parts.push(`직전 같은 기간 대비 <b>${pct(c.직전기간.리프트_pct)}</b>${c.직전기간.주의 ? ' <span class="muted">(직전 기간에 다른 프로모션이 섞여 참고만)</span>' : ''}`);
+    if (c && c.전년동기 && c.전년동기.증감_pct != null) parts.push(`전년 같은 기간 대비 <b>${pct(c.전년동기.증감_pct)}</b>`);
+    return parts.length ? `<div class="muted" style="font-size:12px;margin-top:4px">${parts.join(' · ')} <span class="muted">(하루 평균)</span></div>` : '';
+  };
+  const overlap = j && j.합계주의;
   box.innerHTML = `
     <section class="kpis" style="padding:0 0 14px">
-      ${kpiCard('진행 이벤트', num(events.length) + '개', `쿠폰 연결 ${num(tot.withCp)}개 · ${s}~${e}`, 'accent')}
-      ${kpiCard('프로모션 성과(쿠폰 매출)', won(tot.revenue), `${num(tot.orders)}주문 · 선택 구간 기준`, 'green')}
-      ${kpiCard('쿠폰할인 합', won(tot.disc), `객단가 ${won(tot.orders ? Math.round(tot.revenue / tot.orders) : 0)}`, 'pink')}
+      ${kpiCard('진행 프로모션', num(events.length) + '개', `자사몰 · ${s}~${e}`, 'accent')}
+      ${kpiCard('대상상품 매출 합', won(tot.sales), overlap ? '기간이 겹치는 프로모션은 중복 포함' : `${num(tot.orders)}주문 · 선택 구간 기준`, 'green')}
+      ${kpiCard('주문 합', num(tot.orders) + '건', `수량 ${num(tot.qty)}개`, 'pink')}
     </section>
+    ${overlap ? `<div class="muted" style="font-size:12px;margin:-6px 0 8px">⚠️ ${ae(overlap)}</div>` : ''}
     ${events.map((p) => `
-      <div class="card" style="margin-top:12px"><h3>${ae(p.name)} <span class="hint">${p.start} ~ ${p.end} · 연결 쿠폰 ${num((p.coupons || []).length)}개</span>
-        <button class="btn cal mini" data-perfid="${p.id}" type="button" style="margin-left:auto">프로모션 기간 매출 확인 ▸</button></h3>
-        ${p.hasCoupons ? `
-          <div class="muted" style="font-size:11px;margin-bottom:5px">분석 구간 <b>${p.periodStart} ~ ${p.periodEnd}</b> 기준 (이벤트 기간 ∩ 선택 구간)</div>
-          <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(p.totals.orders)}</b>주문 · <b>${num(p.totals.members)}</b>명 · 매출 <b>${won(p.totals.revenue)}</b> · 쿠폰할인 ${won(p.totals.couponDiscount)}</div>
-          ${(p.byCoupon || []).length ? couponPerfTable(p.byCoupon, p.periodStart, p.periodEnd) : '<div class="muted" style="font-size:12px">선택 구간에 연결 쿠폰 사용 없음 — “프로모션 기간 매출 확인”으로 전체기간을 보세요</div>'}
-        ` : '<div class="muted" style="font-size:13px">연결된 쿠폰이 없습니다 — <b>채널 관리 → 프로모션 편집 → “이 기간 진행 쿠폰 불러오기”</b>로 쿠폰을 연결하면 매출이 집계됩니다.</div>'}
+      <div class="card" style="margin-top:12px"><h3>${ae(p.name)} <span class="hint">${p.start} ~ ${p.end}${p.유형 ? ' · ' + ae(p.유형) : ''}${p.범위 ? ' · ' + ae(p.범위) : ''}</span></h3>
+        <div class="muted" style="font-size:11px;margin-bottom:5px">분석 구간 <b>${p.periodStart} ~ ${p.periodEnd}</b> 기준 (프로모션 기간 ∩ 선택 구간)</div>
+        ${p.error ? `<div class="muted" style="font-size:13px">집계 오류: ${ae(p.error)}</div>` : `
+        <div class="insightline" style="border-left-color:var(--accent)">대상상품 매출 <b>${won(p.sales)}</b> · 주문 <b>${num(p.orders)}</b>건 · 수량 ${num(p.qty)}개</div>
+        ${cmpLine(p.비교)}`}
       </div>`).join('')}`;
-  box.querySelectorAll('[data-perfid]').forEach((b) => b.addEventListener('click', () => openPromoPerfFull(b.dataset.perfid)));
-}
-// '프로모션 기간 매출 확인' — 그 프로모션 전체기간 쿠폰 성과 (팝업)
-async function openPromoPerfFull(id) {
-  openDetailModal('프로모션 기간 매출', '<div class="empty">불러오는 중…</div>');
-  try {
-    const j = await (await fetch(`/api/promotions/coupon-perf-one?id=${enc(id)}`)).json();
-    if (!j.ok) throw new Error(j.error);
-    el('dmTitle').innerHTML = `${ae(j.name)} <span class="muted" style="font-size:13px;font-weight:500">· 프로모션 전체기간 ${j.start} ~ ${j.end}</span>`;
-    el('dmBody').innerHTML = `<div class="card">
-      <h3>전체기간 쿠폰 성과 <span class="hint">연결 쿠폰 ${num((j.coupons || []).length)}개</span></h3>
-      <div class="insightline" style="border-left-color:var(--accent)">쿠폰 사용 <b>${num(j.totals.orders)}</b>주문 · <b>${num(j.totals.members)}</b>명 · 매출 <b>${won(j.totals.revenue)}</b> · 쿠폰할인 ${won(j.totals.couponDiscount)}</div>
-      ${(j.byCoupon || []).length ? couponPerfTable(j.byCoupon, j.periodStart, j.periodEnd) : '<div class="muted">연결 쿠폰 사용 없음</div>'}
-      </div>`;
-  } catch (err) { el('dmBody').innerHTML = `<div class="empty">오류: ${err.message}</div>`; }
 }
 
 // 쿠폰 성과 테이블 — 쿠폰명(행) 클릭 시 그 쿠폰의 상품 순위·판매 비중 팝업. s,e = 그 표의 분석 구간.

@@ -279,6 +279,9 @@
   .gx-det summary{cursor:pointer; font-size:11.5px; color:var(--ink-3); list-style:none;}
   .gx-det summary::-webkit-details-marker{display:none;}
   body.capture .gx-det{display:none;} /* 메일 그림에는 접힌 표 안내를 넣지 않는다 */
+  /* 메일 그림에는 그래프를 넣지 않는다 — 화면에서만 보인다(사용자 결정 2026-10-13). 그래프까지 넣으면 그림이 높이 한도(16,384px)를 넘어
+     전체를 줄여 찍어야 해서(fitCapture), 그래프를 빼고 원래 크기에 가깝게 선명하게 찍는 쪽을 골랐다. 같은 숫자는 아래 문장에 그대로 있다 */
+  body.capture .gx-grid{display:none;}
   @media (max-width:760px){ .gx-grid,.gx-two{grid-template-columns:1fr;} .gx-bars{--nm:92px;} }
   /* 탭 — 오프라인(처음) · 온라인 · 광고. 캡처(메일)에서는 탭 줄을 숨기고 세 묶음을 다 펼친다 */
   .act-tabs{display:flex; gap:2px; margin:16px 0 0; border-bottom:1px solid #e5e8eb; overflow-x:auto;}
@@ -377,8 +380,13 @@
     if (!document.body.classList.contains('capture')) return;
     var w = document.querySelector('.wrap'); if (!w) return;
     w.style.zoom = '';
-    var limit = 16000 / (window.devicePixelRatio || 1), h = w.getBoundingClientRect().height, z = 1;
-    if (h > limit) { z = Math.floor((limit / h) * 0.985 * 1000) / 1000; w.style.zoom = String(z); } // 0.985 — 줄이면 줄바꿈이 조금 달라질 수 있어 여유를 둔다
+    var limit = 16200 / (window.devicePixelRatio || 1), z = 1; // 한도 16,384 에서 조금 여유
+    for (var i = 0; i < 5; i++) { // 줄이면 줄바꿈이 조금 달라질 수 있어, 줄인 뒤 높이를 다시 재서 넘으면 한 번 더 줄인다
+      var h = w.getBoundingClientRect().height; // 줄인 것이 반영된 높이
+      if (h <= limit) break;
+      z = Math.floor(z * (limit / h) * 1000) / 1000;
+      w.style.zoom = String(z);
+    }
     document.body.setAttribute('data-zoom', String(z)); // 얼마나 줄였는지(1 = 그대로) — 확인용
   }
 

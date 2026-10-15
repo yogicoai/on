@@ -202,6 +202,8 @@
   .act-sum b{color:var(--ink);}
   .act-sum .warn-t{color:var(--warn);}
   .act-sum.act-promo{margin-top:8px;} /* 프로모션 머리 줄 — 위 주의 줄과 붙지 않게 */
+  .promo-perf{margin:6px 0 2px;} .promo-perf .muted{color:var(--ink-3); font-size:11px; font-weight:500;}
+  .promo-perf-note{margin:2px 0 8px; font-size:11px;}
   /* 제안 문장의 줄 — 현황 / → 할 일(굵게) / 참고. 줄 사이를 조금 띄워 한 덩어리로 보이지 않게 */
   .tx-l{display:block;}
   .tx-l + .tx-l{margin-top:3px;}
@@ -436,6 +438,25 @@
       return '<span class="tx-l' + (/^→/.test(l.trim()) ? ' dir' : '') + '">' + esc(l.trim()) + '</span>';
     }).join('');
   }
+  // 프로모션 성과 표 — MD 등록 프로모션의 대상상품 매출(이카운트 원장). 몰별 한 줄 + 합계. 비교는 하루 평균끼리(서버 promoPerformance)
+  //   (사용자 요청 2026-10-15: "이걸 기준으로 프로모션 성과도 일일 모니터링에서 보이게"). 막 끝난 프로모션은 어제 칸이 없다.
+  function promoPerfTable(p){
+    var r = p.성과 || []; if (!r.length) return '';
+    var live = p.상태 === '진행';
+    var pc = function(v, warn){ if (v == null) return '<td class="r">—</td>'; return '<td class="r' + (v < 0 ? ' neg' : '') + '">' + signed(v) + (warn ? '*' : '') + '</td>'; };
+    var sum = r.reduce(function(a, x){ a.어제 += x.어제 || 0; a.누적 += x.누적 || 0; a.주문 += x.주문 || 0; a.하루평균 += x.하루평균 || 0; a.어제주문 += x.어제주문 || 0; return a; }, { 어제: 0, 누적: 0, 주문: 0, 하루평균: 0, 어제주문: 0 });
+    var warn = r.some(function(x){ return x.비교주의; });
+    var row = function(x, isSum){
+      return '<tr' + (isSum ? ' class="sum"' : '') + '><td>' + esc(x.몰) + (x.대상상품수 ? ' <span class="muted">대상 ' + comma(x.대상상품수) + '개</span>' : '') + '</td>' +
+        (live ? '<td class="r tnum">' + won(x.어제) + ' <span class="muted">' + comma(x.어제주문) + '건</span></td>' : '') +
+        '<td class="r tnum">' + won(x.누적) + '</td><td class="r tnum">' + comma(x.주문) + '건</td><td class="r tnum">' + won(x.하루평균) + '</td>' +
+        (isSum ? '<td></td><td></td>' : pc(x.리프트, x.비교주의) + pc(x.전년)) + '</tr>';
+    };
+    return '<div class="twrap promo-perf"><table class="t"><thead><tr><th>몰</th>' + (live ? '<th class="r">어제</th>' : '') +
+      '<th class="r">누적 (' + esc(p.성과기간 || '') + ')</th><th class="r">주문</th><th class="r">하루 평균</th><th class="r">프로모션 전 대비</th><th class="r">전년 대비</th></tr></thead><tbody>' +
+      r.map(function(x){ return row(x); }).join('') + (r.length > 1 ? row({ 몰: '합계', 어제: sum.어제, 어제주문: sum.어제주문, 누적: sum.누적, 주문: sum.주문, 하루평균: sum.하루평균 }, true) : '') + '</tbody></table></div>' +
+      '<p class="note promo-perf-note">대상상품 매출 · 이카운트 원장 · 비교는 하루 평균끼리' + (warn ? ' · * 비교 기간에 다른 프로모션이 섞여 있어 참고만' : '') + '</p>';
+  }
   // 항목에서 바로 가는 링크 — dash 첫 화면의 "물류센터 재고 →"와 같은 방식. 새 탭으로 연다. 메일 캡처에는 안 보인다(그림이라 못 누름).
   function goLink(w){ return w && w.href ? ' <a class="act-go" href="' + esc(w.href) + '" target="_blank" rel="noopener noreferrer">' + esc(w.label) + ' →</a>' : ''; }
   // 전사 점검(경보 분야) → 확인할 곳 — dash TodayWatch 의 WHERE 와 같은 곳
@@ -665,7 +686,7 @@
         pr.data.프로모션.map(function(p){
           lOn = lOn.concat(p.항목);
           return '<p class="act-sum act-promo"><span class="chip ' + (p.상태 === '진행' ? 'up' : 'na') + '">' + esc(STATE[p.상태] || p.상태) + '</span> <b>' + esc(p.이름) + '</b>' + (p.유형 ? ' (' + esc(p.유형) + ')' : '') + ' · ' + esc(p.머리) +
-            (p.요약 ? rich(p.요약) : '') + '</p>' + (p.항목.length ? actRows(p.항목, '채널', '글') : '');
+            (p.요약 ? rich(p.요약) : '') + '</p>' + promoPerfTable(p) + (p.항목.length ? actRows(p.항목, '채널', '글') : '');
         }).join('');
     }
     if (dg && !dg.ok) hOn += '<h4>어제 매출 진단</h4>' + errBox(dg);

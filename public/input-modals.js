@@ -69,7 +69,7 @@
         <div id="puStatus" class="imx-muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-          <a id="puTpl" class="imx-btn ghost" href="/api/promo-defs/template" download>⤓ 예제 양식 받기</a>
+          <a id="puTpl" class="imx-btn ghost" href="/api/promo-defs/template" download title="지금 등록된 프로모션이 이 양식으로 들어 있습니다 — 고쳐서 그대로 올리면 됩니다">⤓ 예제 양식 받기</a>
           <label class="imx-btn" style="cursor:pointer;margin:0">
             📄 엑셀 선택<input id="puFile" type="file" accept=".xlsx" style="display:none">
           </label>
@@ -109,7 +109,7 @@
       const j = await (await fetch('/api/promo-defs/status')).json();
       if (!j.적재) { box.innerHTML = '<b>등록된 프로모션이 없습니다</b> — 예제 양식을 받아 작성 후 올려주세요.'; return; }
       const malls = Object.entries(j.몰별 || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
-      box.innerHTML = `현재 <b>${num(j.적재)}건</b> 등록됨 (${malls}) · 기간 ${j.기간 || '-'} · 최종 갱신 ${String(j.갱신시각 || '').slice(0, 16).replace('T', ' ')}`;
+      box.innerHTML = `현재 <b>${num(j.적재)}건</b> 등록됨 (${malls}) · 기간 ${j.기간 || '-'} · 최종 갱신 ${j.갱신시각 ? new Date(Date.parse(j.갱신시각) + 9 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '-'}`; // 저장값은 UTC — 한국 시간으로
     } catch (e) { box.textContent = '현황 조회 오류: ' + e.message; }
   }
 

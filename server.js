@@ -597,7 +597,7 @@ async function handle(req, res) {
     try {
       const buf = await readRawBody(req, 20e6); // 엑셀 바이너리
       if (!buf || !buf.length) throw new Error('업로드된 파일이 비어 있습니다');
-      const parsed = await promoExcel.parse(buf);
+      const parsed = await promoIngest.withCurrent(await promoExcel.parse(buf)); // 17열 양식에 없는 칸은 지금 값 유지
       const v = promoIngest.validate(parsed);
       const preview = v.ok ? await promoIngest.diff(parsed) : null;
       const apply = u.searchParams.get('apply') === '1';
@@ -616,7 +616,8 @@ async function handle(req, res) {
       const buf = await promoExcel.template();
       res.writeHead(200, {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="promo-template.xlsx"',
+        // 지금 등록분이 들어 있는 양식 — 받은 날짜를 이름에 붙인다(한글 이름은 filename* 로)
+        'Content-Disposition': (() => { const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(2, 10).replace(/-/g, ''); return `attachment; filename="promo-template-${d}.xlsx"; filename*=UTF-8''${encodeURIComponent('전사프로모션_등록양식_' + d + '.xlsx')}`; })(),
       });
       return res.end(buf);
     } catch (e) { return sendJson(res, 500, { ok: false, error: String(e.message) }); }

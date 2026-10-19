@@ -740,7 +740,10 @@ async function runHttp() {
 
   const httpServer = http.createServer(async (req, res) => {
     const u = new URL(req.url, `http://${req.headers.host}`);
-    if (u.pathname === '/health') { return sendJson(res, 200, { ok: true, server: 'yogibo-sales-mcp' }); }
+    if (u.pathname === '/health') {
+      // nightlySync: 야간 동기화 켜짐 여부·다음 실행·마지막 결과 (배포·동작 확인용, 비밀값 없음)
+      return sendJson(res, 200, { ok: true, server: 'yogibo-sales-mcp', nightlySync: require('./nightlySync').status() });
+    }
 
     // ── CS 미답변 문의 체크 (REST) — cs-self-guide 어드민 배지/모달용 ─────────
     //   MCP 툴 cs_unanswered 와 동일 로직을 REST(JSON)로 노출. Bearer MCP_TOKEN 인증.

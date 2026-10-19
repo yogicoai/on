@@ -26,6 +26,8 @@ const KST_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let running = false;
+// /health 로 보여 줄 상태 — 켜졌는지, 다음 실행 시각, 마지막 결과 (비밀값 없음)
+const state = { enabled: false, nextRunAt: null, last: null };
 
 // 다음 KST 00:05 까지 남은 ms — 매번 다시 계산해서 하루 간격이 밀리지 않게 한다
 function msUntilNext0005KST(now = new Date()) {
@@ -38,6 +40,7 @@ function msUntilNext0005KST(now = new Date()) {
 function runDailySync(reason) {
   if (running) { console.log(`[nightly-sync] 이미 진행 중 → ${reason} 건너뜀`); return; }
   running = true;
+  const startedAt = new Date().toISOString();
   const days = process.env.ONLINE_SYNC_DAYS || '7';
   console.log(`[nightly-sync] 일일 동기화 시작 (${reason}) — 최근 ${days}일`);
   const child = spawn(process.execPath, [SCRIPT, days], {
@@ -52,10 +55,15 @@ function runDailySync(reason) {
   }, MAX_MS);
   child.on('exit', (code) => {
     clearTimeout(watchdog); running = false;
+    state.last = { reason, startedAt, finishedAt: new Date().toISOString(), code };
     if (code === 0) console.log(`[nightly-sync] ✅ 정상 종료 (${reason})`);
     else console.error(`[nightly-sync] ❌ 실패 종료 code=${code} (${reason}) — 캐시가 갱신되지 않았을 수 있음`);
   });
-  child.on('error', (e) => { clearTimeout(watchdog); running = false; console.error('[nightly-sync] 자식 프로세스 실행 오류:', e.message); });
+  child.on('error', (e) => {
+    clearTimeout(watchdog); running = false;
+    state.last = { reason, startedAt, finishedAt: new Date().toISOString(), error: e.message };
+    console.error('[nightly-sync] 자식 프로세스 실행 오류:', e.message);
+  });
 }
 
 function start() {
@@ -63,8 +71,10 @@ function start() {
     console.log('[nightly-sync] ENABLE_ONLINE_SYNC!=1 → 야간 동기화 꺼짐 (켜면 매일 00:05 KST)');
     return;
   }
+  state.enabled = true;
   const schedule = () => {
     const wait = msUntilNext0005KST();
+    state.nextRunAt = new Date(Date.now() + wait).toISOString();
     setTimeout(() => { runDailySync('매일 00:05 KST'); schedule(); }, wait);
     console.log(`[nightly-sync] 다음 실행까지 ${Math.round(wait / 60000)}분`);
   };
@@ -72,4 +82,8 @@ function start() {
   if (process.env.ONLINE_SYNC_ON_BOOT === '1') setTimeout(() => runDailySync('서버 시작(첫 확인)'), 10000);
 }
 
-module.exports = { start, runDailySync, msUntilNext0005KST };
+function status() {
+  return { ...state, running };
+}
+
+module.exports = { start, runDailySync, msUntilNext0005KST, status };

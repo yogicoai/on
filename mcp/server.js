@@ -827,6 +827,9 @@ async function runHttp() {
     }
   });
   httpServer.listen(PORT, () => console.error(`[mcp] yogibo-sales HTTP 서버 :${PORT}/mcp (auth ${TOKEN ? 'ON' : 'OFF'})`));
+
+  // 야간 동기화(매일 00:05 KST) — 예전엔 yChat이 돌렸다. ENABLE_ONLINE_SYNC=1 일 때만 켜진다
+  require('./nightlySync').start();
 }
 
 if (require.main === module) {

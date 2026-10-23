@@ -717,13 +717,20 @@ async function runStdio() {
   console.error('[mcp] yogibo-sales stdio 서버 시작');
 }
 
-// ── 실행: Streamable HTTP (원격 호스팅 · 두 사람 공유) ──────────────────────
-//   인증: MCP_TOKEN 설정 시 Authorization: Bearer <MCP_TOKEN> 필요. 엔드포인트 /mcp
+// ── 인증 — 개인별 토큰 (2026-10-22, lib/apiTokens.js) ─────────────────────
+//   MCP_TOKENS = "이름:토큰[:권한], …" — 권한 read = 조회(/mcp·CS 미답변·동기화 상태) · sync = 조회 + 동기화 실행(/sync/run).
+//   MCP_TOKEN(예전 공유)은 모두 옮길 때까지 같이 받는다. MCP_LEGACY=read → 조회만, off → 거절.
+//   요청마다 누가 썼는지 이름만 로그에 남긴다(토큰 값은 남기지 않는다).
+const apiTokens = require('../lib/apiTokens');
+
+// ── 실행: Streamable HTTP (원격 호스팅 · 여러 사람 공유) ──────────────────────
+//   인증: 위의 개인별 토큰(MCP_TOKENS) 또는 예전 공유 토큰(MCP_TOKEN). 엔드포인트 /mcp
 async function runHttp() {
   const http = require('http');
   const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
   const PORT = Number(process.env.PORT || process.env.MCP_PORT || 8787);
-  const TOKEN = process.env.MCP_TOKEN || '';
+  const TOKENS = apiTokens.loadTokens('MCP');
+  const AUTH_ON = TOKENS.length > 0;
 
   const readBody = (req) => new Promise((resolve) => {
     // 바이트를 모아 한 번에 UTF-8 디코드 — 한글 인자("맥스 커버" 등)가 chunk 경계에서 깨지는 문제 방지.
@@ -735,7 +742,9 @@ async function runHttp() {
   });
 
   const syncJobs = require('../lib/syncJobs');
-  const authed = (req) => !TOKEN || req.headers['authorization'] === `Bearer ${TOKEN}`;
+  const byHeader = apiTokens.makeIdentify(TOKENS);
+  const identify = (req) => byHeader(req.headers && req.headers['authorization']);
+  const authed = (req) => !!identify(req);
   const sendJson = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'application/json' }).end(JSON.stringify(obj));
 
   const httpServer = http.createServer(async (req, res) => {
@@ -777,8 +786,12 @@ async function runHttp() {
     // ── 무거운 동기화 트리거(Vercel 버튼 → cloudtype 1회 실행) ──────────────
     //   Vercel 은 고정IP 없음·60초 제한이라 직접 못 하는 적재를 여기서 백그라운드로 실행한다.
     if (u.pathname === '/sync/run') {
-      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      const who = identify(req);
+      if (!who) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      // 동기화 실행은 쓰기 — 조회용(read) 개인 토큰으로는 못 한다
+      if (!apiTokens.allows(who, 'sync')) return sendJson(res, 403, { ok: false, error: 'forbidden — 이 토큰은 조회 전용입니다' });
       if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'POST only' });
+      console.error(`[mcp auth] ${who.name} → /sync/run`);
       const body = (await readBody(req)) || {};
       const task = body.task || u.searchParams.get('task') || 'today';
       const params = {
@@ -804,8 +817,16 @@ async function runHttp() {
       } catch (e) { return sendJson(res, 502, { ok: false, error: 'IP 조회 실패: ' + e.message }); }
     }
 
+    // 내 토큰이 맞는지 확인용 — 이름과 권한만 돌려준다(토큰을 받은 사람이 설정 뒤 바로 확인할 수 있게)
+    if (u.pathname === '/whoami') {
+      const who = identify(req);
+      if (!who) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      return sendJson(res, 200, { ok: true, name: who.name, scope: who.scope });
+    }
+
     if (u.pathname !== '/mcp') { res.writeHead(404).end('not found'); return; }
-    if (TOKEN && req.headers['authorization'] !== `Bearer ${TOKEN}`) {
+    const who = identify(req);
+    if (!who) {
       res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' })); return;
     }
     try {
@@ -814,6 +835,8 @@ async function runHttp() {
         // cloudtype 재시작/재배포로 세션 맵이 비워져 "세션 없음" 400 이 나던 문제를 원천 차단.
         // enableJsonResponse: SSE 대신 순수 JSON 응답(프록시 호환). sessionIdGenerator 미지정 = 무상태 모드.
         const body = await readBody(req);
+        // 누가 어떤 도구를 불렀는지 — 이름·도구만(인자·토큰은 남기지 않는다)
+        if (body && body.method === 'tools/call') console.error(`[mcp auth] ${who.name} → ${(body.params && body.params.name) || '?'}`);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
         res.on('close', () => { try { transport.close(); } catch (_) {} });
         await build().connect(transport);
@@ -829,7 +852,7 @@ async function runHttp() {
       if (!res.headersSent) res.writeHead(500).end('server error');
     }
   });
-  httpServer.listen(PORT, () => console.error(`[mcp] yogibo-sales HTTP 서버 :${PORT}/mcp (auth ${TOKEN ? 'ON' : 'OFF'})`));
+  httpServer.listen(PORT, () => console.error(`[mcp] yogibo-sales HTTP 서버 :${PORT}/mcp (auth ${AUTH_ON ? `ON · ${TOKENS.map((t) => `${t.name}(${t.scope})`).join(', ')}` : 'OFF'})`));
 
   // 야간 동기화(매일 00:05 KST) — 예전엔 yChat이 돌렸다. ENABLE_ONLINE_SYNC=1 일 때만 켜진다
   require('./nightlySync').start();

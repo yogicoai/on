@@ -2088,7 +2088,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <h2 style="margin:0;font-size:20px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px">📊 <span id="mayPromoReviewTitle">6월 프로모션 성과 리뷰</span> <span style="font-size:11px;font-weight:500;color:var(--mute);background:#E6F2F0;padding:3px 9px;border-radius:99px">자동 생성</span></h2>
         <div style="display:flex;align-items:center;gap:6px">
           <label style="font-size:12px;color:var(--sub);font-weight:600">분석 월</label>
-          <select id="mayPromoReviewMonthSelect" style="height:34px;padding:0 10px;border:1.5px solid var(--brand);border-radius:8px;background:#fff;font-family:inherit;font-size:13px;font-weight:600;outline:none;color:var(--brand)" data-auto-set-month="2026-06"><option value="2026-06">2026년 6월</option><option value="2026-05">2026년 5월</option><option value="2026-04">2026년 4월</option><option value="2026-03">2026년 3월</option><option value="2026-02">2026년 2월</option><option value="2026-01">2026년 1월</option><option value="2025-12">2025년 12월</option><option value="2025-11">2025년 11월</option><option value="2025-10">2025년 10월</option><option value="2025-09">2025년 9월</option><option value="2025-08">2025년 8월</option><option value="2025-07">2025년 7월</option><option value="2025-06">2025년 6월</option><option value="2025-05">2025년 5월</option><option value="2025-04">2025년 4월</option><option value="2025-03">2025년 3월</option><option value="2025-02">2025년 2월</option><option value="2025-01">2025년 1월</option></select>
+          <select id="mayPromoReviewMonthSelect" style="height:34px;padding:0 10px;border:1.5px solid var(--brand);border-radius:8px;background:#fff;font-family:inherit;font-size:13px;font-weight:600;outline:none;color:var(--brand)" data-auto-set-month="2026-06"></select>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">
@@ -3438,7 +3438,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
         <h3 class="card-title" style="margin:0;display:flex;align-items:center;gap:6px">📝 일별 매출 리뷰 <span style="font-size:11px;font-weight:500;color:var(--mute);background:#E6F2F0;padding:2px 8px;border-radius:99px">자동 생성</span></h3>
-        <div style="font-size:12px;color:var(--sub);margin-top:4px" id="rvDateLabel">기준일: 2026-06-21 (일)</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:4px" id="rvDateLabel">기준일: —</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <label style="font-size:12px;color:var(--sub)">길이</label>
@@ -3458,12 +3458,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <button id="rvCopyBtn" class="btn btn-primary" style="height:30px;padding:0 12px;font-size:12px">📋 리뷰 복사</button>
       </div>
     </div>
-    <div id="rvBody" style="margin-top:12px;padding:14px 16px;background:#FFFFFF;border:1px solid var(--line);border-radius:10px;font-size:13.5px;line-height:1.7;color:#1F2937;white-space:pre-line">[매출 리뷰]
-기준일 총 매출은 605만원으로 전일 대비 -10.1% 감소했습니다.
-채널별로는 자사몰이 전체 매출의 51%를 차지하며 매출을 견인했습니다.
-트래픽은 전일 대비 -11.6% 감소했으며, 구매전환율은 +0.35%p 개선되었습니다.
-프로모션 매출은 454만원으로 전체 매출의 75% 수준입니다. 프로모션 기여도가 높게 나타났습니다.
-매출 Top은 줄라 맥스 프리미엄, 맥스 프리미엄 중심이며, 판매수량 기준으로는 리필 비즈 프리미엄, 리필 비즈 순으로 나타났습니다.</div>
+    <div id="rvBody" style="margin-top:12px;padding:14px 16px;background:#FFFFFF;border:1px solid var(--line);border-radius:10px;font-size:13.5px;line-height:1.7;color:#1F2937;white-space:pre-line"></div>
     <div id="rvTags" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px"><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#전일 대비 하락</span><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#자사몰 견인</span><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#외부채널 둔화</span><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#프로모션 기여</span><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#리퍼 판매 발생</span><span class="tag" style="background:#E6F2F0;color:#1FA89E;font-weight:600">#객단가 하락</span></div>
     <div id="rvNotice" style="margin-top:8px;font-size:11.5px;color:#A55B00"></div>
   </div>
@@ -3477,59 +3472,14 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <pre id="reportText"></pre>
   </div>
 
-  <!-- 5월 프로모션 성과 리뷰 (자동 생성, 복사 가능) -->
+  <!-- 월 프로모션 성과 리뷰 (자동 생성, 복사 가능) — 기준일의 달, 1일 ~ 기준일 누적 -->
   <div class="card" style="margin-top:24px;margin-bottom:16px;border:1px solid #D7E8E5;background:linear-gradient(180deg,#F8FBFA,#FFFFFF)">
-    <h3 class="card-title" style="margin:0;display:flex;align-items:center;gap:6px" id="mayPromoReviewReportTitle">📊 6월 프로모션 성과 리뷰 <span style="font-size:11px;font-weight:500;color:var(--mute);background:#E6F2F0;padding:2px 8px;border-radius:99px">임원 보고용 자동 생성</span></h3>
+    <h3 class="card-title" style="margin:0;display:flex;align-items:center;gap:6px" id="mayPromoReviewReportTitle">📊 프로모션 성과 리뷰 <span style="font-size:11px;font-weight:500;color:var(--mute);background:#E6F2F0;padding:2px 8px;border-radius:99px">임원 보고용 자동 생성</span></h3>
     <p style="margin:6px 0 0;color:var(--sub);font-size:12px" id="mayPromoReviewReportSubtitle">로우데이터 기준 월별 누적 매출/프로모션 성과를 분석하여 6섹션 구조로 자동 생성합니다.</p>
   </div>
   <div class="report-text-card" style="position:relative">
-    <button class="copy-btn" id="mayPromoReviewCopyBtn">📋 5월 리뷰 복사</button>
-    <pre id="mayPromoReviewReportText">[6월 프로모션 성과 리뷰]
-
-1. 종합 요약
-- 6월 누적 매출은 12,569만원 (125,691,096원) 으로 월 목표 23,200만원 대비 달성률 54.2% (목표 대비 보완 필요) 수준입니다.
-- 일평균 매출은 599만원이며, 전년 대비 감소 (-49%), 전월 대비 둔화 (-25%) 흐름을 보였습니다.
-- 채널 기여도: 자사몰 44.5% / 스마트스토어 31.6% / 외부채널 23.9% (공동구매 239만원 별도).
-
-2. 채널별 성과
-- 자사몰: 매출 5,491만원 (비중 44.5%) · 전년비 -41% · 전월비 -23% · 핵심 기여 채널.
-- 스마트스토어: 매출 3,894만원 (비중 31.6%) · 전년비 -9% · 전월비 -1%.
-- 외부채널: 매출 2,946만원 (비중 23.9%) · 전년비 -27% · 전월비 -30%.
-- 공동구매: 매출 239만원 (전체 1.9%) · 전년 6,844만원 → -97% / 전월 1,501만원 → -84% (참고 채널).
-
-3. 전사프로모션 매출 비중 분석
-- 월 전체매출 125,691,096원 중 전사프로모션은 93,654,286원 (74.5%)를 차지했습니다.
-- 추가프로모션(번쩍핫딜 등)은 2,108,500원 (1.7%), 일반매출은 29,928,310원 (23.8%)입니다.
-- 전사프로모션 726건 · 객단가 129,000원 · 판매수량 726개 기록.
-- 전월(2026-05) 대비: 전사프로모션 매출 +58.0% · 비중 +39.1%p · 추가프로모션 -77.1% · 일반매출 -69.7%.
-- 전사프로모션이 월 매출의 핵심 견인 요인으로 작용했습니다.
-
-4. 프로모션 성과
-- 가장 성과가 좋았던 프로모션은 &lt;6월 전사프로모션- 10%&gt; 매출 6,133만원 / 601개 / 591건입니다.
-- 판매량 기여도가 높은 상품군은 Sofa(소파) (4,961만원)으로 확인됩니다.
-- 매출 Top 3 상품 (수량 기준): 1위 리필 비즈 프리미엄 66개, 2위 리필 비즈 49개, 3위 서포트 42개.
-
-5. 상품/카테고리 인사이트
-- Sofa(소파): 6,906만원 (전년비 -57.6%)
-- Body Pillow(바디 필로우): 2,024만원 (전년비 -12.7%)
-- Living(리빙): 676만원 (전년비 -34.8%)
-- Kids(키즈): 331만원 (전년비 -53.0%)
-- Care(케어): 2,614만원 (전년비 -36.9%)
-
-6. 향후 실행 제안
-[6월 유지할 부분]
-- Sofa(소파) 카테고리 매출 견인 패턴
-
-[개선할 부분]
-- 전년 대비 매출 격차 축소
-- 자사몰 매출 회복
-
-[추가 검토 액션]
-- 월말 추가 매출 확보를 위한 채널 노출 강화 및 단가/쿠폰 캠페인 검토 필요
-- 전년 대비 부진한 카테고리/상품 분석 및 신상품 노출 확대 검토 필요
-- 자사몰 전년 대비 -41% 부진 — 채널 마케팅 점검 및 vendor/MD 미팅 일정 수립 필요
-- 전사프로모션 의존도 높음 — 비프로모션 일반매출 안정화를 위한 베스트 상품 노출 강화 검토
-</pre>
+    <button class="copy-btn" id="mayPromoReviewCopyBtn">📋 리뷰 복사</button>
+    <pre id="mayPromoReviewReportText"></pre>
   </div>
 
   <!-- 월 매출 현황 요약 (자동 생성, 복사 가능) -->
@@ -8101,7 +8051,10 @@ function buildAutoReviewSentences(R){
   const topShareNum = R.chShare[topCh];
   let chSent;
   if (topShareNum >= 0.5) {
-    chSent = `채널별로는 ${topCh}이 전체 매출의 ${topShare}%를 차지하며 매출을 견인했습니다.`;
+    // 조사 — 받침이 있으면 "이"(자사몰이), 없으면 "가"(스마트스토어가)
+    const _code = String(topCh || '').charCodeAt(String(topCh || '').length - 1);
+    const _iga = _code >= 0xAC00 && _code <= 0xD7A3 && (_code - 0xAC00) % 28 === 0 ? '가' : '이';
+    chSent = `채널별로는 ${topCh}${_iga} 전체 매출의 ${topShare}%를 차지하며 매출을 견인했습니다.`;
     tags.push(`${topCh} 견인`);
   } else {
     const second = R.channels.slice().sort((a,b)=>R.chShare[b]-R.chShare[a])[1];
@@ -10186,9 +10139,12 @@ ${MAY_PROMO_REVIEW_CONFIG.baseCategories.map(c => {
 
 function renderMayPromoReview(){
   // 셀렉트 박스 초기화 (1회) — 데이터가 있는 모든 월을 옵션으로 등록
+  //   예전엔 "옵션이 비어 있을 때만" 채웠는데 템플릿에 2026-06 까지 박혀 있어 10월로 못 넘어가고 6월 리뷰가 나왔다(2026-10-15 수정)
   const selEl = document.getElementById('mayPromoReviewMonthSelect');
   const baseMonth = currentDate ? currentDate.slice(0,7) : MAY_PROMO_REVIEW_CONFIG.targetMonth;
-  if (selEl && !selEl.options.length) {
+  if (selEl && selEl.dataset.ready !== '1') {
+    selEl.innerHTML = '';
+    selEl.dataset.ready = '1';
     const monthSet = new Set();
     Object.keys(dailyByDate).forEach(d => monthSet.add(d.slice(0,7)));
     const months = [...monthSet].sort().reverse();  // 최신순
@@ -10247,9 +10203,19 @@ function renderMayPromoReview(){
   if (yoyTitle) yoyTitle.textContent = `${prevYearMonth.replace('-','년 ')+'월'} vs ${selectedMonth.replace('-','년 ')+'월'} (전년 동월 비교)`;
 
   const state = mayPromoReviewGetState();
-  const mayRange = mayPromoReviewGetMonthRange(selectedMonth);
-  const yoyRange = mayPromoReviewGetMonthRange(prevYearMonth);
-  const momRange = mayPromoReviewGetMonthRange(prevMonth);
+  let mayRange = mayPromoReviewGetMonthRange(selectedMonth);
+  let yoyRange = mayPromoReviewGetMonthRange(prevYearMonth);
+  let momRange = mayPromoReviewGetMonthRange(prevMonth);
+  // 기준일이 속한 달이면 1일 ~ 기준일 누적 — 전월 · 전년도 같은 날짜까지로 맞춘다(덜 찬 달을 꽉 찬 달과 비교하지 않게, 2026-10-15)
+  const reviewUpTo = (currentDate && selectedMonth === currentDate.slice(0,7)) ? parseInt(currentDate.slice(8,10)) : null;
+  if (reviewUpTo) {
+    const clampTo = (r) => { const last = parseInt(r.end.slice(8,10)); const dd = Math.min(reviewUpTo, last); return { start: r.start, end: r.start.slice(0,8) + String(dd).padStart(2,'0'), days: dd }; };
+    mayRange = clampTo(mayRange); yoyRange = clampTo(yoyRange); momRange = clampTo(momRange);
+  }
+  const repSub = document.getElementById('mayPromoReviewReportSubtitle');
+  if (repSub) repSub.textContent = reviewUpTo
+    ? `${mayRange.start} ~ ${mayRange.end}(기준일) 누적 · 전월 · 전년도 같은 날짜까지 비교 · 로우데이터 자동 집계`
+    : `${selectedMonth} 한 달 · 전월(${prevMonth}) · 전년 동월(${prevYearMonth}) 비교 · 로우데이터 자동 집계`;
 
   // 옵션 — 필터는 프로모션/카테고리/상품 분석에만 적용. 전체 매출(상단 KPI)은 항상 FULL 사용
   const aggOpts = {

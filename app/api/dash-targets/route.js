@@ -1,4 +1,5 @@
 import store from '@/lib/store';
+import apiTokens from '@/lib/apiTokens';
 
 /**
  * 대시보드 월 목표 — 사람이 직접 입력한 값.
@@ -7,23 +8,18 @@ import store from '@/lib/store';
  * 사람 화면에만 남고 다른 사람은 원천 기본값을 봐서, 같은 회의에서 서로 다른
  * 달성률을 보게 된다. 여기(Mongo)에 두면 누가 보든 같은 값이다.
  *
- * 인증은 export 와 같은 EXPORT_TOKEN 을 쓴다 — 서버끼리만 주고받는 값이고
- * dash 가 이미 그 토큰을 가지고 있다.
+ * 인증은 export 와 같은 토큰(EXPORT_TOKENS + 예전 EXPORT_TOKEN, lib/apiTokens.js)이다.
+ * 읽기는 read 로 되지만 저장(POST)은 write 권한이 있어야 한다 — 개인 조회용 토큰으로 목표를 바꿀 수 없게 (2026-10-22).
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const COLL = ['dash', 'targets'];
 
-function denied(request) {
-  const tok = String(process.env.EXPORT_TOKEN || '').trim();
-  if (!tok) return false; // 토큰 미설정이면 검사하지 않는다(로컬 개발)
-  const got = String(request.headers.get('authorization') || '').trim().replace(/^Bearer\s+/i, '').trim();
-  return got !== tok;
-}
+const identify = apiTokens.makeIdentify(apiTokens.loadTokens('EXPORT'));
 
 export async function GET(request) {
-  if (denied(request)) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  if (!identify(request.headers.get('authorization'))) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   const month = new URL(request.url).searchParams.get('month');
   try {
     const c = await store.namedCollection(...COLL);
@@ -35,7 +31,10 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  if (denied(request)) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const who = identify(request.headers.get('authorization'));
+  if (!who) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  if (!apiTokens.allows(who, 'write')) return Response.json({ ok: false, error: 'forbidden — 이 토큰은 조회 전용입니다' }, { status: 403 });
+  console.error(`[export auth] ${who.name} → dash-targets 저장`);
   let body;
   try {
     body = await request.json();

@@ -45,6 +45,8 @@ const cafe24Coupons = require('./lib/cafe24Coupons');
 const bizadvisor = require('./lib/bizadvisor');
 const ai = require('./lib/ai');
 const dataExport = require('./lib/dataExport'); // 외부 제공용 export(매출·광고·재고, 개인정보 없음)
+const apiTokens = require('./lib/apiTokens');   // 개인별 토큰 — export 는 EXPORT_TOKENS(+예전 EXPORT_TOKEN)
+const exportIdentify = apiTokens.makeIdentify(apiTokens.loadTokens('EXPORT'));
 const promoDefs = require('./lib/promoDefs');   // 전사 프로모션 정의(MD 엑셀 적재분) — 성과 계산 기준
 const promoIngest = require('./lib/promoIngest'); // 정의 검증·미리보기·적재(엑셀/JSON 공통)
 const promoExcel = require('./lib/promoExcel');  // 엑셀 → 표준구조 파싱 + 예제 양식 생성
@@ -214,18 +216,20 @@ async function handle(req, res) {
   }
 
   // ── 외부 제공용 데이터 export (오너/외부 분석자) ─────────────────────────────
-  //   EXPORT_TOKEN 환경변수 설정 시 Bearer 인증 필수. 개인정보 없는 집계 원장만 제공.
+  //   Bearer 인증 필수 — 개인별 토큰(EXPORT_TOKENS) 또는 예전 공유 토큰(EXPORT_TOKEN), lib/apiTokens.js (2026-10-22).
+  //   조회라 read 권한이면 된다. 개인정보 없는 집계 원장만 제공. 앞뒤 공백·줄바꿈은 비교 전에 걷어낸다(흔한 설정 실수).
   if (u.pathname === '/api/export' || u.pathname === '/api/export/catalog' || u.pathname === '/api/export/alerts') {
-    // 토큰 비교 — 복사 시 붙는 앞뒤 공백/줄바꿈은 양쪽 모두 trim 해서 비교(흔한 설정 실수 방지)
-    const tok = String(process.env.EXPORT_TOKEN || '').trim();
-    const got = String(req.headers['authorization'] || '').trim().replace(/^Bearer\s+/i, '').trim();
-    if (tok && got !== tok) {
+    const who = exportIdentify(req.headers['authorization']);
+    if (!who) {
+      const sent = /^Bearer\s+\S/i.test(String(req.headers['authorization'] || '').trim());
       return sendJson(res, 401, {
         ok: false,
-        error: 'unauthorized — Authorization: Bearer <EXPORT_TOKEN> 필요',
-        hint: got ? '보낸 토큰이 서버 값과 다릅니다 — 호출하는 쪽(클라이언트)에서 발급받은 토큰을 정확히 넣으세요. 이 API 서버는 정상이며 여기서 재배포할 필요 없습니다.' : '요청에 Authorization 헤더가 없습니다(브라우저 주소창은 헤더를 못 보내므로 curl/코드로 호출하세요)',
+        error: 'unauthorized — Authorization: Bearer <발급받은 토큰> 필요',
+        hint: sent ? '보낸 토큰이 등록된 값과 다릅니다 — 발급받은 개인 토큰을 정확히 넣으세요. 이 API 서버는 정상이며 여기서 재배포할 필요 없습니다.' : '요청에 Authorization 헤더가 없습니다(브라우저 주소창은 헤더를 못 보내므로 curl/코드로 호출하세요)',
       });
     }
+    // 누가 무엇을 가져갔는지 — 이름·경로·데이터셋만(토큰 값은 남기지 않는다)
+    console.error(`[export auth] ${who.name} → ${u.pathname}${u.searchParams.get('dataset') ? ` ${u.searchParams.get('dataset')}` : ''}`);
     if (u.pathname === '/api/export/catalog') return sendJson(res, 200, { ok: true, ...dataExport.catalog() });
     // 경보 스캔 — dash 홈 "오늘 챙길 것" 카드. fresh=1 이면 캐시를 건너뛰고 다시 스캔.
     if (u.pathname === '/api/export/alerts') {

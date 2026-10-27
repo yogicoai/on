@@ -66,7 +66,43 @@ function runDailySync(reason) {
   });
 }
 
+// ── 스마트스토어 매시 동기화 — CS 주문 조회(상태·송장)를 하루 1번보다 빨리 맞춘다.
+//   켜기: ENABLE_SMARTSTORE_HOURLY=1 (야간 동기화와 따로 켠다) · SMARTSTORE_HOURLY_HOURS(기본 2시간 창)
+const RECENT_SCRIPT = path.join(ROOT, 'scripts', 'sync-smartstore-recent.js');
+const HOUR_MS = 60 * 60 * 1000;
+let hourlyRunning = false;
+const hourly = { enabled: false, nextRunAt: null, last: null };
+
+function runHourly() {
+  // 야간 전체 동기화가 도는 중이면 스마트스토어도 그때 같이 적재되므로 건너뛴다.
+  if (running || hourlyRunning) return;
+  hourlyRunning = true;
+  const startedAt = new Date().toISOString();
+  const child = spawn(process.execPath, [RECENT_SCRIPT, process.env.SMARTSTORE_HOURLY_HOURS || '2'], {
+    cwd: ROOT,
+    env: { ...process.env, TZ: 'Asia/Seoul' },
+    stdio: 'inherit',
+  });
+  const watchdog = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) {} }, 10 * 60 * 1000);
+  const done = (result) => {
+    clearTimeout(watchdog); hourlyRunning = false;
+    hourly.last = { startedAt, finishedAt: new Date().toISOString(), ...result };
+  };
+  child.on('exit', (code) => done({ code }));
+  child.on('error', (e) => done({ error: e.message }));
+}
+
+function startHourly() {
+  if (process.env.ENABLE_SMARTSTORE_HOURLY !== '1') return;
+  hourly.enabled = true;
+  const tick = () => { runHourly(); hourly.nextRunAt = new Date(Date.now() + HOUR_MS).toISOString(); };
+  hourly.nextRunAt = new Date(Date.now() + 60 * 1000).toISOString();
+  setTimeout(() => { tick(); setInterval(tick, HOUR_MS); }, 60 * 1000);
+  console.log('[smartstore-hourly] 매시 스마트스토어 최근 변경분 동기화 켜짐');
+}
+
 function start() {
+  startHourly();
   if (process.env.ENABLE_ONLINE_SYNC !== '1') {
     console.log('[nightly-sync] ENABLE_ONLINE_SYNC!=1 → 야간 동기화 꺼짐 (켜면 매일 00:05 KST)');
     return;
@@ -83,7 +119,7 @@ function start() {
 }
 
 function status() {
-  return { ...state, running };
+  return { ...state, running, smartstoreHourly: { ...hourly, running: hourlyRunning } };
 }
 
 module.exports = { start, runDailySync, msUntilNext0005KST, status };

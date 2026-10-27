@@ -458,6 +458,19 @@ function build() {
     inputSchema: { orderNo: z.string().describe('주문번호(부분일치, 자사몰 YYYYMMDD-0000000 / 스토어 주문·상품주문번호)') },
   }, wrap(({ orderNo }) => csTools.orderLookup(orderNo)));
 
+  server.registerTool('cs_order_search', {
+    title: 'CS 주문 찾기 — 이름·연락처로 스마트스토어+매장 택배 (주문번호 모를 때) [조회전용·개인정보 마스킹]',
+    description: '주문번호를 모를 때 주문자 이름(또는 연락처 끝 4자리)과 기간으로 스마트스토어 주문과 매장 택배 발송을 찾는다: 채널·주문일/발송일·상품·상태·택배사·송장번호. ' +
+      '"25일에 정은경으로 스토어 주문했대, 배송 어디까지 왔어?" 같은 질문에 사용. 자사몰(Cafe24) 주문은 여기 없음(cs-self-guide가 실시간 조회). ' +
+      '사본 기준 시각을 함께 주며, 이름은 마스킹·연락처는 끝 4자리만. 동명이인은 끝 4자리로 본인 확인.',
+    inputSchema: {
+      name: z.string().optional().describe('주문자 이름(2자 이상)'),
+      phone: z.string().optional().describe('연락처(전체 또는 끝 4자리)'),
+      start: z.string().optional().describe('주문일 시작 YYYY-MM-DD (생략=최근 30일)'),
+      end: z.string().optional().describe('주문일 종료 YYYY-MM-DD'),
+    },
+  }, wrap(({ name, phone, start, end }) => csTools.orderSearch({ name, phone, start, end })));
+
   // ── 통합: CS 미답변 체크 (자사몰+스토어 한 번에) ──
   server.registerTool('cs_unanswered', {
     title: 'CS 미답변 문의 체크 — 자사몰+스마트스토어 통합 [CS 모니터링]',
@@ -780,6 +793,46 @@ async function runHttp() {
         return sendJson(res, 200, out);
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: String((e && e.message) || e) });
+      }
+    }
+
+    // ── CS 주문 찾기 (REST) — cs-self-guide AI 도우미용 ─────────────────────
+    //   MCP 툴 cs_order_search 와 같은 로직. Bearer MCP_TOKEN 인증. ?name=&phone=&start=&end=
+    if (u.pathname === '/api/cs/orders') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      try {
+        const p = u.searchParams;
+        const out = await csTools.orderSearch({ name: p.get('name'), phone: p.get('phone'), start: p.get('start'), end: p.get('end') });
+        return sendJson(res, 200, { ok: true, ...out });
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: String((e && e.message) || e) });
+      }
+    }
+
+    // ── 게시판 관리(REST) — cs-self-guide 의 스마트스토어 고객문의 목록·답변 등록 ─────────
+    //   네이버는 허용 IP 에서만 불리므로 cs-self-guide(Vercel)는 여기를 거친다.
+    //   목록은 조회 토큰이면 되고, 답변 등록은 고객에게 바로 보이는 쓰기라 answer(또는 all) 권한 토큰만.
+    if (u.pathname === '/api/cs/smartstore/inquiries') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      try {
+        const { from, to } = csTools.searchRange(u.searchParams.get('start'), u.searchParams.get('end'));
+        return sendJson(res, 200, { ok: true, start: from, end: to, items: await ssExtra.inquiryList(from, to) });
+      } catch (e) {
+        return sendJson(res, 502, { ok: false, error: String((e && e.message) || e) });
+      }
+    }
+    const inquiryAnswer = u.pathname.match(/^\/api\/cs\/smartstore\/inquiries\/(\d+)\/answer$/);
+    if (inquiryAnswer) {
+      const who = identify(req);
+      if (!who) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      if (!apiTokens.allows(who, 'answer')) return sendJson(res, 403, { ok: false, error: 'forbidden — 답변 등록(answer) 권한 토큰이 아닙니다' });
+      if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'POST only' });
+      const body = (await readBody(req)) || {};
+      console.error(`[mcp auth] ${who.name} → 스마트스토어 고객문의 ${inquiryAnswer[1]} 답변 등록`);
+      try {
+        return sendJson(res, 200, { ok: true, ...(await ssExtra.answerInquiry(inquiryAnswer[1], body.answer, body.date)) });
+      } catch (e) {
+        return sendJson(res, e.httpStatus || 502, { ok: false, error: String((e && e.message) || e), ...(e.inquiry ? { inquiry: e.inquiry } : {}) });
       }
     }
 

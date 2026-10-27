@@ -835,6 +835,46 @@ async function runHttp() {
         return sendJson(res, e.httpStatus || 502, { ok: false, error: String((e && e.message) || e), ...(e.inquiry ? { inquiry: e.inquiry } : {}) });
       }
     }
+    // 상품문의(Q&A) — 목록(조회 토큰) · 답변 등록 POST / 고치기 PUT …/qnas/{questionId}/answer { answer, date }(answer 권한)
+    if (u.pathname === '/api/cs/smartstore/qnas') {
+      if (!authed(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      try {
+        const { from, to } = csTools.searchRange(u.searchParams.get('start'), u.searchParams.get('end'));
+        return sendJson(res, 200, { ok: true, start: from, end: to, items: await ssExtra.qnaList(from, to) });
+      } catch (e) {
+        return sendJson(res, 502, { ok: false, error: String((e && e.message) || e) });
+      }
+    }
+    const qnaAnswer = u.pathname.match(/^\/api\/cs\/smartstore\/qnas\/(\d+)\/answer$/);
+    if (qnaAnswer) {
+      const who = identify(req);
+      if (!who) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      if (!apiTokens.allows(who, 'answer')) return sendJson(res, 403, { ok: false, error: 'forbidden — 답변 등록(answer) 권한 토큰이 아닙니다' });
+      if (req.method !== 'POST' && req.method !== 'PUT') return sendJson(res, 405, { ok: false, error: 'POST·PUT only' });
+      const mode = req.method === 'POST' ? 'answer' : 'edit';
+      const body = (await readBody(req)) || {};
+      console.error(`[mcp auth] ${who.name} → 스마트스토어 상품문의 ${qnaAnswer[1]} 답변 ${mode === 'answer' ? '등록' : '고치기'}`);
+      try {
+        return sendJson(res, 200, { ok: true, ...(await ssExtra.saveQnaAnswer(qnaAnswer[1], body.answer, body.date, mode)) });
+      } catch (e) {
+        return sendJson(res, e.httpStatus || 502, { ok: false, error: String((e && e.message) || e), ...(e.qna ? { qna: e.qna } : {}) });
+      }
+    }
+    // 등록된 답변 고치기 — PUT …/answer/{answerContentId} { answer, date }
+    const inquiryAnswerEdit = u.pathname.match(/^\/api\/cs\/smartstore\/inquiries\/(\d+)\/answer\/(\d+)$/);
+    if (inquiryAnswerEdit) {
+      const who = identify(req);
+      if (!who) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      if (!apiTokens.allows(who, 'answer')) return sendJson(res, 403, { ok: false, error: 'forbidden — 답변 등록(answer) 권한 토큰이 아닙니다' });
+      if (req.method !== 'PUT') return sendJson(res, 405, { ok: false, error: 'PUT only' });
+      const body = (await readBody(req)) || {};
+      console.error(`[mcp auth] ${who.name} → 스마트스토어 고객문의 ${inquiryAnswerEdit[1]} 답변 고치기`);
+      try {
+        return sendJson(res, 200, { ok: true, ...(await ssExtra.updateInquiryAnswer(inquiryAnswerEdit[1], inquiryAnswerEdit[2], body.answer, body.date)) });
+      } catch (e) {
+        return sendJson(res, e.httpStatus || 502, { ok: false, error: String((e && e.message) || e), ...(e.inquiry ? { inquiry: e.inquiry } : {}) });
+      }
+    }
 
     // ── 무거운 동기화 트리거(Vercel 버튼 → cloudtype 1회 실행) ──────────────
     //   Vercel 은 고정IP 없음·60초 제한이라 직접 못 하는 적재를 여기서 백그라운드로 실행한다.

@@ -453,7 +453,9 @@
       return '<tr><td>' + esc(s.name) + '</td><td>' + (s.cur_pct != null ? s.cur_pct.toFixed(2) + '%' : '—') + ' <span style="color:#9CA3AF">(' + comma(s.cur) + ')</span></td><td>' + (s.target_pct != null ? s.target_pct.toFixed(2) + '%' : '—') + '</td><td>' + (s.avg7_pct != null ? s.avg7_pct.toFixed(2) + '%' : '—') + '</td><td>' + spp(s.vs_target_pp) + '</td><td>' + spp(s.vs_avg7_pp) + '</td><td>' + caseChip(s) + '</td></tr>';
     }).join('');
     var n = d.net_revenue || {};
-    var extra = d.ch === 'mall' ? '주문 이프두 ' + comma(n.orders) + '건 · Cafe24 ' + comma(n.orders_cafe24) + '건' : '판매 ' + won(n.sales) + (n.returns ? ' · 반품 ' + won(n.returns) : '') + ' · 판매 주문 ' + comma(n.orders) + '건';
+    var extra = d.ch === 'mall'
+      ? '판매 ' + won(n.sales) + (n.returns ? ' · 반품 ' + won(n.returns) : '') + ' · 주문 이프두 ' + comma(n.orders) + '건 · 원장 ' + comma(n.orders_ledger) + '건'
+      : '판매 ' + won(n.sales) + (n.returns ? ' · 반품 ' + won(n.returns) : '') + ' · 판매 주문 ' + comma(n.orders) + '건';
     return '<details class="aic-det"><summary>▸ 판정 근거 — 단계별 비율 · 케이스 · 순매출</summary>' +
       '<div class="aic-tblw"><table class="aic-tbl"><thead><tr><th>단계</th><th>당일</th><th>목표</th><th>7일평균</th><th>vs 목표</th><th>vs 7일평균</th><th>케이스</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<p class="aic-p mute" style="margin-top:6px">순매출 ' + won(n.actual) + ' (일 목표 ' + won(n.target_daily) + ' · 7일평균 ' + won(n.avg7) + ') · 객단가 ' + won(n.aov) + ' (7일평균 ' + won(n.aov_avg7) + ' · 목표 ' + won(n.aov_target) + ') · ' + extra + '</p></details>';
@@ -464,7 +466,7 @@
   }
   function foot(d, aiv) {
     var ds = d.data_status || {}, parts = [aiv ? '문장 — 🤖 AI 상세 분석(' + aiMeta(d.detail) + ')' : '분석 — 데이터 기반(서버 규칙)'];
-    if (d.ch === 'mall') { parts.push('이프두 3단계 ' + (ds.ifdu_3steps ? '입력됨' : '미입력')); parts.push('유입 ' + (ds.inflow_source || '—')); parts.push('순매출 Cafe24'); }
+    if (d.ch === 'mall') { parts.push('이프두 3단계 ' + (ds.ifdu_3steps ? '입력됨' : '미입력')); parts.push('유입 ' + (ds.inflow_source || '—')); parts.push('순매출 이카운트 원장'); }
     else { parts.push('스토어 유입 ' + (ds.inflow_uploaded ? '입력됨' : '미입력')); parts.push('순매출 이카운트 원장'); }
     parts.push('기준선 7일평균');
     return '<div class="aic-foot">' + parts.join(' · ') + '</div>';

@@ -178,7 +178,7 @@
         <li>이프두 <b>방문시작</b>과 시스템(Cafe24) 방문수는 정의가 달라 값이 다릅니다(실측 약 0.90배, 날에 따라 ±20%).
             퍼널 목표가 이프두 기준으로 정해져 있어 <b>화면 계산은 이프두 값</b>으로 합니다. 이프두를 아직 안 올린 날만 Cafe24 값으로 채우고, 위쪽에 며칠인지 표시합니다.</li>
         <li><b>장바구니 → 주문서 전환율이 100%를 넘을 수 있습니다.</b> 장바구니를 거치지 않고 바로구매로 주문서에 진입한 경우가 포함되기 때문이며, 오류가 아닙니다.</li>
-        <li>순매출은 <b>취소·반품이 빠진 금액</b>이고, 공동구매는 외부채널로 분류되어 자사몰에 포함되지 않습니다.</li>
+        <li>순매출은 자사몰·스마트스토어 모두 <b>이카운트 원장(출고 기준, 반품 차감)</b>입니다 — 판매집계표·일일 매출 대시보드와 같은 값입니다. 원장은 매일 아침 들어오므로 그 전에는 어제 순매출이 비어 있습니다. 공동구매는 외부채널로 분류되어 자사몰에 포함되지 않습니다.</li>
       </ul>
       <p style="margin:12px 0 0;font-size:12px;opacity:.7">문의는 온라인팀으로 주세요.</p>
     </div>
@@ -230,7 +230,7 @@ function targetsFor(cc,ym){
   }
 }
 function rows(cc){ return cc==='mall'?MALL:SS; }
-// 일별 순매출 조회 (MCP 실측). cc: mall→1, ss→2
+// 일별 순매출 조회 (이카운트 원장). cc: mall→1, ss→2
 var NETMAP={};
 function buildNetmap(){ NETMAP={}; (CFG.netDaily||[]).forEach(function(x){ NETMAP[x[0]]=x; }); }
 buildNetmap();
@@ -339,7 +339,7 @@ function renderMain(){
         return '<div class="stage rev"><div class="shead"><span class="sname">순매출</span><span class="sach na">데이터 없음</span></div>'+
           '<div class="sbody"><div class="sv" style="color:var(--ink-3)">—</div>'+
           '<div class="stgt tnum">목표 <b>'+(hasT?money(tgt.net):'—')+'</b></div>'+
-          '<div class="st">MCP 순매출 미수집 구간<br>(현재 2026-08 backfill 완료)</div></div></div>';
+          '<div class="st">이카운트 원장 미반영<br>(아침 적재 전이면 비어 있습니다)</div></div></div>';
       }
       var revAct=known.reduce(function(p,c){return p+c.net;},0);
       if(partial){
@@ -348,15 +348,15 @@ function renderMain(){
           '<span class="sach na">'+known.length+'/'+days+'일만 집계</span></div>'+
           '<div class="sbody"><div class="sv tnum" style="color:var(--c-rev)">'+money(revAct)+'</div>'+
           '<div class="stgt tnum">기간 목표 <b>'+(hasT?money(tgt.net):'—')+'</b></div>'+
-          '<div class="st">나머지 '+(days-known.length)+'일 MCP 보충 필요<br>— 부분 집계라 달성률·객단가 미산출</div></div></div>';
+          '<div class="st">나머지 '+(days-known.length)+'일 원장 미반영<br>— 부분 집계라 달성률·객단가 미산출</div></div></div>';
       }
-      // 전체 커버: 객단가는 같은 기간의 주문 수로 나눔 — 매출과 같은 출처인 Cafe24 주문 수(netDaily 4번째)를 우선.
+      // 전체 커버: 객단가는 같은 기간의 주문 수로 나눔 — 매출과 같은 출처인 원장 주문 수(netDaily 4번째)를 우선.
       //   주문완료(이프두)로 나누면 이프두가 못 잡은 주문만큼 객단가가 부푼다(2026-10-02)
       var revDates={}; known.forEach(function(k){revDates[k.date]=1;});
       var doneSame=r.reduce(function(p,x){ if(!revDates[x[0]]) return p; var n=NETMAP[x[0]]; return p+(n&&n[3]!=null?n[3]:x[5]); },0);
       return stageCard({name:'순매출', actual:revAct, actualTxt:money(revAct),
         target:hasT?tgt.net:null, targetTxt:money(tgt.net), unit:'',
-        sub:'MCP 실측'+(single?'':' 합산')+' · 취소/반품 제외', rev:true,
+        sub:'이카운트 출고'+(single?'':' 합산')+' · 반품 차감', rev:true,
         ratioLabel:'자사몰 퍼널 목표',
         ratioAct:doneSame?revAct/doneSame:null, ratioTgt:B.aov, ratioUnit:'원', ratioName:'객단가'});
     })()+'</div>';
@@ -386,7 +386,7 @@ function renderMain(){
     var sv=0,so=0,sr=0; r.forEach(function(x){sv+=x[1];so+=x[2];sr+=x[4];});
     var prate=pct(so,sv), B2=CFG.benchSS;
     var perOrd=so?sr/so:0;
-    // 순매출: MCP 실측(취소/반품 제외) — 목표 기준과 동일 정의
+    // 순매출: 이카운트 원장(출고 기준·반품 차감) — 자사몰과 같은 기준
     var knownSS=r.map(function(x){var v=netOf(ch,x[0]); return v==null?null:{date:x[0],net:v};}).filter(Boolean);
     var netCard;
     (function(){
@@ -395,7 +395,7 @@ function renderMain(){
         netCard='<div class="stage rev"><div class="shead"><span class="sname">순매출</span><span class="sach na">데이터 없음</span></div>'+
           '<div class="sbody"><div class="sv" style="color:var(--ink-3)">—</div>'+
           '<div class="stgt tnum">목표 <b>'+(hasT?money(tgt.net):'—')+'</b></div>'+
-          '<div class="st">MCP 순매출 미수집 구간<br>(현재 2026-08 backfill 완료)</div></div></div>'; return;
+          '<div class="st">이카운트 원장 미반영<br>(아침 적재 전이면 비어 있습니다)</div></div></div>'; return;
       }
       var nAct=knownSS.reduce(function(p,c){return p+c.net;},0);
       if(partial){
@@ -403,13 +403,13 @@ function renderMain(){
           '<span class="sach na">'+knownSS.length+'/'+days+'일만 집계</span></div>'+
           '<div class="sbody"><div class="sv tnum" style="color:var(--c-rev)">'+money(nAct)+'</div>'+
           '<div class="stgt tnum">기간 목표 <b>'+(hasT?money(tgt.net):'—')+'</b></div>'+
-          '<div class="st">나머지 '+(days-knownSS.length)+'일 MCP 보충 필요<br>— 부분 집계라 달성률·건당매출 미산출</div></div></div>'; return;
+          '<div class="st">나머지 '+(days-knownSS.length)+'일 원장 미반영<br>— 부분 집계라 달성률·건당매출 미산출</div></div></div>'; return;
       }
       var netDates={}; knownSS.forEach(function(k){netDates[k.date]=1;});
       var ordSame=r.reduce(function(p,x){return p+(netDates[x[0]]?x[2]:0);},0);
       netCard=stageCard({name:'순매출', actual:nAct, actualTxt:money(nAct),
         target:hasT?tgt.net:null, targetTxt:money(tgt.net), unit:'',
-        sub:'MCP 실측'+(single?'':' 합산')+' · 취소/반품 제외', rev:true,
+        sub:'이카운트 출고'+(single?'':' 합산')+' · 반품 차감', rev:true,
         ratioLabel:'스마트스토어 퍼널 목표', ratioName:'건당 순매출',
         ratioAct:ordSame?nAct/ordSame:null, ratioTgt:B2.perOrder, ratioUnit:'원'});
     })();
@@ -427,7 +427,7 @@ function renderMain(){
         ratioAct:perOrd, ratioTgt:B2.perOrder, ratioUnit:'원'})+
       netCard+'</div>';
     var msg, act2;
-    // 목표는 순매출 기준이므로 진단도 MCP 순매출로 판정(전 기간 커버될 때만)
+    // 목표는 순매출 기준이므로 진단도 원장 순매출로 판정(전 기간 커버될 때만)
     var netFull=(knownSS.length===days)?knownSS.reduce(function(p,c){return p+c.net;},0):null;
     if(hasT && netFull!=null){
       var gapV=pct(sv,tgt.visit), gapR2=pct(netFull,tgt.net);
@@ -457,13 +457,13 @@ function renderPace(){
   var elapsed=mrows.length, total=T.days;
   var head='<div class="card-head"><p class="eyebrow">Monthly Pace</p><h2>'+ym.replace('-','년 ')+'월 진척 — 목표 페이스 대비</h2>'+
     '<p class="sub">경과 '+elapsed+'일 / '+total+'일 기준. 페이스 = 목표를 일할 계산한 오늘까지의 기대치.</p></div>';
-  // 순매출 누적 — MCP 실측 일별 합산(목표와 동일 정의). 미수집 월은 대체 소스.
+  // 순매출 누적 — 이카운트 원장 일별 합산(판매집계표·매출보고와 같은 값). 미수집 월은 대체 소스.
   var mtdNet=null, netAsOf=last, netSrc='', elNet=elapsed;
   var netRows=(CFG.netDaily||[]).filter(function(x){return x[0].slice(0,7)===ym && x[ch==='mall'?1:2]!=null;});
   if(netRows.length){
     mtdNet=netRows.reduce(function(a,x){return a+x[ch==='mall'?1:2];},0);
     netAsOf=netRows[netRows.length-1][0]; elNet=netRows.length;
-    netSrc='MCP 실측 '+netRows.length+'일 합산';
+    netSrc='이카운트 원장 '+netRows.length+'일 합산';
   } else if(ch==='mall'){ var seed=CFG.mtdSeed.mall; mtdNet=seed.net; netAsOf=seed.asOf; netSrc=seed.src;
     elNet=Math.min(total,Math.round((new Date(netAsOf)-new Date(ym+'-01'))/86400000)+1);
   } else { mtdNet=mrows.reduce(function(a,x){return a+x[4];},0); netSrc='일별 파일 합산(취소 반영 전)'; elNet=elapsed; }
@@ -516,7 +516,7 @@ function renderBasis(){
   '<p><b>자사몰 ✓</b> — 이프두 일별 603일(2025-01-01~2026-08-26), 누락·중복 0. 표본 5개월(25.01·05·10·11, 26.06) 일별합 = 월별 원본과 <b>5단계 전부 정확 일치</b>.</p>'+
   '<p><b>스마트스토어 — 정의 차이 2건 발견.</b> ① 일별 "주문건수"는 월별 "결제완료건수"의 약 0.75배(다른 정의) → 목표·벤치마크를 일별 파일 기준으로 재산정. ② <b>월별 파일의 26.06 유입(7,225)은 오류로 확인</b> — 일별합 11,753이며 1~5월은 전부 일치. 월별 분석에서 26.06을 이상치로 제외했던 판단이 데이터로 입증됨(실제 구매율 3.08%, 정상 범위).</p>'+
   '<p><b class="warn">전사 대시보드 목표 불일치</b> — yogibo-sales에 등록된 8월 목표(자사몰 1.27억 / 스토어 5,000만)가 이 시트의 확정 목표(1.3억 / 5,600만)와 다릅니다. <b>동기화 필요.</b></p>'+
-  '<p><b>순매출은 MCP 실측(returns_analysis)</b> — 목표가 순매출 기준이므로, 두 채널 모두 취소·반품을 제외한 MCP 값을 사용합니다. <b>2026-08-01~26 전 일자 backfill 완료</b>(자사몰·스마트스토어 각 26일). 그 이전 구간은 미수집이라 순매출 칸이 비며, 필요 시 추가 backfill 가능합니다.</p>'+'<p><b class="warn">스마트스토어는 매출이 두 종류</b> — 파일 매출(스마트스토어 통계·만원 반올림·취소 반영 전)과 MCP 순매출(취소·반품 제외)을 나란히 표시합니다. 8/23 기준 파일 347만원 vs MCP 333만원으로 차이가 있으며, <b>목표 달성률 판정은 MCP 순매출</b>을 씁니다.</p>'+
+  '<p><b>순매출은 이카운트 원장(출고 기준·반품 차감)</b> — 판매집계표·매출보고와 같은 값이고, 월 목표도 매출보고와 같은 것을 씁니다. 자사몰은 홈페이지 전체, 스마트스토어는 상품매출입니다. <b>2026-10-29 까지 자사몰은 Cafe24 주문일 결제금액</b>이라 판매집계표와 하루 100만원 넘게 어긋났습니다(10/28 Cafe24 323만 vs 원장 206만).</p>'+'<p><b class="warn">스마트스토어는 매출이 두 종류</b> — 파일 매출(스마트스토어 통계·만원 반올림·취소 반영 전)과 MCP 순매출(취소·반품 제외)을 나란히 표시합니다. 8/23 기준 파일 347만원 vs MCP 333만원으로 차이가 있으며, <b>목표 달성률 판정은 MCP 순매출</b>을 씁니다.</p>'+
   '<p><b>갱신 절차</b> — ① 이프두 퍼널분석 xls·스마트스토어 일별 xlsx 다운로드 → ② Claude에게 파일 전달("일별 DB 갱신") → ③ 검증 후 이 시트 재생성. 전사 대시보드에는 iframe으로 삽입(코드 충돌 없음).</p></div>';
 }
 

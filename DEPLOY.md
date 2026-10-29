@@ -21,7 +21,11 @@
 3. Deploy
 
 ## 4) 주의 / 한계
-- **개인정보**: 비즈유도/세그먼트/쿠폰구매자 화면에 고객 이름·연락처·이메일이 포함됩니다. 인증 없이 공개하면 노출되니, 필요 시 **Vercel → Settings → Deployment Protection(Password)** 으로 잠그세요.
+- **개인정보 / 접속 잠금**: 비즈유도/세그먼트/쿠폰구매자 화면에 고객 이름·연락처·이메일이 포함됩니다. 그래서 `middleware.js` 가 화면과 `/api/*` 전체를 **아이디·비밀번호(브라우저 로그인 창)** 로 잠급니다.
+  - Vercel 환경변수에 `DASHBOARD_USER`(기본 `yogibo`)·`DASHBOARD_PASSWORD` 를 **먼저** 넣고 배포하세요. 비밀번호가 없으면 운영에서는 503으로 전부 막힙니다(다시 열리는 사고 방지).
+  - 예외: `/api/health`(공개), `/api/export*`·`/api/dash-targets`(Export 토큰), `/api/cron/sync`(`CRON_SECRET` — GitHub Secrets·Vercel 양쪽에 같은 값으로 넣는 걸 권장).
+  - dash 같은 서버 간 호출은 개인 Export 토큰(Bearer)으로 `middleware.js` 의 `TOKEN_PATHS`(집계 주소)만 통과합니다. 개인정보 주소는 토큰으로 열리지 않습니다.
+  - 예전 배포 주소(`*-yogicoai.vercel.app` 같은 개별 URL)까지 막으려면 Vercel → Settings → Deployment Protection 의 Vercel Authentication(Standard)도 켜 두세요.
 - **함수 타임아웃**: Hobby 플랜은 함수 실행 10초 제한이라, 라이브 API를 호출하는 화면(트래픽·비즈유도 등)은 캐시가 없으면 끊길 수 있습니다. **데이터를 로컬에서 미리 캐시**해 두면 조회는 빠릅니다. (Pro 플랜은 `maxDuration` 60초까지)
 - **수집/동기화/적재**(백필·쿠폰명 적재·트래픽 월별 워밍)는 **로컬에서 `npm run legacy`**(= `node server.js`)로 실행하세요. Vercel에서는 `READ_ONLY=1`로 비활성화됩니다.
 

@@ -507,7 +507,7 @@
       '<h4 class="wk-h">오프라인 — 매장별 <span>매출(원) · 좌수(상담)</span></h4>' +
       '<div class="twrap"><table class="t"><thead><tr><th>매장</th>' + th + '<th class="r">3일 매출</th><th class="r">좌수(금 · 토 · 일)</th><th class="r">3일 좌수</th></tr></thead><tbody>' + t2 + '</tbody></table></div>' +
       (w.매장외매출 ? '<p class="note">월 목표 미등록 매장 매출 ' + won(w.매장외매출) + '은 표에 없습니다(위 오프라인 합계에는 포함).</p>' : '') +
-      '<h4 class="wk-h">온라인 — KPI <span>퍼널 점검과 같은 값 · 자사몰 순매출은 Cafe24 기준</span></h4>' +
+      '<h4 class="wk-h">온라인 — KPI <span>퍼널 점검과 같은 값 · 순매출은 이카운트 출고 기준</span></h4>' +
       '<div class="twrap"><table class="t"><thead><tr><th rowspan="2">날짜</th><th class="c" colspan="4">자사몰</th><th class="c wk-div" colspan="4">스마트스토어</th></tr>' +
         '<tr><th class="r">유입</th><th class="r">주문</th><th class="r">구매전환</th><th class="r">순매출</th><th class="r wk-div">유입</th><th class="r">주문</th><th class="r">구매율</th><th class="r">순매출</th></tr></thead><tbody>' + t3 + '</tbody></table></div>' +
       '<p class="note" style="margin:0">' + esc(w.기준) + '(' + esc(dayLabel(w.전주기간.시작)) + ' ~ ' + esc(dayLabel(w.전주기간.종료)) + ')</p></div>';
@@ -1021,7 +1021,7 @@
         '<p class="pace-h">이번 달 누적 진척</p>' + paceBlock(k.ss.월진척) + '</div>' +
       '</div>';
     h += renderAds(adSec, onSales);
-    h += '<p class="note">구매전환율·구매율·객단가·건당 매출의 목표는 기준월 벤치마크입니다. 순매출: 자사몰 = Cafe24 통계, 스토어 = 이카운트 원장(반품 차감). ' +
+    h += '<p class="note">구매전환율·구매율·객단가·건당 매출의 목표는 기준월 벤치마크입니다. 순매출: 자사몰(홈페이지)·스토어 모두 이카운트 원장(출고 기준·반품 차감) — 판매집계표와 같은 값. ' +
       '자사몰 방문·상품조회·장바구니·주문서·주문완료(이프두)와 스토어 유입(비즈어드바이저)은 온라인팀이 올리는 값입니다. 이프두가 아직 안 올라온 날의 방문·주문완료는 Cafe24 값으로 채우고 <span class="src-tag" style="margin-left:0">Cafe24</span>로 표시합니다.</p>';
     return h + '</div>';
   }

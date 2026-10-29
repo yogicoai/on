@@ -28,20 +28,11 @@ const todayKST = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/
 const hourKST = () =>
   Number(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', hour12: false }));
 
-// 대시보드 잠금(middleware.js) 통과용 — 같은 서버의 /api 를 부를 때 대시보드 계정으로 인증한다.
-function internalHeaders() {
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) return {};
-  const user = process.env.DASHBOARD_USER || 'yogibo';
-  return { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` };
-}
-
 async function hit(origin, path, ms) {
   const started = Date.now();
   try {
     const res = await fetch(new URL(path, origin), {
       cache: 'no-store',
-      headers: internalHeaders(),
       signal: AbortSignal.timeout(ms),
     });
     return { path, ok: res.ok, status: res.status, ms: Date.now() - started };
@@ -73,7 +64,6 @@ export async function GET(request) {
   try {
     const res = await fetch(new URL('/api/smartstore/status', origin), {
       cache: 'no-store',
-      headers: internalHeaders(),
       signal: AbortSignal.timeout(10_000),
     });
     const status = await res.json();

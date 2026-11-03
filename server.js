@@ -160,6 +160,8 @@ function readBody(req) {
 //     /api/sync-status 로 진행상태를 폴링한다. (모든 사용자 공유 · 중복 클릭은 cloudtype 가 dedup)
 const ON_VERCEL = !!process.env.VERCEL;
 const SYNC_BASE = (process.env.CLOUDTYPE_SYNC_URL || process.env.SYNC_BASE || '').replace(/\/+$/, '');
+// cloudtype /sync/run 을 부르는 열쇠 — cloudtype 의 MCP_TOKENS 에 "이름:이 값:sync" 로 등록돼 있어야 한다.
+//   모르는 값이면 401(unauthorized), 조회 전용이면 403 이다. Vercel 에만 있는 값이라 바뀌면 한쪽만 어긋나기 쉽다.
 const SYNC_TOKEN = process.env.MCP_TOKEN || '';
 
 function cloudtypeSync(pathname, { method = 'GET', body = null, timeout = 15000 } = {}) {
@@ -185,6 +187,16 @@ function cloudtypeSync(pathname, { method = 'GET', body = null, timeout = 15000 
     if (data) r.write(data);
     r.end();
   });
+}
+
+// cloudtype 가 거절하면 200 으로 돌려주지 않는다. ok:false 를 200 에 실어 보내면 상태 코드만 보는
+//   크론·dash 는 성공으로 읽는다 — 자사몰 당일 수집이 막힌 채로 Actions 가 계속 초록불이었다.
+function sendDelegated(res, r) {
+  if (r && r.ok === false) {
+    const error = r.error === 'unauthorized' ? 'cloudtype 인증 실패(on 프로젝트 MCP_TOKEN 확인)' : r.error;
+    return sendJson(res, 502, { ...r, delegated: true, error });
+  }
+  return sendJson(res, 200, { ok: true, delegated: true, ...r });
 }
 
 function serveStatic(res, pathname) {
@@ -290,7 +302,7 @@ async function handle(req, res) {
     if (ON_VERCEL) {
       try {
         const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'today' } });
-        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+        return sendDelegated(res, r);
       } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
     }
     const t0 = Date.now();
@@ -318,7 +330,7 @@ async function handle(req, res) {
     if (ON_VERCEL) { // 전체(Cafe24+스마트스토어+traffic+워밍) 무거운 작업 → cloudtype 위임
       try {
         const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days } });
-        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+        return sendDelegated(res, r);
       } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
     }
     const t0 = Date.now();
@@ -774,7 +786,7 @@ async function handle(req, res) {
     if (ON_VERCEL) { // 60초 제한 회피 → cloudtype 위임
       try {
         const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'coupons', start, end } });
-        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+        return sendDelegated(res, r);
       } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
     }
     console.log(`[${new Date().toISOString()}] /api/cafe24/sync-coupons-from-orders ${start}~${end}`);
@@ -975,7 +987,7 @@ async function handle(req, res) {
     if (smartstore.onVercel()) { // 고정IP 필요 → cloudtype 위임(최근 31일 Cafe24+스마트스토어 적재)
       try {
         const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days: 31 } });
-        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+        return sendDelegated(res, r);
       } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
     }
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });
@@ -989,7 +1001,7 @@ async function handle(req, res) {
     if (smartstore.onVercel()) { // 고정IP 필요 → cloudtype 위임(최근 N일 Cafe24+스마트스토어 적재 + 워밍)
       try {
         const r = await cloudtypeSync('/sync/run', { method: 'POST', body: { task: 'daily', days: Math.max(1, Math.min(31, Number(u.searchParams.get('days') || 7))) } });
-        return sendJson(res, 200, { ok: true, delegated: true, ...r });
+        return sendDelegated(res, r);
       } catch (e) { return sendJson(res, 502, { ok: false, delegated: true, error: 'cloudtype 트리거 실패: ' + e.message }); }
     }
     if (!smartstore.enabled()) return sendJson(res, 400, { ok: false, error: '네이버 커머스 자격증명 미설정(.env NAVER_COMMERCE_CLIENT_ID/SECRET)' });

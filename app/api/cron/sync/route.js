@@ -35,7 +35,15 @@ async function hit(origin, path, ms) {
       cache: 'no-store',
       signal: AbortSignal.timeout(ms),
     });
-    return { path, ok: res.ok, status: res.status, ms: Date.now() - started };
+    // 거절 사유까지 남긴다 — Actions 로그만 보고 왜 실패했는지 알 수 있게
+    const body = await res.json().catch(() => null);
+    return {
+      path,
+      ok: res.ok && body?.ok !== false,
+      status: res.status,
+      ...(body?.error ? { error: body.error } : {}),
+      ms: Date.now() - started,
+    };
   } catch (err) {
     return { path, ok: false, error: String(err?.message || err), ms: Date.now() - started };
   }

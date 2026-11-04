@@ -1244,7 +1244,7 @@ function renderSSPanel() {
   if (ssTab === 'inflow') {
     p.innerHTML = `<div class="card"><h3>유입경로별 주문·매출 <span class="hint">네이버 제공 유입경로 · 상위 ${j.inflow.length} · 클릭 시 상세</span></h3>
       ${tableHtml(['유입경로', '주문', '매출', '비중'], j.inflow, (r) => [dlink('inflow', r.inflow), num(r.orders), won(r.sales), pct(j.kpis.revenue ? r.sales / j.kpis.revenue : 0)])}
-      <div class="insightline">여기는 <strong>주문 단위 유입경로</strong>(결제로 이어진 경로)입니다. 일별 <strong>사이트 방문/유입수(전체)</strong>는 커머스 API 미제공 영역이라 <strong>⑦ 마케팅 분석</strong> 탭에서 비즈어드바이저 기준으로 따로 봅니다.</div></div>`;
+      <div class="insightline">여기는 <strong>주문 단위 유입경로</strong>(결제로 이어진 경로)입니다. 일별 <strong>사이트 방문/유입수(전체)</strong>는 커머스 API 미제공 영역이라 <strong>⑦ 마케팅 분석</strong> 탭에서 스토어 유입 기준으로 따로 봅니다.</div></div>`;
   } else if (ssTab === 'product') {
     p.innerHTML = `
       <div class="grid two">
@@ -1302,7 +1302,7 @@ function renderSSPanel() {
       </div>
       <div class="card" style="margin-top:16px"><h3>적용 쿠폰 <span class="hint">쿠폰 적용 주문 ${num(k.couponOrders||0)}건 · 네이버는 쿠폰 마스터 API 미제공 → 주문에 적용된 쿠폰 집계</span></h3>
         ${(j.coupons && j.coupons.length) ? tableHtml(['쿠폰', '적용 주문', '할인액'], j.coupons, (c) => [dlink('coupon', c.name), num(c.orders), won(c.discount)]) : '<div class="empty">이 기간 적용된 쿠폰 정보 없음 (재수집 필요하거나 쿠폰 미사용)</div>'}
-        <div class="insightline">네이버 커머스 API는 쿠폰 발급/마스터 조회를 제공하지 않습니다(공식 확인). 대신 <strong>주문에 적용된 할인 유형·금액·쿠폰</strong>을 집계해 분석합니다. 방문수 통계도 API 미제공(셀러센터 비즈어드바이저 전용).</div></div>`;
+        <div class="insightline">네이버 커머스 API는 쿠폰 발급/마스터 조회를 제공하지 않습니다(공식 확인). 대신 <strong>주문에 적용된 할인 유형·금액·쿠폰</strong>을 집계해 분석합니다. 방문수 통계도 API 미제공(셀러센터 스토어분석 전용).</div></div>`;
   } else if (ssTab === 'payment') {
     p.innerHTML = '<div class="empty">결제·혜택 분석 중…</div>';
     loadSSPayment();
@@ -1324,12 +1324,12 @@ function renderSSPanel() {
     p.innerHTML = `
       <div class="card" style="margin-bottom:14px">
         <div class="panelctl" style="flex-wrap:wrap;gap:10px">
-          <strong>📈 마케팅채널 유입수 <span class="hint">일별 · 비즈어드바이저</span></strong>
+          <strong>📈 마케팅채널 유입수 <span class="hint">일별 · 10/30부터 스토어분석 환산</span></strong>
           <span style="flex:1"></span>
           <label style="font-size:12px;color:var(--muted)">기간 <input type="date" id="bizStart" style="font-size:12px"> ~ <input type="date" id="bizEnd" style="font-size:12px"></label>
           <a class="btn ghost" id="bizCsv" href="#">⤓ 기간 다운로드</a>
         </div>
-        <div class="muted" style="font-size:12px;margin-top:8px">이 탭은 <b>조회 기간</b>(시작~종료)으로 봅니다(상단 날짜와 별개) · <b>on.bizInflow</b> DB에 적재된 비즈어드바이저 일별 채널 유입수를 분석·다운로드합니다.</div>
+        <div class="muted" style="font-size:12px;margin-top:8px">이 탭은 <b>조회 기간</b>(시작~종료)으로 봅니다(상단 날짜와 별개) · <b>on.bizInflow</b> DB에 적재된 일별 유입수를 분석·다운로드합니다. 10/29까지는 비즈어드바이저 실측, <b>10/30부터는 스토어분석 방문수를 환산한 추정값</b>이라 채널 이름이 경로로 바뀌고 구성도 달라집니다.</div>
       </div>
       <section class="kpis" id="bizKpis" style="padding:0 0 14px"></section>
       <div class="card"><h3>일별 채널 유입수 <span class="hint" id="bizRangeHint"></span></h3>
@@ -1345,7 +1345,7 @@ function renderSSPanel() {
     loadBizMarketing();
   }
 }
-// ── 마케팅 분석 (비즈어드바이저 일별 채널 유입수) ──
+// ── 마케팅 분석 (일별 채널 유입수: 10/29까지 비즈어드바이저, 10/30부터 스토어분석 환산) ──
 const BIZ_COLORS = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#0891b2', '#7c3aed', '#65a30d', '#dc2626', '#0d9488', '#9333ea', '#ca8a04', '#e11d48', '#4f46e5', '#059669', '#f59e0b', '#94a3b8'];
 const bizColor = (channels, c) => BIZ_COLORS[Math.max(0, channels.indexOf(c)) % BIZ_COLORS.length];
 let bizStartSel = '', bizEndSel = ''; // 이 탭 전용 조회 기간(시작~종료) — 상단 날짜와 독립
@@ -1388,7 +1388,7 @@ function renderBizMarketing(j) {
         ['총 유입수', num(j.grandTotal), `${j.days.length}일 합계`],
         ['일평균 유입', num(avg), '하루 평균'],
         ['채널 수', num(j.channels.length), '유입 채널'],
-        ['데이터 최신일', j.latestDate || '-', '비즈어드바이저'],
+        ['데이터 최신일', j.latestDate || '-', '스토어 유입 입력'],
       ].map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`).join('');
     } else kpi.innerHTML = '';
   }
@@ -1864,7 +1864,7 @@ async function renderCmpTraffic() {
   const kc = (l, v, sub, cls) => `<div class="kpi ${cls || ''}"><div class="label">${l}</div><div class="val num">${v}</div><div class="sub">${sub}</div></div>`;
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
   p.innerHTML = `
-    <div class="insightline" style="border-left-color:var(--accent)">ℹ️ <strong>방문수·페이지뷰·가입수는 자사몰(Cafe24) 기준</strong>입니다. 네이버 커머스 API는 방문수·회원가입 통계를 제공하지 않아(셀러센터 비즈어드바이저 전용) 스마트스토어 트래픽은 분리할 수 없습니다. 대신 <strong>구매·매출은 아래에서 자사몰 vs 스마트스토어로 비교</strong>합니다.</div>
+    <div class="insightline" style="border-left-color:var(--accent)">ℹ️ <strong>방문수·페이지뷰·가입수는 자사몰(Cafe24) 기준</strong>입니다. 네이버 커머스 API는 방문수·회원가입 통계를 제공하지 않아(셀러센터 스토어분석 전용) 스마트스토어 트래픽은 분리할 수 없습니다. 대신 <strong>구매·매출은 아래에서 자사몰 vs 스마트스토어로 비교</strong>합니다.</div>
     <section class="kpis" style="padding:0 0 14px">
       ${kc('방문수 (자사몰)', num(t.visits), `${s} ~ ${e} · 일평균 ${num(Math.round(t.visits / (t.days || 1)))}`, 'accent')}
       ${kc('페이지뷰(PV)', num(t.pv), `PV/방문 ${t.pvPerVisit.toFixed(2)}`, '')}

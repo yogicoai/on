@@ -518,9 +518,9 @@ function build() {
   }, wrap(({ query, limit, channel }) => csSelfGuide.search(query, { limit, channel })));
 
   server.registerTool('marketing_inflow', {
-    title: '마케팅채널 유입수 — 일별 제공(비즈어드바이저)',
+    title: '마케팅채널 유입수 — 일별 제공(10/29까지 비즈어드바이저 실측, 10/30부터 스토어분석 방문수 환산 추정)',
     description: '기간 스마트스토어 유입수: 일별 총유입 + 채널별 합계 + (기간 짧으면)일별×채널 상세. ' +
-      'on.bizInflow에 일별 데이터가 적재돼 있음 — "일별 유입은 월합산만" 같은 추정 금지, 일별까지 이 도구로 제공.',
+      'on.bizInflow에 일별 데이터가 적재돼 있음 — "일별 유입은 월합산만" 같은 추정 금지, 일별까지 이 도구로 제공. 10/30부터는 추정값이고 채널명이 경로(네이버 광고 > 검색 광고 …)로 바뀌며 하루 오차가 10% 안팎이다.',
     inputSchema: D,
   }, wrapR(async (start, end) => {
     const s = await bizadvisor.summary(start, end);

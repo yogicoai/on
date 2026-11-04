@@ -142,7 +142,7 @@
     <!-- 입력 버튼 — 입력 창은 /input-modals.js (openInput 참고) -->
     <div class="acts">
       <button type="button" onclick="openInput('fn')" title="이프두 퍼널 표(방문시작·상품조회·장바구니·주문서작성·주문완료)를 엑셀로 등록">📊 퍼널 입력</button>
-      <button type="button" onclick="openInput('biz')" title="비즈어드바이저 스마트스토어 유입수(일별 × 채널)를 가져와 반영">📈 스토어 유입 입력</button>
+      <button type="button" onclick="openInput('biz')" title="스토어분석 방문수를 예전 유입수 기준으로 환산해 반영">📈 스토어 유입 입력</button>
     </div>
     <div class="seg" role="tablist"><button role="tab" aria-selected="true" data-ch="mall">자사몰</button><button role="tab" aria-selected="false" data-ch="ss">스마트스토어</button></div>
   </div>
@@ -163,7 +163,7 @@
       <p style="margin:0 0 8px"><b>MD가 넣어주셔야 하는 것</b></p>
       <ul style="margin:0 0 14px 18px;padding:0">
         <li>이프두의 <b>방문시작 · 상품조회 · 장바구니조회 · 주문서작성 · 주문완료</b> → 이 화면 위 <b>[📊 퍼널 입력]</b> — 아직 안 올린 날의 방문시작·주문완료는 Cafe24 값으로 채워 둡니다</li>
-        <li>스마트스토어 <b>유입수</b>(비즈어드바이저) → 이 화면 위 <b>[📈 스토어 유입 입력]</b> — 비즈어드바이저 화면에서 복사한 cURL을 붙여넣으면 일별 × 채널 유입수를 가져옵니다</li>
+        <li>스마트스토어 <b>유입수</b>(스토어분석) → 이 화면 위 <b>[📈 스토어 유입 입력]</b> — 방문 분석 화면에서 복사한 cURL을 붙여넣으면 일별 유입수를 가져옵니다. <b>10/30부터는 방문수를 예전 기준으로 환산한 추정값</b>이라 하루 숫자는 10% 안팎 다를 수 있고, 프로모션 날은 더 낮게 나올 수 있습니다</li>
       </ul>
       <p style="margin:0 0 14px"><b>AI 분석은</b> 일일 매출 대시보드 맨 위 <b>[🤖 AI 분석 데이터 확인]</b>에서 봅니다 — 기간을 고르면 일자별 카드와 기간 종합 카드가 나오고, 한 번 분석한 날은 저장됩니다.</p>
       <p style="margin:0 0 8px"><b>퍼널 입력 올리는 방법</b></p>

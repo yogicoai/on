@@ -181,7 +181,7 @@
   // ── 일일 퍼널 입력(엑셀 업로드) ─────────────────────────────────────────────
   //   MD가 이프두 표(방문시작·상품조회·장바구니조회·주문서작성·주문완료)를 올린다.
   //   방문시작·주문완료도 이프두 값으로 계산한다(2026-10-02~, lib/funnelDaily mallBase). 순매출·스토어 매출은 시스템이 자동으로 갖는다.
-  //   스토어 유입수(비즈어드바이저)는 MD가 [📈 스토어 유입 입력]으로 직접 가져온다(아래 buildBizInflowUi).
+  //   스토어 유입수(스토어분석 환산)는 MD가 [📈 스토어 유입 입력]으로 직접 가져온다(아래 buildBizInflowUi).
   //   저장은 **파일에 있는 날짜만 덮어쓰기** — 이번 주치만 올려도 지난 데이터가 남는다.
   let _funnelFile = null;
 
@@ -367,11 +367,11 @@
     } catch (e) { el('puResult').innerHTML = `<div class="imx-line">오류: ${ae(e.message)}</div>`; }
   }
 
-  // ── 스마트스토어 유입 입력(비즈어드바이저) ──────────────────────────────────
-  //   MD가 비즈어드바이저에서 "Copy as cURL" 한 텍스트를 붙여넣으면 서버(/api/bizadvisor/refresh)가 그 로그인 토큰으로
-  //   일별 × 채널 유입수를 가져와 on.bizInflow 에 반영한다 → 퍼널 점검의 스토어 유입·마케팅 분석에 쓰인다.
-  //   cURL 에는 네이버 로그인 토큰이 들어 있다 — 브라우저·서버 어디에도 저장하지 않고, 보내자마자 입력칸을 비운다.
-  //   다 쓰면 비즈어드바이저 로그아웃 → 재로그인으로 토큰을 폐기하도록 안내한다.
+  // ── 스마트스토어 유입 입력(스토어분석 방문 분석) ──────────────────────────────────
+  //   MD가 방문 분석 화면의 query 요청을 cURL로 복사해 붙여넣으면 서버(/api/bizadvisor/refresh)가 그 로그인 쿠키로
+  //   일별 × 경로 방문수를 가져와 예전 유입수 기준으로 환산해 on.bizInflow 에 반영한다 → 퍼널 점검의 스토어 유입·마케팅 분석에 쓰인다.
+  //   cURL 에는 네이버 로그인 쿠키가 들어 있다 — 브라우저·서버 어디에도 저장하지 않고, 보내자마자 입력칸을 비운다.
+  //   다 쓰면 스마트스토어센터 로그아웃 → 재로그인으로 쿠키를 폐기하도록 안내한다.
   function buildBizInflowUi() {
     if (el('bizInModal')) return;
     const m = document.createElement('div');
@@ -385,23 +385,24 @@
     m.innerHTML = `<div class="imx-box" style="max-width:760px">
       <div class="imx-head">
         <div><strong>스마트스토어 유입 입력</strong>
-          <div class="imx-sub" style="font-size:12px;color:var(--muted)">비즈어드바이저 유입수(일별 × 채널)를 가져옵니다 · 퍼널 점검의 스토어 유입에 바로 반영</div></div>
+          <div class="imx-sub" style="font-size:12px;color:var(--muted)">스토어분석 방문수(일별 × 경로)를 예전 유입수 기준으로 환산해 가져옵니다 · 퍼널 점검의 스토어 유입에 바로 반영</div></div>
         <button id="biClose" class="imx-btn ghost mini" type="button">닫기 ✕</button>
       </div>
       <div class="imx-body">
         <div id="biStatus" class="imx-muted" style="font-size:12px;margin-bottom:10px">현황 확인 중…</div>
         <div class="imx-line" style="font-size:12.5px;line-height:1.75;margin-bottom:12px">
           <b>가져오는 방법</b> (1~2분)<br>
-          ① 크롬에서 <b>비즈어드바이저</b>에 로그인하고, 채널별 유입수가 보이는 <b>마케팅 분석</b> 화면을 엽니다<br>
-          ② <b>F12</b> → <b>Network</b> 탭 → 필터 칸에 <b>report</b> 입력 → 화면을 한 번 새로고침<br>
-          ③ 목록의 <b>report?…</b> 요청을 오른쪽 클릭 → <b>Copy → Copy as cURL (bash)</b> → 아래 칸에 붙여넣고 <b>가져오기</b><br>
-          <span style="color:var(--warn,#e6c86a)">붙여넣는 내용에는 로그인 정보가 들어 있습니다. 저장하지 않고 바로 지우며, 끝나면 비즈어드바이저에서 <b>로그아웃 → 다시 로그인</b>해 주세요.</span>
+          ① 크롬에서 <b>스마트스토어센터</b>에 로그인하고, <b>스토어 분석 → 방문 분석</b> 화면을 엽니다<br>
+          ② <b>F12</b> → <b>Network</b> 탭 → 필터 칸에 <b>query</b> 입력 → 화면의 <b>[조회]</b> 클릭<br>
+          ③ 목록의 <b>query</b> 요청 하나를 오른쪽 클릭 → <b>복사 → cURL(bash)로 복사</b> → 아래 칸에 붙여넣고 <b>가져오기</b><br>
+          10/29까지는 비즈어드바이저 실측이라 덮어쓰지 않고, <b>10/30부터는 방문수를 환산한 추정값</b>이 들어갑니다.<br>
+          <span style="color:var(--warn,#e6c86a)">붙여넣는 내용에는 로그인 정보가 들어 있습니다. 저장하지 않고 바로 지우며, 끝나면 스마트스토어센터에서 <b>로그아웃 → 다시 로그인</b>해 주세요.</span>
         </div>
-        <textarea id="biCurl" rows="5" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:11.5px;border:1px solid var(--line2);border-radius:8px;padding:8px;resize:vertical" placeholder="curl 'https://bizadvisor.naver.com/api/v3/sites/s_…/report?…' -H 'authorization: Bearer …' …"></textarea>
+        <textarea id="biCurl" rows="5" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;font-family:Consolas,monospace;font-size:11.5px;border:1px solid var(--line2);border-radius:8px;padding:8px;resize:vertical" placeholder="curl 'https://sell.smartstore.naver.com/api/v1/seller-insight/store-analytics/metrics/query' -H …"></textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 12px">
           <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">가져올 기간
             <select id="biFrom" style="font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px">
-              ${opt(0, '이번 달')}${opt(1, '지난달부터')}${opt(3, '최근 3개월')}<option value="2025-1">전체 (2025년 1월부터 · 1분 정도)</option>
+              ${opt(0, '이번 달')}${opt(1, '지난달부터')}
             </select></label>
           <button id="biGo" class="imx-btn" type="button">가져오기</button>
         </div>
@@ -444,8 +445,8 @@
   async function runBizInflow() {
     const ta = el('biCurl'), box = el('biResult'), btn = el('biGo');
     const curl = ta.value.trim();
-    if (!/bizadvisor/i.test(curl) || !/bearer/i.test(curl)) {
-      box.innerHTML = '<div class="imx-line" style="border-left-color:var(--warn,#e6c86a)">비즈어드바이저 요청의 cURL이 아닌 것 같습니다 — <b>Copy as cURL (bash)</b>로 복사한 전체 텍스트를 붙여넣어 주세요.</div>';
+    if (!/store-analytics/i.test(curl)) {
+      box.innerHTML = '<div class="imx-line" style="border-left-color:var(--warn,#e6c86a)">방문 분석 query 요청의 cURL이 아닌 것 같습니다 — <b>cURL(bash)로 복사</b>로 복사한 전체 텍스트를 붙여넣어 주세요.</div>';
       return;
     }
     const [fy, fm] = el('biFrom').value.split('-').map(Number);
@@ -460,13 +461,13 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) {
         const msg = j.error || `HTTP ${r.status}`;
-        const hint = /인증 실패|토큰|Bearer|사이트ID/.test(msg) ? ' — 비즈어드바이저 화면을 새로고침한 뒤 cURL을 다시 복사해 주세요.' : '';
+        const hint = /쿠키/.test(msg) ? ' — 방문 분석 화면을 새로고침한 뒤 cURL을 다시 복사해 주세요.' : '';
         box.innerHTML = `<div class="imx-line" style="border-left-color:var(--warn,#e6c86a)">가져오지 못했습니다: ${ae(msg)}${hint}</div>`;
         return;
       }
       const months = (j.months || []).map((x) => (x.error ? `${x.ym} 오류` : `${x.ym} ${num(x.rows)}건`)).join(' · ');
       box.innerHTML = `<div class="imx-line">✅ 가져왔습니다 — ${num(j.totalRows)}건 반영 (${ae(months)})<br>`
-        + '<span class="imx-muted" style="font-size:12px">이제 비즈어드바이저에서 <b>로그아웃 → 다시 로그인</b>해 주세요(붙여넣은 로그인 정보 폐기).</span></div>';
+        + '<span class="imx-muted" style="font-size:12px">이제 스마트스토어센터에서 <b>로그아웃 → 다시 로그인</b>해 주세요(붙여넣은 로그인 정보 폐기).</span></div>';
       loadBizInflowStatus();
       afterApply('biz');
     } catch (e) {

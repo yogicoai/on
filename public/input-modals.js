@@ -465,7 +465,16 @@
         box.innerHTML = `<div class="imx-line" style="border-left-color:var(--warn,#e6c86a)">가져오지 못했습니다: ${ae(msg)}${hint}</div>`;
         return;
       }
-      const months = (j.months || []).map((x) => (x.error ? `${x.ym} 오류` : `${x.ym} ${num(x.rows)}건`)).join(' · ');
+      const months = (j.months || []).map((x) => `${x.ym} ${num(x.rows)}건`).join(' · ');
+      const missing = j.missing || [];
+      if (missing.length) { // 일부 날짜가 빠졌으면 성공으로 보이지 않게 한다 — 다시 가져와야 하니 로그아웃 안내도 뺀다
+        const list = missing.map((x) => `${x.date.slice(5).replace('-', '/')} (${x.why})`).join(', ');
+        box.innerHTML = `<div class="imx-line" style="border-left-color:var(--warn,#e6c86a)"><b>⚠ 아직 안 들어간 날짜가 있습니다: ${ae(list)}</b><br>`
+          + `<span class="imx-muted" style="font-size:12px">${j.lastDate ? `${ae(j.lastDate)}까지 저장했습니다(${ae(months)}). ` : ''}잠시 뒤 [조회]를 다시 누르고 cURL을 새로 복사해 한 번 더 가져와 주세요. 로그아웃은 다 넣은 뒤에 해 주세요.</span></div>`;
+        loadBizInflowStatus();
+        afterApply('biz');
+        return;
+      }
       box.innerHTML = `<div class="imx-line">✅ 가져왔습니다 — ${num(j.totalRows)}건 반영 (${ae(months)})<br>`
         + '<span class="imx-muted" style="font-size:12px">이제 스마트스토어센터에서 <b>로그아웃 → 다시 로그인</b>해 주세요(붙여넣은 로그인 정보 폐기).</span></div>';
       loadBizInflowStatus();

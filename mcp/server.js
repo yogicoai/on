@@ -46,6 +46,7 @@ const couponUsage = require('../lib/couponUsage');     // 쿠폰 사용 현황·
 const csTools = require('../lib/csTools');             // CS: 주문 통합조회·게시판 미답변 체크
 const csKnowledge = require('../lib/csKnowledge');     // CS: 정책/FAQ 지식·과거 답변 사례(응답 초안용)
 const csSelfGuide = require('../lib/csSelfGuide');     // CS 셀프가이드 FAQ 검색(cs-self-guide 앱 DB)
+const reviews = require('../lib/reviews');             // 리뷰 분석 — 마케팅팀 지식 문서·카피 은행·리뷰 원문(scripts/import-reviews.js 적재)
 const alerts = require('../lib/alerts');               // 경보 스캔 — "오늘 챙길 것"(이상신호 자동 감지)
 const cafe24Stock = require('../lib/cafe24Stock');     // 자사몰 옵션별 진열 재고/품절
 const dailyBreakdown = require('../lib/dailyBreakdown'); // 일별 온·오프 + 날짜별 최다판매(원샷)
@@ -91,7 +92,8 @@ const RANGE_SCHEMA = {
   period: PERIOD_FIELD,
 };
 
-function build() {
+// who = 요청한 토큰({ name, scope }) — 리뷰 회의 원문처럼 토큰별로 보는 범위가 다른 도구가 쓴다. 로컬 stdio 는 undefined.
+function build(who) {
   const server = new McpServer({ name: 'yogibo-sales', version: '1.0.0' }, {
     // 클라이언트(Claude)에게 전달되는 전역 지침 — 통화·표기 규칙
     instructions: '이 서버의 모든 금액 수치는 대한민국 원(KRW)이다. 숫자 표기 규칙(반드시 준수): ' +
@@ -113,7 +115,9 @@ function build() {
       '두 기준의 숫자를 한 답변에서 합산·혼용하지 말고, 수치를 제시할 때 어느 기준인지 밝힌다. 출고 시차 때문에 최근 달은 출고 기준이 주문 기준보다 작게 나오는 것이 정상이다. ' +
       'CS 라우팅(중요): 반품·교환·환불·배송·세탁·쿠폰·회원·A/S·품절 등 정책/규정/FAQ성 질문("~하면 어떻게 돼?", "~ 규정/방법 알려줘" 포함)은 되묻지 말고 먼저 cs_self_guide(셀프가이드 FAQ) 또는 cs_reference(mode:policy 공식 정책)로 조회해 원문 근거로 답한다. 원문에 없을 때만 "공식 정책 없음"으로 안내하고 추측하지 않는다. 주문번호가 나오면 cs_order_lookup, "미답변/답변 놓친" 은 cs_unanswered. ' +
       '이미지 자료 라우팅: 요청이 "이미지"로 시작하면("이미지: W_B 모델 자료", "이미지 맥스 색상" 등) image_reference 를 쓴다 — 이미지 생성이 아니라 등록된 전속 모델·제품 색상·실촬영 이미지의 정보와 링크 조회다. ' +
-      '"이미지" 키워드가 없는 질문에는 image_reference 를 쓰지 않는다.',
+      '"이미지" 키워드가 없는 질문에는 image_reference 를 쓰지 않는다. ' +
+      '리뷰 라우팅: 리뷰 분석·리뷰 기반 개선안(상세페이지·CRM·광고 카피·리뷰 이벤트·매장 문구)·고객 표현 질문은 review_knowledge(먼저 P-9 절차·K-1 규칙)·reviews(리뷰 원문 찾기·집계)·review_copy_bank(광고용 고객 문장)를 쓴다. ' +
+      '최근 2주 자사몰 게시판 새 글만 볼 때는 cafe24_voc.',
   });
   // 순수 날짜 도구 스키마 — period(자연어) 우선, 없으면 start/end. 핸들러는 wrapR로 감쌀 것.
   const D = RANGE_SCHEMA;
@@ -516,6 +520,63 @@ function build() {
       channel: z.string().optional().describe('ownmall(자사몰) | marketplace(외부몰) — 노출범위 필터'),
     },
   }, wrap(({ query, limit, channel }) => csSelfGuide.search(query, { limit, channel })));
+
+  // ── 리뷰 분석 — 마케팅팀 리뷰 분석 자료(2026-11, scripts/import-reviews.js 로 적재) ──
+  server.registerTool('review_knowledge', {
+    title: '리뷰 분석 지식 문서 — 규칙·임원진 방향·대시보드 1·2·회의·개선안 절차 [마케팅팀 리뷰 분석]',
+    description: '마케팅팀이 2026-08~11 리뷰 분석으로 만든 지식 문서를 조각 ID 단위로 조회. id 없이 부르면 목차, query 로 찾기, id 로 본문(긴 조각은 part). ' +
+      '리뷰 기반 개선안(상세페이지·CRM·광고 카피·리뷰 이벤트·매장 문구)을 "우리 리뷰 분석 방식대로" 만들 때는 먼저 P-9-01~04(절차·출력 형식), K-1(용어·숫자 규칙), K-2(임원진 방향성)를 읽고 그 순서를 따른다. ' +
+      '리뷰 작성률·언급률·점수 같은 숫자는 이 문서 조각에서 가져와 조각 ID([D2-…] 등)를 근거로 달고, 같은 조각에 적힌 기준(기간·채널·분모)과 함께 쓴다. ' +
+      '용어 규칙: 공식몰→자사몰, 실리뷰→자사몰 고객 리뷰, 자연유입→직접 작성, 카카오톡 리뷰 요청→크리마 리뷰 챗봇(K-1-01).',
+    inputSchema: {
+      query: z.string().optional().describe('찾을 말(예: "냄새", "작성률", "임원 리뷰 발언", "CRM")'),
+      id: z.string().optional().describe('조각 ID(예: P-9-02, D2-07, K-1-05)'),
+      part: z.number().int().optional().describe('긴 조각의 몇 번째 부분(기본 1)'),
+    },
+  }, wrap((a) => reviews.knowledge(a, who)));
+
+  server.registerTool('review_copy_bank', {
+    title: '리뷰 카피 은행 — 광고·상세페이지에 쓸 고객 원문 문장 4,048개 [마케팅팀 리뷰 분석]',
+    description: 'AI가 카피 가치 2점 이상으로 고른 고객 리뷰 원문(3점 = 헤드라인감). 상품군·모델·채널·연도·코드(예: "냄새", "독서", "아이")·문장 키워드로 고른다. ' +
+      '"광고 헤드라인 후보", "아이 있는 집 대상 고객 문장", "맥스 상세페이지에 쓸 후기 문장" 질문에 사용. 원문 그대로 쓰고 출처(연도·채널)를 함께 밝힌다.',
+    inputSchema: {
+      query: z.string().optional().describe('문장에 들어간 말(쉼표·띄어쓰기로 여러 개 = 하나라도)'),
+      fam: z.string().optional().describe('상품군: 빈백·커버·비즈·서포트·롤·필로우·인형·트레이보·기타'),
+      model: z.string().optional().describe('모델(예: 맥스, 미디, 서포트, 롤)'),
+      ch: z.string().optional().describe('자사몰 | 스마트스토어'),
+      year: z.number().int().optional().describe('리뷰 연도'),
+      code: z.string().optional().describe('분류 코드 일부(예: 냄새, 독서, 편안함, 아이)'),
+      minScore: z.number().int().optional().describe('카피 점수 하한 2~3(기본 2)'),
+      limit: z.number().int().optional().describe('개수(기본 20, 최대 50)'),
+    },
+  }, wrap((a) => reviews.copyBank(a)));
+
+  server.registerTool('reviews', {
+    title: '리뷰 원문 찾기·집계 — 자사몰(크리마)·스마트스토어 2024-01~ [마케팅팀 리뷰 분석 자료]',
+    description: 'mode=search: 기간·채널·상품군·모델·별점·키워드로 리뷰 원문 찾기(반복 등록·블라인드 제외). ' +
+      'mode=stats: 월·연도·상품군·모델별 리뷰 수·5점/1~2점 비율·사진·영상 포함 비율·글자 수, keyword 를 주면 언급률(채널은 항상 따로). ' +
+      '"냄새 불만 리뷰 보여줘", "커버 리뷰 월별 추이", "맥스 1~2점 리뷰" 질문에 사용. 2023년 이전 리뷰와 외부몰(쿠팡 등) 리뷰는 없다. ' +
+      '리뷰별 AI 감정·주제 분류는 없어 키워드 일치로 찾는다 — 대시보드 2의 언급률·점수와 다르니 그 숫자는 review_knowledge 에서 가져온다. 평균 별점은 쓰지 않는다.',
+    inputSchema: {
+      mode: z.enum(['search', 'stats']).describe('search | stats'),
+      ...RANGE_SCHEMA,
+      ch: z.string().optional().describe('자사몰 | 스마트스토어'),
+      fam: z.string().optional().describe('상품군: 빈백·커버·비즈·서포트·롤·필로우·인형·트레이보·기타'),
+      model: z.string().optional().describe('모델(예: 맥스, 미디, 슬림, 서포트)'),
+      rating: z.string().optional().describe('별점 하나("1") 또는 범위("1-2")'),
+      kind: z.string().optional().describe('스마트스토어 리뷰 종류: 구매 후 리뷰 | 한 달 사용 후기'),
+      buyer: z.string().optional().describe('자사몰 구매자: 자사몰 회원 | 네이버페이 결제 고객'),
+      keyword: z.string().optional().describe('본문 키워드(쉼표·띄어쓰기로 여러 개 = 하나라도)'),
+      media: z.boolean().optional().describe('true = 사진·영상 있는 리뷰만'),
+      by: z.string().optional().describe('stats 묶음: month(기본) | year | fam | model'),
+      sort: z.string().optional().describe('search 정렬: new(기본) | old | long | helpful'),
+      limit: z.number().int().optional().describe('search 개수(기본 20, 최대 50)'),
+    },
+  }, wrap(async (a) => {
+    const p = withPeriod(a);
+    const out = p.mode === 'stats' ? await reviews.stats(p) : await reviews.search(p);
+    return p._periodLabel ? { 기간: `${p.start}~${p.end} (${p._periodLabel})`, ...out } : out;
+  }));
 
   server.registerTool('marketing_inflow', {
     title: '마케팅채널 유입수 — 일별 제공(10/29까지 비즈어드바이저 실측, 10/30부터 스토어분석 방문수 환산 추정)',
@@ -932,7 +993,7 @@ async function runHttp() {
         if (body && body.method === 'tools/call') console.error(`[mcp auth] ${who.name} → ${(body.params && body.params.name) || '?'}`);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
         res.on('close', () => { try { transport.close(); } catch (_) {} });
-        await build().connect(transport);
+        await build(who).connect(transport);
         await transport.handleRequest(req, res, body);
       } else if (req.method === 'GET' || req.method === 'DELETE') {
         // 무상태 모드 — 독립 SSE 스트림/세션 종료 불필요. 스펙대로 405(요청/응답은 POST로만).

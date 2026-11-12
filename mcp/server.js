@@ -552,11 +552,15 @@ function build(who) {
   }, wrap((a) => reviews.copyBank(a)));
 
   server.registerTool('reviews', {
-    title: '리뷰 원문 찾기·집계 — 자사몰(크리마)·스마트스토어 2024-01~ [마케팅팀 리뷰 분석 자료]',
-    description: 'mode=search: 기간·채널·상품군·모델·별점·키워드로 리뷰 원문 찾기(반복 등록·블라인드 제외). ' +
-      'mode=stats: 월·연도·상품군·모델별 리뷰 수·5점/1~2점 비율·사진·영상 포함 비율·글자 수, keyword 를 주면 언급률(채널은 항상 따로). ' +
-      '"냄새 불만 리뷰 보여줘", "커버 리뷰 월별 추이", "맥스 1~2점 리뷰" 질문에 사용. 2023년 이전 리뷰와 외부몰(쿠팡 등) 리뷰는 없다. ' +
-      '리뷰별 AI 감정·주제 분류는 없어 키워드 일치로 찾는다 — 대시보드 2의 언급률·점수와 다르니 그 숫자는 review_knowledge 에서 가져온다. 평균 별점은 쓰지 않는다.',
+    title: '리뷰 원문 찾기·집계 — 자사몰(크리마) 2016-10~·스마트스토어 2020-02~, AI 감정·불만 유형 포함 [마케팅팀 리뷰 분석 자료]',
+    description: 'mode=search: 기간·채널·상품군·모델·별점·감정·불만 유형·칭찬한 점·아쉬운 점·키워드로 리뷰 원문 찾기(대시보드 2 분석 대상 14,663건 기준 — 반복 등록·연동분·관리자 글·블라인드 제외). ' +
+      'mode=stats: 월·연도·상품군·모델별 리뷰 수(게시판기준·분석기준)·5점/1~2점 비율·사진·영상 포함 비율·감정 비율(채널은 항상 따로). ' +
+      '"냄새 불만 리뷰 보여줘", "커버 리뷰 월별 추이", "맥스 1~2점 리뷰" 질문에 사용. 외부몰(쿠팡 등) 리뷰는 없다. ' +
+      '규칙(문서 K-1-14): 불만·칭찬은 키워드만으로 세지 않는다("냄새 거의 없어요"는 칭찬) — 불만은 complaint(불만 유형) 또는 sentiment=부정·섞임으로, 칭찬은 praise 로 거른다. ' +
+      '언급률·감정 비율·속성 점수는 원문을 다시 세지 말고 review_knowledge 의 대시보드 2(D2) 숫자를 쓰고, 원문 검색은 고객 문장 예시를 찾는 데 쓴다. ' +
+      '상품군은 마케팅팀 분류(DD-8-05 v2) 값이다. 평균 별점은 쓰지 않는다. ' +
+      '리뷰 작성률(문서 K-1-02) = 그달 리뷰수_게시판기준 ÷ 같은 달 판매수량 — 자사몰은 cafe24_analysis 의 totalQty, 스마트스토어는 smartstore_analysis 의 totalQty 로 나누고, ' +
+      '스마트스토어 분자는 구매 후 리뷰만(kind). 채널별로 따로 계산한다.',
     inputSchema: {
       mode: z.enum(['search', 'stats']).describe('search | stats'),
       ...RANGE_SCHEMA,
@@ -566,7 +570,12 @@ function build(who) {
       rating: z.string().optional().describe('별점 하나("1") 또는 범위("1-2")'),
       kind: z.string().optional().describe('스마트스토어 리뷰 종류: 구매 후 리뷰 | 한 달 사용 후기'),
       buyer: z.string().optional().describe('자사몰 구매자: 자사몰 회원 | 네이버페이 결제 고객'),
-      keyword: z.string().optional().describe('본문 키워드(쉼표·띄어쓰기로 여러 개 = 하나라도)'),
+      sentiment: z.string().optional().describe('AI 전체 감정: 긍정 | 섞임 | 부정 (여러 개는 쉼표, 예: "부정,섞임" = 불만이 섞인 리뷰)'),
+      complaint: z.string().optional().describe('불만 유형 일부(예: 냄새, 불량·파손, 크기 예상과 다름, 비즈 부족)'),
+      praise: z.string().optional().describe('칭찬한 점 일부(예: 편안함, 디자인, 허리)'),
+      regret: z.string().optional().describe('아쉬운 점 일부(예: 냄새, 크기, 세탁)'),
+      code: z.string().optional().describe('세부 코드 일부(예: C_smell, F_comfort+, U_kid)'),
+      keyword: z.string().optional().describe('본문 키워드(쉼표·띄어쓰기로 여러 개 = 하나라도) — 불만·칭찬 구분은 감정·불만 유형으로'),
       media: z.boolean().optional().describe('true = 사진·영상 있는 리뷰만'),
       by: z.string().optional().describe('stats 묶음: month(기본) | year | fam | model'),
       sort: z.string().optional().describe('search 정렬: new(기본) | old | long | helpful'),
